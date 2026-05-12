@@ -14,7 +14,7 @@
 #include "platform/psp/rendering/PspSceneLightingSnapshot.hpp"
 
 namespace helengine::psp::rendering {
-    /// Accepts generated-core 3D drawables and renders the first PSP unlit mesh pass through GU.
+    /// Accepts generated-core 3D drawables and renders PSP 3D meshes through the active lighting pipeline.
     class PspRenderManager3D final : public RenderManager3D, public IRenderVisitor3D {
     public:
         /// Creates the PSP 3D render manager.

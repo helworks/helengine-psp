@@ -52,6 +52,16 @@ namespace helengine::psp::rendering {
             float Z;
         };
 
+        /// Stores one GU fixed-function vertex with a local normal and position.
+        struct PspFixedFunctionVertex {
+            float NX;
+            float NY;
+            float NZ;
+            float X;
+            float Y;
+            float Z;
+        };
+
         /// Stores one raw 4x4 float buffer that can be reinterpreted as a PSP GU matrix.
         struct alignas(16) PspMatrixBuffer {
             float M[4][4];
@@ -159,6 +169,197 @@ namespace helengine::psp::rendering {
             sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
             sceGuTexFilter(GU_NEAREST, GU_NEAREST);
             sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+        }
+
+        /// Converts one generated vector into the PSP GU vector layout.
+        ScePspFVector3 CreatePspVector3(const float3& value) {
+            ScePspFVector3 result {};
+            result.x = value.X;
+            result.y = value.Y;
+            result.z = value.Z;
+            return result;
+        }
+
+        /// Returns whether one PSP material should react to the current directional-light path.
+        bool UsesDirectionalLighting(PspRuntimeMaterial* material) {
+            return material != nullptr
+                && material->GetReceivesLighting()
+                && material->GetLightingResponse() == PspMaterialLightingResponse::LitDirectional;
+        }
+
+        /// Evaluates the current CPU Lambert response for one vertex.
+        float4 EvaluateCpuLitColor(
+            const float4& baseColor,
+            const float3& worldNormal,
+            bool useLighting,
+            const PspLightingSettings& lightingSettings,
+            const PspSceneLightingSnapshot& lightingSnapshot) {
+            if (!useLighting) {
+                return baseColor;
+            }
+
+            const float ambient = lightingSettings.AmbientIntensity;
+            float diffuse = 0.0f;
+            if (lightingSnapshot.HasDirectionalLight) {
+                const float3 lightDirection = float3::Normalize(lightingSnapshot.DirectionalLightDirection);
+                diffuse = std::max(0.0f, float3::Dot(worldNormal, lightDirection));
+            }
+
+            return ClampColor(float4(
+                baseColor.X * (ambient + (diffuse * lightingSnapshot.DirectionalLightColor.X * lightingSnapshot.DirectionalLightIntensity)),
+                baseColor.Y * (ambient + (diffuse * lightingSnapshot.DirectionalLightColor.Y * lightingSnapshot.DirectionalLightIntensity)),
+                baseColor.Z * (ambient + (diffuse * lightingSnapshot.DirectionalLightColor.Z * lightingSnapshot.DirectionalLightIntensity)),
+                baseColor.W));
+        }
+
+        /// Configures the scene-wide fixed-function lighting state for the active camera pass.
+        void ConfigureFixedFunctionSceneLighting(
+            const PspLightingSettings& lightingSettings,
+            const PspSceneLightingSnapshot& lightingSnapshot) {
+            sceGuDisable(GU_TEXTURE_2D);
+            sceGuLightMode(GU_SINGLE_COLOR);
+            sceGuSpecular(0.0f);
+            sceGuAmbient(ConvertColorToAbgr(float4(
+                lightingSettings.AmbientIntensity,
+                lightingSettings.AmbientIntensity,
+                lightingSettings.AmbientIntensity,
+                1.0f)));
+
+            if (!lightingSnapshot.HasDirectionalLight) {
+                sceGuDisable(GU_LIGHT0);
+                return;
+            }
+
+            const float3 normalizedDirection = float3::Normalize(lightingSnapshot.DirectionalLightDirection);
+            const float3 scaledDirectionalColor = float3(
+                lightingSnapshot.DirectionalLightColor.X * lightingSnapshot.DirectionalLightIntensity,
+                lightingSnapshot.DirectionalLightColor.Y * lightingSnapshot.DirectionalLightIntensity,
+                lightingSnapshot.DirectionalLightColor.Z * lightingSnapshot.DirectionalLightIntensity);
+            const ScePspFVector3 lightVector = CreatePspVector3(normalizedDirection);
+
+            sceGuEnable(GU_LIGHT0);
+            sceGuLight(0, GU_DIRECTIONAL, GU_DIFFUSE, &lightVector);
+            sceGuLightAtt(0, 1.0f, 0.0f, 0.0f);
+            sceGuLightColor(0, GU_AMBIENT, 0);
+            sceGuLightColor(0, GU_DIFFUSE, ConvertColorToAbgr(float4(
+                scaledDirectionalColor.X,
+                scaledDirectionalColor.Y,
+                scaledDirectionalColor.Z,
+                1.0f)));
+            sceGuLightColor(0, GU_SPECULAR, 0);
+        }
+
+        /// Configures the per-draw fixed-function material state for one PSP runtime material.
+        void ConfigureFixedFunctionMaterial(const float4& baseColor, bool useLighting, bool hasDirectionalLight) {
+            const std::uint32_t baseColorAbgr = ConvertColorToAbgr(baseColor);
+
+            sceGuDisable(GU_TEXTURE_2D);
+            sceGuColor(baseColorAbgr);
+            sceGuAmbientColor(baseColorAbgr);
+            sceGuModelColor(0, baseColorAbgr, baseColorAbgr, 0);
+
+            if (!useLighting) {
+                sceGuDisable(GU_LIGHT0);
+                sceGuDisable(GU_LIGHTING);
+                return;
+            }
+
+            sceGuEnable(GU_LIGHTING);
+            if (hasDirectionalLight) {
+                sceGuEnable(GU_LIGHT0);
+            } else {
+                sceGuDisable(GU_LIGHT0);
+            }
+        }
+
+        /// Submits one drawable through the existing CPU-lit vertex path.
+        void SubmitCpuLitDrawable(
+            IDrawable3D* drawable,
+            const PspMeshRecord& record,
+            const float4& baseColor,
+            bool useLighting,
+            const PspLightingSettings& lightingSettings,
+            const PspSceneLightingSnapshot& lightingSnapshot) {
+            int32_t vertexCount = static_cast<int32_t>(record.Indices.empty() ? record.Positions.size() : record.Indices.size());
+            if (vertexCount < 3) {
+                return;
+            }
+
+            PspLitVertex* vertices = static_cast<PspLitVertex*>(sceGuGetMemory(sizeof(PspLitVertex) * static_cast<std::size_t>(vertexCount)));
+            for (int32_t index = 0; index < vertexCount; index++) {
+                std::uint32_t sourceIndex = record.Indices.empty()
+                    ? static_cast<std::uint32_t>(index)
+                    : record.Indices[static_cast<std::size_t>(index)];
+                if (sourceIndex >= record.Positions.size()) {
+                    return;
+                }
+
+                const float3& position = record.Positions[sourceIndex];
+                const float3 sourceNormal = sourceIndex < record.Normals.size()
+                    ? record.Normals[sourceIndex]
+                    : float3(0.0f, 0.0f, 1.0f);
+                const float3 worldNormal = float3::Normalize(RotateNormal(sourceNormal, drawable->get_Parent()));
+                const float4 litColor = EvaluateCpuLitColor(baseColor, worldNormal, useLighting, lightingSettings, lightingSnapshot);
+
+                vertices[index] = PspLitVertex {
+                    ConvertColorToAbgr(litColor),
+                    position.X,
+                    position.Y,
+                    position.Z
+                };
+            }
+
+            sceGumDrawArray(
+                GU_TRIANGLES,
+                GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
+                vertexCount,
+                nullptr,
+                vertices);
+        }
+
+        /// Submits one drawable through the current fixed-function lighting path.
+        void SubmitFixedFunctionDrawable(
+            const PspMeshRecord& record,
+            const float4& baseColor,
+            bool useLighting,
+            bool hasDirectionalLight) {
+            int32_t vertexCount = static_cast<int32_t>(record.Indices.empty() ? record.Positions.size() : record.Indices.size());
+            if (vertexCount < 3) {
+                return;
+            }
+
+            ConfigureFixedFunctionMaterial(baseColor, useLighting, hasDirectionalLight);
+
+            PspFixedFunctionVertex* vertices = static_cast<PspFixedFunctionVertex*>(sceGuGetMemory(sizeof(PspFixedFunctionVertex) * static_cast<std::size_t>(vertexCount)));
+            for (int32_t index = 0; index < vertexCount; index++) {
+                std::uint32_t sourceIndex = record.Indices.empty()
+                    ? static_cast<std::uint32_t>(index)
+                    : record.Indices[static_cast<std::size_t>(index)];
+                if (sourceIndex >= record.Positions.size()) {
+                    throw std::runtime_error("PSP fixed-function draw submitted an out-of-range mesh index.");
+                }
+
+                const float3& position = record.Positions[sourceIndex];
+                const float3 sourceNormal = sourceIndex < record.Normals.size()
+                    ? record.Normals[sourceIndex]
+                    : float3(0.0f, 0.0f, 1.0f);
+
+                vertices[index] = PspFixedFunctionVertex {
+                    sourceNormal.X,
+                    sourceNormal.Y,
+                    sourceNormal.Z,
+                    position.X,
+                    position.Y,
+                    position.Z
+                };
+            }
+
+            sceGumDrawArray(
+                GU_TRIANGLES,
+                GU_NORMAL_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
+                vertexCount,
+                nullptr,
+                vertices);
         }
     }
 
@@ -291,26 +492,25 @@ namespace helengine::psp::rendering {
             return;
         }
 
-        if (LightingSettings.Pipeline == PspLightingPipeline::FixedFunctionLambert) {
-            throw std::runtime_error("PspLightingPipeline::FixedFunctionLambert is not implemented yet.");
-        }
-
         float4x4 world = BuildWorldMatrix(drawable->get_Parent());
         PspMatrixBuffer worldMatrix = CreatePspMatrixBuffer(world);
 
         sceGumMatrixMode(GU_MODEL);
         sceGumLoadMatrix(reinterpret_cast<ScePspFMatrix4*>(&worldMatrix));
 
-        int32_t vertexCount = static_cast<int32_t>(record.Indices.empty() ? record.Positions.size() : record.Indices.size());
-        if (vertexCount < 3) {
+        const float4& baseColor = pspRuntimeMaterial->GetBaseColor();
+        const bool useLighting = UsesDirectionalLighting(pspRuntimeMaterial);
+        PspRuntimeTexture* texture = nullptr;
+        const bool hasTexture = pspRuntimeMaterial->TryResolveTexture(texture);
+        if (LightingSettings.Pipeline == PspLightingPipeline::FixedFunctionLambert) {
+            if (hasTexture) {
+                throw std::runtime_error("PSP fixed-function lighting does not support textured materials yet.");
+            }
+
+            SubmitFixedFunctionDrawable(record, baseColor, useLighting, CurrentLighting.HasDirectionalLight);
             return;
         }
 
-        const float4& baseColor = pspRuntimeMaterial->GetBaseColor();
-        const bool useLighting = pspRuntimeMaterial->GetReceivesLighting()
-            && pspRuntimeMaterial->GetLightingResponse() == PspMaterialLightingResponse::LitDirectional;
-        PspRuntimeTexture* texture = nullptr;
-        const bool hasTexture = pspRuntimeMaterial->TryResolveTexture(texture);
         if (hasTexture && record.TexCoords.empty()) {
             throw std::runtime_error("Textured PSP drawables require mesh texcoords.");
         }
@@ -318,6 +518,11 @@ namespace helengine::psp::rendering {
         BindTexture(texture);
 
         if (hasTexture) {
+            int32_t vertexCount = static_cast<int32_t>(record.Indices.empty() ? record.Positions.size() : record.Indices.size());
+            if (vertexCount < 3) {
+                return;
+            }
+
             PspTexturedLitVertex* vertices = static_cast<PspTexturedLitVertex*>(sceGuGetMemory(sizeof(PspTexturedLitVertex) * static_cast<std::size_t>(vertexCount)));
             for (int32_t index = 0; index < vertexCount; index++) {
                 std::uint32_t sourceIndex = record.Indices.empty()
@@ -333,22 +538,7 @@ namespace helengine::psp::rendering {
                     : float3(0.0f, 0.0f, 1.0f);
                 const float3 worldNormal = float3::Normalize(RotateNormal(sourceNormal, drawable->get_Parent()));
                 const float2& texCoord = record.TexCoords[sourceIndex];
-
-                float4 litColor = baseColor;
-                if (useLighting) {
-                    const float ambient = LightingSettings.AmbientIntensity;
-                    float diffuse = 0.0f;
-                    if (CurrentLighting.HasDirectionalLight) {
-                        const float3 lightDirection = float3::Normalize(CurrentLighting.DirectionalLightDirection);
-                        diffuse = std::max(0.0f, float3::Dot(worldNormal, lightDirection));
-                    }
-
-                    litColor = ClampColor(float4(
-                        baseColor.X * (ambient + (diffuse * CurrentLighting.DirectionalLightColor.X * CurrentLighting.DirectionalLightIntensity)),
-                        baseColor.Y * (ambient + (diffuse * CurrentLighting.DirectionalLightColor.Y * CurrentLighting.DirectionalLightIntensity)),
-                        baseColor.Z * (ambient + (diffuse * CurrentLighting.DirectionalLightColor.Z * CurrentLighting.DirectionalLightIntensity)),
-                        baseColor.W));
-                }
+                const float4 litColor = EvaluateCpuLitColor(baseColor, worldNormal, useLighting, LightingSettings, CurrentLighting);
 
                 vertices[index] = PspTexturedLitVertex {
                     texCoord.X,
@@ -369,51 +559,7 @@ namespace helengine::psp::rendering {
             return;
         }
 
-        PspLitVertex* vertices = static_cast<PspLitVertex*>(sceGuGetMemory(sizeof(PspLitVertex) * static_cast<std::size_t>(vertexCount)));
-        for (int32_t index = 0; index < vertexCount; index++) {
-            std::uint32_t sourceIndex = record.Indices.empty()
-                ? static_cast<std::uint32_t>(index)
-                : record.Indices[static_cast<std::size_t>(index)];
-            if (sourceIndex >= record.Positions.size()) {
-                return;
-            }
-
-            const float3& position = record.Positions[sourceIndex];
-            const float3 sourceNormal = sourceIndex < record.Normals.size()
-                ? record.Normals[sourceIndex]
-                : float3(0.0f, 0.0f, 1.0f);
-            const float3 worldNormal = float3::Normalize(RotateNormal(sourceNormal, drawable->get_Parent()));
-
-            float4 litColor = baseColor;
-            if (useLighting) {
-                const float ambient = LightingSettings.AmbientIntensity;
-                float diffuse = 0.0f;
-                if (CurrentLighting.HasDirectionalLight) {
-                    const float3 lightDirection = float3::Normalize(CurrentLighting.DirectionalLightDirection);
-                    diffuse = std::max(0.0f, float3::Dot(worldNormal, lightDirection));
-                }
-
-                litColor = ClampColor(float4(
-                    baseColor.X * (ambient + (diffuse * CurrentLighting.DirectionalLightColor.X * CurrentLighting.DirectionalLightIntensity)),
-                    baseColor.Y * (ambient + (diffuse * CurrentLighting.DirectionalLightColor.Y * CurrentLighting.DirectionalLightIntensity)),
-                    baseColor.Z * (ambient + (diffuse * CurrentLighting.DirectionalLightColor.Z * CurrentLighting.DirectionalLightIntensity)),
-                    baseColor.W));
-            }
-
-            vertices[index] = PspLitVertex {
-                ConvertColorToAbgr(litColor),
-                position.X,
-                position.Y,
-                position.Z
-            };
-        }
-
-        sceGumDrawArray(
-            GU_TRIANGLES,
-            GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
-            vertexCount,
-            nullptr,
-            vertices);
+        SubmitCpuLitDrawable(drawable, record, baseColor, useLighting, LightingSettings, CurrentLighting);
     }
 
     /// Resolves the active scene lighting for the current render pass.
@@ -486,6 +632,12 @@ namespace helengine::psp::rendering {
         IRenderQueue3D* renderQueue = camera->get_RenderQueue3D();
         if (renderQueue != nullptr) {
             ResolveSceneLighting();
+            if (LightingSettings.Pipeline == PspLightingPipeline::FixedFunctionLambert) {
+                ConfigureFixedFunctionSceneLighting(LightingSettings, CurrentLighting);
+            } else {
+                sceGuDisable(GU_LIGHT0);
+                sceGuDisable(GU_LIGHTING);
+            }
             renderQueue->VisitOrdered(this);
         }
     }

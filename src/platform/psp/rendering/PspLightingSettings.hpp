@@ -8,7 +8,7 @@ namespace helengine::psp::rendering {
         /// Default ambient intensity used until ambient becomes scene-authored.
         float AmbientIntensity = 0.25f;
 
-        /// Active PSP lighting pipeline.
-        PspLightingPipeline Pipeline = PspLightingPipeline::CpuVertexLambert;
+        /// Active PSP lighting pipeline. Fixed-function is forced during the current cube-test milestone.
+        PspLightingPipeline Pipeline = PspLightingPipeline::FixedFunctionLambert;
     };
 }
