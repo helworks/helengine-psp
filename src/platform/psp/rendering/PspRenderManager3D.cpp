@@ -440,7 +440,8 @@ namespace helengine::psp::rendering {
                 }
 
                 CurrentLighting.HasDirectionalLight = true;
-                CurrentLighting.DirectionalLightDirection = float4::RotateVector(float3(0.0f, 0.0f, -1.0f), directionalLight->get_Parent()->get_Orientation());
+                const float3 lightForward = float4::RotateVector(float3(0.0f, 0.0f, -1.0f), directionalLight->get_Parent()->get_Orientation());
+                CurrentLighting.DirectionalLightDirection = float3(-lightForward.X, -lightForward.Y, -lightForward.Z);
                 CurrentLighting.DirectionalLightColor = directionalLight->get_Color();
                 CurrentLighting.DirectionalLightIntensity = directionalLight->get_Intensity();
                 return;
