@@ -180,6 +180,16 @@ public static class PspPlatformDefinitionFactory {
                     "helengine.directionallightcomponent",
                     PlatformComponentSupportKind.PassThrough,
                     "Directional light payloads can deserialize even when the first PSP renderer ignores them.",
+                    string.Empty),
+                new PlatformComponentSupportRule(
+                    "helengine.directionalshadowtowerspincomponent",
+                    PlatformComponentSupportKind.PassThrough,
+                    "Directional cube-grid spin components can deserialize so PSP can exercise authored scene motion.",
+                    string.Empty),
+                new PlatformComponentSupportRule(
+                    "city.menu.demodiscreturntomenucomponent, gameplay",
+                    PlatformComponentSupportKind.PassThrough,
+                    "Menu return gameplay components can deserialize without blocking PSP rendering-scene bring-up.",
                     string.Empty)
             ],
             [

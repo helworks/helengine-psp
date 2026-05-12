@@ -21,6 +21,7 @@
 #include "platform/psp/PspPackagedAssetLoader.hpp"
 #include "platform/psp/rendering/PspRenderManager2D.hpp"
 #include "platform/psp/rendering/PspRenderManager3D.hpp"
+#include "runtime/native_exceptions.hpp"
 
 PSP_MODULE_INFO("helengine_psp", 0, 1, 0);
 PSP_HEAP_SIZE_KB(16 * 1024);
@@ -86,6 +87,13 @@ namespace helengine::psp {
             std::printf("[helengine-psp] fatal exception: %s\n", exception.what());
             std::fflush(stdout);
             ShowFatalErrorAndHalt(exception.what());
+            return 1;
+        } catch (const Exception* exception) {
+            const char* message = exception != nullptr ? exception->what() : "Unknown managed runtime exception.";
+            std::printf("[helengine-psp] fatal runtime exception: %s\n", message);
+            std::fflush(stdout);
+            ShowFatalErrorAndHalt(message);
+            delete exception;
             return 1;
         } catch (...) {
             std::printf("[helengine-psp] fatal unknown exception\n");

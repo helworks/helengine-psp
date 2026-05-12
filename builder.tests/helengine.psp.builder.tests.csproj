@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+    <HelengineRoot Condition="'$(HelengineRoot)' == '' and '$(HELENGINE_ROOT)' != ''">$(HELENGINE_ROOT)</HelengineRoot>
+    <HelengineRoot Condition="'$(HelengineRoot)' == ''">$(MSBuildThisFileDirectory)..\..\helengine</HelengineRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\builder\helengine.psp.builder.csproj" />
+    <ProjectReference Include="$(HelengineRoot)\engine\helengine.baseplatform\helengine.baseplatform.csproj" />
+    <ProjectReference Include="$(HelengineRoot)\engine\helengine.editor\helengine.editor.csproj" />
+  </ItemGroup>
+
+  <Target Name="ValidateHelengineRoot" BeforeTargets="CollectPackageReferences">
+    <Error Condition="!Exists('$(HelengineRoot)\engine\helengine.baseplatform\helengine.baseplatform.csproj')" Text="helengine checkout not found. Set the HelengineRoot MSBuild property or HELENGINE_ROOT environment variable to a valid helengine checkout." />
+  </Target>
+
+</Project>
