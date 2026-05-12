@@ -37,6 +37,10 @@ public sealed class PspPlatformAssetBuilderTests {
             supportRule.ComponentTypeId == "helengine.meshcomponent");
         Assert.Contains(builder.Definition.ComponentSupportRules, supportRule =>
             supportRule.ComponentTypeId == "helengine.cameracomponent");
+        Assert.Contains(builder.Definition.ComponentSupportRules, supportRule =>
+            supportRule.ComponentTypeId == "helengine.directionalshadowtowerspincomponent");
+        Assert.Contains(builder.Definition.ComponentSupportRules, supportRule =>
+            supportRule.ComponentTypeId == "city.menu.demodiscreturntomenucomponent, gameplay");
     }
 
     /// <summary>
@@ -204,6 +208,41 @@ public sealed class PspPlatformAssetBuilderTests {
         Assert.Equal(0.0f, BitConverter.ToSingle(lightingBuffer.Data, 4));
         Assert.Equal(0.0f, BitConverter.ToSingle(lightingBuffer.Data, 8));
         Assert.Equal(0.0f, BitConverter.ToSingle(lightingBuffer.Data, 12));
+    }
+
+    /// <summary>
+    /// Verifies the PSP base-color parser preserves the documented <c>#RRGGBBAA</c> channel order.
+    /// </summary>
+    [Fact]
+    public void CookMaterial_preserves_rgba_base_color_order() {
+        PspPlatformAssetBuilder builder = new();
+
+        PlatformMaterialCookResult result = builder.CookMaterial(new PlatformMaterialCookRequest(
+            "Materials/Test.helmat",
+            "Materials/Test.helmat",
+            "psp",
+            "debug",
+            "psp-forward",
+            "standard-shader",
+            new Dictionary<string, string> {
+                ["use-custom-shader"] = "false",
+                ["shader-asset-id"] = "engine:material:standard",
+                ["vertex-program"] = "ForwardStandard.vs",
+                ["pixel-program"] = "ForwardStandard.ps",
+                ["variant"] = "Mesh",
+                ["base-color"] = "#FF404080",
+                ["texture-id"] = string.Empty,
+                ["casts-shadow"] = "true",
+                ["receives-shadow"] = "true"
+            }));
+
+        MaterialAsset materialAsset = Assert.IsType<MaterialAsset>(AssetSerializer.DeserializeFromBytes(result.CookedMaterialBytes));
+        MaterialConstantBufferAsset baseColorBuffer = Assert.Single(materialAsset.ConstantBuffers, buffer => buffer.Name == "BaseColorBuffer");
+
+        Assert.Equal(1.0f, BitConverter.ToSingle(baseColorBuffer.Data, 0));
+        Assert.Equal(64.0f / 255.0f, BitConverter.ToSingle(baseColorBuffer.Data, 4), 5);
+        Assert.Equal(64.0f / 255.0f, BitConverter.ToSingle(baseColorBuffer.Data, 8), 5);
+        Assert.Equal(128.0f / 255.0f, BitConverter.ToSingle(baseColorBuffer.Data, 12), 5);
     }
 
     /// <summary>
