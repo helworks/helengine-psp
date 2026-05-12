@@ -6,9 +6,10 @@ This repository contains the native PSP host scaffold for Helengine.
 
 - Docker-only build using the official PSPDEV SDK image
 - Standard PSP homebrew packaging ending in `EBOOT.PBP`
-- Generated Helengine runtime sources still bundled into the PSP executable
-- Isolated blank-frame boot remains the default verification baseline
-- Checkpointed runtime startup can be enabled explicitly to diagnose PSP startup through startup-scene load
+- Generated Helengine runtime sources bundled into the PSP executable
+- Runtime startup reaches the real startup scene and main loop
+- PSP 3D rendering supports scene-driven directional lighting with CPU vertex Lambert shading
+- Ambient lighting currently defaults to `0.25` from PSP renderer settings
 
 ## Build
 
@@ -54,6 +55,25 @@ Expected staged output:
 
 - `output/psp/PSP/GAME/HELENGINE/EBOOT.PBP`
 - `output/psp/PSP/GAME/HELENGINE/cooked/scenes/rendering/cube_test.hasset`
+
+## Rendering status
+
+The PSP renderer currently supports:
+
+- live scene camera traversal
+- mesh submission from cooked runtime scene data
+- base-color materials
+- directional-light ambient plus diffuse shading
+- unlit material bypass
+
+The PSP renderer does not yet support:
+
+- point lights
+- spot lights
+- specular
+- emissive
+- shadows
+- fixed-function GU lighting backend
 
 ## Boot check
 
