@@ -62,6 +62,18 @@ namespace helengine::psp::rendering {
             float Z;
         };
 
+        /// Stores one GU fixed-function textured vertex with UVs, a local normal, and position.
+        struct PspFixedFunctionTexturedVertex {
+            float U;
+            float V;
+            float NX;
+            float NY;
+            float NZ;
+            float X;
+            float Y;
+            float Z;
+        };
+
         /// Stores one raw 4x4 float buffer that can be reinterpreted as a PSP GU matrix.
         struct alignas(16) PspMatrixBuffer {
             float M[4][4];
@@ -253,7 +265,6 @@ namespace helengine::psp::rendering {
         void ConfigureFixedFunctionMaterial(const float4& baseColor, bool useLighting, bool hasDirectionalLight) {
             const std::uint32_t baseColorAbgr = ConvertColorToAbgr(baseColor);
 
-            sceGuDisable(GU_TEXTURE_2D);
             sceGuColor(baseColorAbgr);
             sceGuAmbientColor(baseColorAbgr);
             sceGuModelColor(0, baseColorAbgr, baseColorAbgr, 0);
@@ -317,7 +328,7 @@ namespace helengine::psp::rendering {
                 vertices);
         }
 
-        /// Submits one drawable through the current fixed-function lighting path.
+        /// Submits one drawable through the current fixed-function untextured lighting path.
         void SubmitFixedFunctionDrawable(
             const PspMeshRecord& record,
             const float4& baseColor,
@@ -328,6 +339,7 @@ namespace helengine::psp::rendering {
                 return;
             }
 
+            BindTexture(nullptr);
             ConfigureFixedFunctionMaterial(baseColor, useLighting, hasDirectionalLight);
 
             PspFixedFunctionVertex* vertices = static_cast<PspFixedFunctionVertex*>(sceGuGetMemory(sizeof(PspFixedFunctionVertex) * static_cast<std::size_t>(vertexCount)));
@@ -357,6 +369,62 @@ namespace helengine::psp::rendering {
             sceGumDrawArray(
                 GU_TRIANGLES,
                 GU_NORMAL_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
+                vertexCount,
+                nullptr,
+                vertices);
+        }
+
+        /// Submits one drawable through the current fixed-function textured lighting path.
+        void SubmitFixedFunctionTexturedDrawable(
+            const PspMeshRecord& record,
+            const float4& baseColor,
+            bool useLighting,
+            bool hasDirectionalLight,
+            PspRuntimeTexture* texture) {
+            int32_t vertexCount = static_cast<int32_t>(record.Indices.empty() ? record.Positions.size() : record.Indices.size());
+            if (vertexCount < 3) {
+                return;
+            }
+
+            if (texture == nullptr || !texture->HasPixels()) {
+                throw std::runtime_error("PSP fixed-function textured draws require a valid runtime texture.");
+            } else if (record.TexCoords.empty()) {
+                throw std::runtime_error("PSP fixed-function textured draws require mesh texcoords.");
+            }
+
+            BindTexture(texture);
+            ConfigureFixedFunctionMaterial(baseColor, useLighting, hasDirectionalLight);
+
+            PspFixedFunctionTexturedVertex* vertices = static_cast<PspFixedFunctionTexturedVertex*>(sceGuGetMemory(sizeof(PspFixedFunctionTexturedVertex) * static_cast<std::size_t>(vertexCount)));
+            for (int32_t index = 0; index < vertexCount; index++) {
+                std::uint32_t sourceIndex = record.Indices.empty()
+                    ? static_cast<std::uint32_t>(index)
+                    : record.Indices[static_cast<std::size_t>(index)];
+                if (sourceIndex >= record.Positions.size() || sourceIndex >= record.TexCoords.size()) {
+                    throw std::runtime_error("PSP fixed-function textured draw submitted an out-of-range mesh index.");
+                }
+
+                const float3& position = record.Positions[sourceIndex];
+                const float3 sourceNormal = sourceIndex < record.Normals.size()
+                    ? record.Normals[sourceIndex]
+                    : float3(0.0f, 0.0f, 1.0f);
+                const float2& texCoord = record.TexCoords[sourceIndex];
+
+                vertices[index] = PspFixedFunctionTexturedVertex {
+                    texCoord.X,
+                    texCoord.Y,
+                    sourceNormal.X,
+                    sourceNormal.Y,
+                    sourceNormal.Z,
+                    position.X,
+                    position.Y,
+                    position.Z
+                };
+            }
+
+            sceGumDrawArray(
+                GU_TRIANGLES,
+                GU_TEXTURE_32BITF | GU_NORMAL_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
                 vertexCount,
                 nullptr,
                 vertices);
@@ -504,7 +572,8 @@ namespace helengine::psp::rendering {
         const bool hasTexture = pspRuntimeMaterial->TryResolveTexture(texture);
         if (LightingSettings.Pipeline == PspLightingPipeline::FixedFunctionLambert) {
             if (hasTexture) {
-                throw std::runtime_error("PSP fixed-function lighting does not support textured materials yet.");
+                SubmitFixedFunctionTexturedDrawable(record, baseColor, useLighting, CurrentLighting.HasDirectionalLight, texture);
+                return;
             }
 
             SubmitFixedFunctionDrawable(record, baseColor, useLighting, CurrentLighting.HasDirectionalLight);
