@@ -259,16 +259,19 @@ public sealed class PspPlatformAssetBuilderTests {
         string sceneSourcePath = Path.Combine(sourceRoot, "cooked", "scenes", "rendering", "cube_test.hasset");
         string modelSourcePath = Path.Combine(sourceRoot, "cooked", "models", "cube.hasset");
         string materialSourcePath = Path.Combine(sourceRoot, "cooked", "materials", "standard.hasset");
+        string importedTextureSourcePath = Path.Combine(sourceRoot, "cooked", "imported", "textures", "checker");
 
         Directory.CreateDirectory(Path.GetDirectoryName(sceneSourcePath)!);
         Directory.CreateDirectory(Path.GetDirectoryName(modelSourcePath)!);
         Directory.CreateDirectory(Path.GetDirectoryName(materialSourcePath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(importedTextureSourcePath)!);
         Directory.CreateDirectory(generatedCoreRoot);
         Directory.CreateDirectory(generatedCoreRuntimeRoot);
         Directory.CreateDirectory(Path.Combine(repositoryRoot, "src", "platform", "psp"));
         File.WriteAllText(sceneSourcePath, "scene payload");
         File.WriteAllText(modelSourcePath, "model payload");
         File.WriteAllText(materialSourcePath, "material payload");
+        File.WriteAllText(importedTextureSourcePath, "texture payload");
         File.WriteAllText(Path.Combine(generatedCoreRoot, "helengine_core_amalgamated.cpp"), "// generated");
         File.WriteAllText(Path.Combine(generatedCoreRoot, "helcpp_config.hpp"), "#pragma once");
         File.WriteAllText(Path.Combine(generatedCoreRuntimeRoot, "runtime_startup_manifest.cpp"), "// startup");
@@ -300,7 +303,8 @@ public sealed class PspPlatformAssetBuilderTests {
                 [
                     new PlatformBuildArtifact("cooked/scenes/rendering/cube_test.hasset", "scene:cube-test", "sha256:scene", "scene", "shared"),
                     new PlatformBuildArtifact("cooked/models/cube.hasset", "model:cube", "sha256:model", "model", "shared"),
-                    new PlatformBuildArtifact("cooked/materials/standard.hasset", "material:standard", "sha256:material", "material", "shared")
+                    new PlatformBuildArtifact("cooked/materials/standard.hasset", "material:standard", "sha256:material", "material", "shared"),
+                    new PlatformBuildArtifact("cooked/imported/textures/checker", "texture:checker", "sha256:texture", "texture", "shared")
                 ],
                 Array.Empty<PlatformBuildCodeModule>(),
                 Array.Empty<PlatformArtifactPlacement>(),
@@ -343,11 +347,12 @@ public sealed class PspPlatformAssetBuilderTests {
 
             Assert.True(report.Succeeded);
             Assert.Empty(diagnosticReporter.Diagnostics);
-            Assert.Equal(3, progressReporter.Updates.Count);
+            Assert.Equal(4, progressReporter.Updates.Count);
             Assert.True(File.Exists(Path.Combine(outputRoot, "PSP", "GAME", "HELENGINE", "EBOOT.PBP")));
             Assert.True(File.Exists(Path.Combine(outputRoot, "PSP", "GAME", "HELENGINE", "cooked", "scenes", "rendering", "cube_test.hasset")));
             Assert.True(File.Exists(Path.Combine(outputRoot, "PSP", "GAME", "HELENGINE", "cooked", "models", "cube.hasset")));
             Assert.True(File.Exists(Path.Combine(outputRoot, "PSP", "GAME", "HELENGINE", "cooked", "materials", "standard.hasset")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "PSP", "GAME", "HELENGINE", "cooked", "imported", "textures", "checker")));
             Assert.Equal(generatedCoreRoot, nativeBuildExecutor.LastWorkspace.GeneratedCoreRootPath);
         } finally {
             try {

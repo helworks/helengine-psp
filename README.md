@@ -8,7 +8,8 @@ This repository contains the native PSP host scaffold for Helengine.
 - Standard PSP homebrew packaging ending in `EBOOT.PBP`
 - Generated Helengine runtime sources bundled into the PSP executable
 - Runtime startup reaches the real startup scene and main loop
-- PSP 3D rendering supports scene-driven directional lighting with CPU vertex Lambert shading
+- PSP 3D rendering supports base-color materials and diffuse textures under CPU directional lighting
+- Diffuse textures currently use GU nearest sampling with no mipmaps
 - Ambient lighting currently defaults to `0.25` from PSP renderer settings
 
 ## Build
@@ -63,11 +64,14 @@ The PSP renderer currently supports:
 - live scene camera traversal
 - mesh submission from cooked runtime scene data
 - base-color materials
+- diffuse texture sampling
 - directional-light ambient plus diffuse shading
 - unlit material bypass
 
 The PSP renderer does not yet support:
 
+- mipmaps
+- filtered sampling beyond nearest
 - point lights
 - spot lights
 - specular

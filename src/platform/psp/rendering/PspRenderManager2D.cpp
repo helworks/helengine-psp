@@ -1,16 +1,9 @@
 #include "platform/psp/rendering/PspRenderManager2D.hpp"
 
 namespace helengine::psp::rendering {
-    /// Builds a runtime texture placeholder from raw texture metadata.
+    /// Builds a PSP runtime texture from raw texture data and reuses cached instances by asset id.
     RuntimeTexture* PspRenderManager2D::BuildTextureFromRaw(TextureAsset* data) {
-        RuntimeTexture* runtimeTexture = new RuntimeTexture();
-        if (data != nullptr) {
-            runtimeTexture->set_Id(data->get_Id());
-            runtimeTexture->set_Width(data->Width);
-            runtimeTexture->set_Height(data->Height);
-        }
-
-        return runtimeTexture;
+        return TextureCache.BuildTextureFromRaw(data);
     }
 
     /// Ignores rounded-rectangle draws during the first 3D-only PSP milestone.

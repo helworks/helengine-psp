@@ -18,6 +18,7 @@ public sealed class PspGeneratedCoreCompatibilityNormalizer {
         NormalizePlatformConfiguration(generatedCoreRootPath);
         NormalizeEditorAssetBinarySerializer(generatedCoreRootPath);
         NormalizeEngineBinaryReader(generatedCoreRootPath);
+        NormalizeContentManager(generatedCoreRootPath);
         NormalizePathRootDetection(generatedCoreRootPath);
     }
 
@@ -134,6 +135,32 @@ public sealed class PspGeneratedCoreCompatibilityNormalizer {
             @"(std::string EngineBinaryReader::ReadString\(\)\s*\{\s*const int32_t length = this->ReadInt32\(\);\s*if \(length == -1\)\s*\{\s*)return nullptr;(\s*\}\s*else\s+if \(length < -1\))",
             "$1return String::Empty;$2",
             RegexOptions.CultureInvariant);
+
+        if (!string.Equals(sourceContents, updatedSourceContents, StringComparison.Ordinal)) {
+            File.WriteAllText(sourcePath, updatedSourceContents);
+        }
+    }
+
+    /// <summary>
+    /// Rewrites generated content loading so native PSP builds always close opened file streams after processor reads complete.
+    /// </summary>
+    /// <param name="generatedCoreRootPath">Absolute generated-core source root produced by the editor build graph.</param>
+    static void NormalizeContentManager(string generatedCoreRootPath) {
+        string sourcePath = Path.Combine(generatedCoreRootPath, "ContentManager.cpp");
+        if (!File.Exists(sourcePath)) {
+            return;
+        }
+
+        string sourceContents = File.ReadAllText(sourcePath);
+        string newline = sourceContents.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        string updatedSourceContents = sourceContents.Replace(
+            "{\n::FileStream *stream = File::OpenRead(fullPath);\nreturn processor->Read(stream);}",
+            "{"
+            + newline + "::FileStream *stream = File::OpenRead(fullPath);"
+            + newline + "T content = processor->Read(stream);"
+            + newline + "delete stream;"
+            + newline + "return content;}",
+            StringComparison.Ordinal);
 
         if (!string.Equals(sourceContents, updatedSourceContents, StringComparison.Ordinal)) {
             File.WriteAllText(sourcePath, updatedSourceContents);

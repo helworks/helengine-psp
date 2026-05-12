@@ -87,4 +87,29 @@ public sealed class PspGeneratedCoreCompatibilityNormalizerTests {
         Assert.Contains("#define HE_CPP_PLATFORM_PS2 0", updatedConfigContents, StringComparison.Ordinal);
         Assert.Contains("#define HE_CPP_PLATFORM_IS_WINDOWS_HOST 0", updatedConfigContents, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Ensures generated <c>ContentManager::LoadProcessedContent()</c> closes opened file streams after processor reads complete.
+    /// </summary>
+    [Fact]
+    public void Normalize_whenContentManagerReturnsProcessorReadDirectly_rewrites_stream_lifetime() {
+        string generatedCoreRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(generatedCoreRoot);
+
+        string sourcePath = Path.Combine(generatedCoreRoot, "ContentManager.cpp");
+        File.WriteAllText(
+            sourcePath,
+            "template <typename T>\n"
+            + "T ContentManager::LoadProcessedContent(std::string fullPath, ::IContentProcessor_1<T>* processor)\n"
+            + "{\n"
+            + "::FileStream *stream = File::OpenRead(fullPath);\n"
+            + "return processor->Read(stream);}\n");
+
+        new PspGeneratedCoreCompatibilityNormalizer().Normalize(generatedCoreRoot);
+
+        string updatedSourceContents = File.ReadAllText(sourcePath);
+        Assert.Contains("T content = processor->Read(stream);", updatedSourceContents, StringComparison.Ordinal);
+        Assert.Contains("delete stream;", updatedSourceContents, StringComparison.Ordinal);
+        Assert.Contains("return content;}", updatedSourceContents, StringComparison.Ordinal);
+    }
 }

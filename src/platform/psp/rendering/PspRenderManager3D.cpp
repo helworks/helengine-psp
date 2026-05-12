@@ -10,16 +10,19 @@
 
 #include <pspgu.h>
 #include <pspgum.h>
+#include <pspkernel.h>
 
 #include "Core.hpp"
 #include "DirectionalLightComponent.hpp"
 #include "Entity.hpp"
 #include "IRenderQueue3D.hpp"
+#include "MaterialLayoutBuilder.hpp"
 #include "ModelAsset.hpp"
+#include "float2.hpp"
 #include "ObjectManager.hpp"
-#include "platform/psp/PspBootTrace.hpp"
 #include "platform/psp/rendering/PspRuntimeMaterial.hpp"
 #include "platform/psp/rendering/PspRuntimeModel.hpp"
+#include "platform/psp/rendering/PspRuntimeTexture.hpp"
 
 namespace helengine::psp::rendering {
     namespace {
@@ -27,11 +30,22 @@ namespace helengine::psp::rendering {
         struct PspMeshRecord {
             std::vector<float3> Positions;
             std::vector<float3> Normals;
+            std::vector<float2> TexCoords;
             std::vector<std::uint32_t> Indices;
         };
 
         /// Stores one GU vertex with per-vertex color and position.
         struct PspLitVertex {
+            std::uint32_t Color;
+            float X;
+            float Y;
+            float Z;
+        };
+
+        /// Stores one GU textured vertex with UVs, per-vertex color, and position.
+        struct PspTexturedLitVertex {
+            float U;
+            float V;
             std::uint32_t Color;
             float X;
             float Y;
@@ -44,14 +58,7 @@ namespace helengine::psp::rendering {
         };
 
         std::unordered_map<const RuntimeModel*, PspMeshRecord> MeshRecords;
-        int LoggedFrameCount = 0;
-        int CurrentFrameVisitedDrawables = 0;
-        int CurrentFrameSubmittedVertices = 0;
-
-        /// Determines whether the current frame should emit bring-up render diagnostics.
-        bool ShouldLogRenderDiagnostics() {
-            return LoggedFrameCount < 8;
-        }
+        std::unordered_map<std::string, RuntimeModel*> CachedModels;
 
         /// Converts one generated matrix into the column-major layout expected by PSP GU.
         PspMatrixBuffer CreatePspMatrixBuffer(const float4x4& matrix) {
@@ -134,6 +141,25 @@ namespace helengine::psp::rendering {
                 std::min(std::max(color.Z, 0.0f), 1.0f),
                 std::min(std::max(color.W, 0.0f), 1.0f));
         }
+
+        /// Binds one PSP runtime texture for GU sampling or disables texturing when no texture exists.
+        void BindTexture(PspRuntimeTexture* texture) {
+            if (texture == nullptr || !texture->HasPixels()) {
+                sceGuDisable(GU_TEXTURE_2D);
+                return;
+            }
+
+            sceKernelDcacheWritebackRange(
+                const_cast<std::uint32_t*>(texture->GetPixelsAbgr8888()),
+                static_cast<unsigned int>(texture->GetPixelCount() * sizeof(std::uint32_t)));
+
+            sceGuEnable(GU_TEXTURE_2D);
+            sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+            sceGuTexImage(0, texture->get_Width(), texture->get_Height(), texture->get_Width(), texture->GetPixelsAbgr8888());
+            sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+            sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+            sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+        }
     }
 
     /// Creates the PSP 3D render manager.
@@ -145,6 +171,13 @@ namespace helengine::psp::rendering {
 
     /// Builds a CPU-side runtime model payload from the raw mesh asset.
     RuntimeModel* PspRenderManager3D::BuildModelFromRaw(ModelAsset* data) {
+        if (data != nullptr && !data->get_Id().empty()) {
+            auto cachedModelIterator = CachedModels.find(data->get_Id());
+            if (cachedModelIterator != CachedModels.end()) {
+                return cachedModelIterator->second;
+            }
+        }
+
         PspRuntimeModel* runtimeModel = new PspRuntimeModel();
         PspMeshRecord record;
 
@@ -164,6 +197,13 @@ namespace helengine::psp::rendering {
                 }
             }
 
+            if (data->TexCoords != nullptr && data->TexCoords->Length > 0) {
+                record.TexCoords.reserve(static_cast<std::size_t>(data->TexCoords->Length));
+                for (int32_t index = 0; index < data->TexCoords->Length; index++) {
+                    record.TexCoords.push_back((*data->TexCoords)[index]);
+                }
+            }
+
             if (data->Indices32 != nullptr && data->Indices32->Length > 0) {
                 record.Indices.reserve(static_cast<std::size_t>(data->Indices32->Length));
                 for (int32_t index = 0; index < data->Indices32->Length; index++) {
@@ -178,6 +218,9 @@ namespace helengine::psp::rendering {
         }
 
         MeshRecords[runtimeModel] = record;
+        if (data != nullptr && !data->get_Id().empty()) {
+            CachedModels.emplace(data->get_Id(), runtimeModel);
+        }
         return runtimeModel;
     }
 
@@ -186,6 +229,8 @@ namespace helengine::psp::rendering {
         PspRuntimeMaterial* runtimeMaterial = new PspRuntimeMaterial();
         if (materialAsset != nullptr) {
             runtimeMaterial->LoadFromCooked(materialAsset);
+            runtimeMaterial->SetLayout(MaterialLayoutBuilder::Build(materialAsset, shaderAsset));
+            runtimeMaterial->SetRenderState(materialAsset->RenderState);
         } else if (shaderAsset != nullptr) {
             runtimeMaterial->set_Id(shaderAsset->get_Id());
         }
@@ -202,22 +247,7 @@ namespace helengine::psp::rendering {
 
         List<ICamera*>* cameras = Core::get_Instance()->get_ObjectManager()->get_Cameras();
         if (cameras == nullptr || cameras->Count() == 0) {
-            if (ShouldLogRenderDiagnostics()) {
-                PspBootTrace::WriteLine("Render3D Draw cameras=0");
-                LoggedFrameCount++;
-            }
             return;
-        }
-
-        if (ShouldLogRenderDiagnostics()) {
-            std::string windowSizeText = "none";
-            if (get_MainWindowSize() != nullptr) {
-                windowSizeText = std::to_string(get_MainWindowSize()->X) + "x" + std::to_string(get_MainWindowSize()->Y);
-            }
-
-            PspBootTrace::WriteLine(
-                "Render3D Draw cameras=" + std::to_string(cameras->Count())
-                + " window=" + windowSizeText);
         }
 
         for (int32_t index = 0; index < cameras->Count(); index++) {
@@ -230,10 +260,6 @@ namespace helengine::psp::rendering {
             }
 
             RenderCamera(camera);
-        }
-
-        if (ShouldLogRenderDiagnostics()) {
-            LoggedFrameCount++;
         }
     }
 
@@ -248,13 +274,8 @@ namespace helengine::psp::rendering {
             return;
         }
 
-        CurrentFrameVisitedDrawables++;
-
         auto meshRecordIterator = MeshRecords.find(runtimeModel);
         if (meshRecordIterator == MeshRecords.end()) {
-            if (ShouldLogRenderDiagnostics()) {
-                PspBootTrace::WriteLine("Render3D Visit missing-mesh-record");
-            }
             return;
         }
 
@@ -282,17 +303,71 @@ namespace helengine::psp::rendering {
 
         int32_t vertexCount = static_cast<int32_t>(record.Indices.empty() ? record.Positions.size() : record.Indices.size());
         if (vertexCount < 3) {
-            if (ShouldLogRenderDiagnostics()) {
-                PspBootTrace::WriteLine("Render3D Visit vertexCount=" + std::to_string(vertexCount));
-            }
             return;
         }
-
-        CurrentFrameSubmittedVertices += vertexCount;
 
         const float4& baseColor = pspRuntimeMaterial->GetBaseColor();
         const bool useLighting = pspRuntimeMaterial->GetReceivesLighting()
             && pspRuntimeMaterial->GetLightingResponse() == PspMaterialLightingResponse::LitDirectional;
+        PspRuntimeTexture* texture = nullptr;
+        const bool hasTexture = pspRuntimeMaterial->TryResolveTexture(texture);
+        if (hasTexture && record.TexCoords.empty()) {
+            throw std::runtime_error("Textured PSP drawables require mesh texcoords.");
+        }
+
+        BindTexture(texture);
+
+        if (hasTexture) {
+            PspTexturedLitVertex* vertices = static_cast<PspTexturedLitVertex*>(sceGuGetMemory(sizeof(PspTexturedLitVertex) * static_cast<std::size_t>(vertexCount)));
+            for (int32_t index = 0; index < vertexCount; index++) {
+                std::uint32_t sourceIndex = record.Indices.empty()
+                    ? static_cast<std::uint32_t>(index)
+                    : record.Indices[static_cast<std::size_t>(index)];
+                if (sourceIndex >= record.Positions.size() || sourceIndex >= record.TexCoords.size()) {
+                    throw std::runtime_error("PSP textured draw submitted an out-of-range mesh index.");
+                }
+
+                const float3& position = record.Positions[sourceIndex];
+                const float3 sourceNormal = sourceIndex < record.Normals.size()
+                    ? record.Normals[sourceIndex]
+                    : float3(0.0f, 0.0f, 1.0f);
+                const float3 worldNormal = float3::Normalize(RotateNormal(sourceNormal, drawable->get_Parent()));
+                const float2& texCoord = record.TexCoords[sourceIndex];
+
+                float4 litColor = baseColor;
+                if (useLighting) {
+                    const float ambient = LightingSettings.AmbientIntensity;
+                    float diffuse = 0.0f;
+                    if (CurrentLighting.HasDirectionalLight) {
+                        const float3 lightDirection = float3::Normalize(CurrentLighting.DirectionalLightDirection);
+                        diffuse = std::max(0.0f, float3::Dot(worldNormal, lightDirection));
+                    }
+
+                    litColor = ClampColor(float4(
+                        baseColor.X * (ambient + (diffuse * CurrentLighting.DirectionalLightColor.X * CurrentLighting.DirectionalLightIntensity)),
+                        baseColor.Y * (ambient + (diffuse * CurrentLighting.DirectionalLightColor.Y * CurrentLighting.DirectionalLightIntensity)),
+                        baseColor.Z * (ambient + (diffuse * CurrentLighting.DirectionalLightColor.Z * CurrentLighting.DirectionalLightIntensity)),
+                        baseColor.W));
+                }
+
+                vertices[index] = PspTexturedLitVertex {
+                    texCoord.X,
+                    texCoord.Y,
+                    ConvertColorToAbgr(litColor),
+                    position.X,
+                    position.Y,
+                    position.Z
+                };
+            }
+
+            sceGumDrawArray(
+                GU_TRIANGLES,
+                GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
+                vertexCount,
+                nullptr,
+                vertices);
+            return;
+        }
 
         PspLitVertex* vertices = static_cast<PspLitVertex*>(sceGuGetMemory(sizeof(PspLitVertex) * static_cast<std::size_t>(vertexCount)));
         for (int32_t index = 0; index < vertexCount; index++) {
@@ -409,25 +484,8 @@ namespace helengine::psp::rendering {
 
         IRenderQueue3D* renderQueue = camera->get_RenderQueue3D();
         if (renderQueue != nullptr) {
-            CurrentFrameVisitedDrawables = 0;
-            CurrentFrameSubmittedVertices = 0;
             ResolveSceneLighting();
-            if (ShouldLogRenderDiagnostics()) {
-                PspBootTrace::WriteLine(
-                    "Render3D Camera queueCount=" + std::to_string(renderQueue->get_Count())
-                    + " position="
-                    + std::to_string(cameraPosition.X) + ","
-                    + std::to_string(cameraPosition.Y) + ","
-                    + std::to_string(cameraPosition.Z));
-            }
-
             renderQueue->VisitOrdered(this);
-
-            if (ShouldLogRenderDiagnostics()) {
-                PspBootTrace::WriteLine(
-                    "Render3D Camera visitedDrawables=" + std::to_string(CurrentFrameVisitedDrawables)
-                    + " submittedVertices=" + std::to_string(CurrentFrameSubmittedVertices));
-            }
         }
     }
 }

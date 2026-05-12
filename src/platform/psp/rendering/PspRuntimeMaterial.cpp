@@ -36,6 +36,22 @@ namespace helengine::psp::rendering {
         return LightingResponse;
     }
 
+    /// Resolves the first bound PSP runtime texture when the material exposes one.
+    bool PspRuntimeMaterial::TryResolveTexture(PspRuntimeTexture*& texture) {
+        RuntimeTexture* resolvedTexture = ResolveTexture();
+        if (resolvedTexture == nullptr) {
+            texture = nullptr;
+            return false;
+        }
+
+        texture = dynamic_cast<PspRuntimeTexture*>(resolvedTexture);
+        if (texture == nullptr) {
+            throw std::runtime_error("PSP textured materials require PspRuntimeTexture instances.");
+        }
+
+        return true;
+    }
+
     /// Loads PSP material state from one cooked material asset.
     void PspRuntimeMaterial::LoadFromCooked(MaterialAsset* materialAsset) {
         if (materialAsset == nullptr) {

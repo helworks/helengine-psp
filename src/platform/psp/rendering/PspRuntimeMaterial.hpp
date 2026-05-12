@@ -6,6 +6,7 @@
 #include "RuntimeMaterial.hpp"
 #include "float4.hpp"
 #include "platform/psp/rendering/PspMaterialLightingResponse.hpp"
+#include "platform/psp/rendering/PspRuntimeTexture.hpp"
 
 namespace helengine::psp::rendering {
     /// Stores PSP-specific runtime material state derived from the cooked material payload.
@@ -22,6 +23,9 @@ namespace helengine::psp::rendering {
 
         /// Gets the PSP lighting-response mode.
         PspMaterialLightingResponse GetLightingResponse() const;
+
+        /// Resolves the first bound PSP runtime texture when the material exposes one.
+        bool TryResolveTexture(PspRuntimeTexture*& texture);
 
         /// Loads PSP material state from one cooked material asset.
         void LoadFromCooked(MaterialAsset* materialAsset);

@@ -1,2 +1,4 @@
 build/
 .worktrees/
+bin/
+obj/

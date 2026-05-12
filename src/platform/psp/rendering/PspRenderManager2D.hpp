@@ -3,6 +3,7 @@
 #include "RenderManager2D.hpp"
 #include "RuntimeTexture.hpp"
 #include "TextureAsset.hpp"
+#include "platform/psp/rendering/PspTextureCache.hpp"
 
 namespace helengine::psp::rendering {
     /// Provides the minimal 2D runtime surface required to initialize generated core on PSP.
@@ -19,5 +20,9 @@ namespace helengine::psp::rendering {
 
         /// Ignores text draws during the first 3D-only PSP milestone.
         void DrawText(ITextDrawable2D* text) override;
+
+    private:
+        /// Stores cached PSP runtime textures built from cooked texture assets.
+        PspTextureCache TextureCache;
     };
 }
