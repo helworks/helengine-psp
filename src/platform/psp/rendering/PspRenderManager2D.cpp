@@ -101,8 +101,8 @@ namespace helengine::psp::rendering {
             return;
         }
 
-        int2* size = shape->get_Size();
-        if (size == nullptr || size->X <= 0 || size->Y <= 0) {
+        const int2 size = shape->get_Size();
+        if (size.X <= 0 || size.Y <= 0) {
             return;
         }
 
@@ -111,11 +111,11 @@ namespace helengine::psp::rendering {
         const float radius = std::max(0.0f, shape->get_Radius());
 
         if (borderThickness > 0) {
-            DrawFilledRoundedRect(position, *size, radius, shape->get_BorderColor());
+            DrawFilledRoundedRect(position, size, radius, shape->get_BorderColor());
         }
 
-        const int32_t innerWidth = size->X - (borderThickness * 2);
-        const int32_t innerHeight = size->Y - (borderThickness * 2);
+        const int32_t innerWidth = size.X - (borderThickness * 2);
+        const int32_t innerHeight = size.Y - (borderThickness * 2);
         if (innerWidth <= 0 || innerHeight <= 0) {
             return;
         }
@@ -136,10 +136,7 @@ namespace helengine::psp::rendering {
         }
 
         RuntimeTexture* texture = sprite->get_Texture();
-        int2* size = sprite->get_Size();
-        int2 resolvedSize = size != nullptr
-            ? *size
-            : int2::Zero;
+        int2 resolvedSize = sprite->get_Size();
         if (resolvedSize.X <= 0 || resolvedSize.Y <= 0) {
             resolvedSize = int2(texture->get_Width(), texture->get_Height());
         }
@@ -170,10 +167,10 @@ namespace helengine::psp::rendering {
         std::string content = text->get_Text();
 
         if (text->get_WrapText()) {
-            int2* textSize = text->get_Size();
+            const int2 textSize = text->get_Size();
             const int32_t wrapWidth = std::max<int32_t>(
                 1,
-                static_cast<int32_t>(std::lround((textSize != nullptr ? textSize->X : 1) / fontScale)));
+                static_cast<int32_t>(std::lround(std::max<int32_t>(static_cast<int32_t>(textSize.X), 1) / fontScale)));
             content = TextLayoutUtils::WrapText(content, font, wrapWidth);
         }
 
@@ -284,22 +281,16 @@ namespace helengine::psp::rendering {
 
             if (IRoundedRectDrawable2D* roundedRect = dynamic_cast<IRoundedRectDrawable2D*>(drawable)) {
                 drawableKind = "RoundedRect";
-                int2* size = roundedRect->get_Size();
-                if (size != nullptr) {
-                    sizeSummary = "size=" + std::to_string(size->X) + "," + std::to_string(size->Y);
-                }
+                const int2 size = roundedRect->get_Size();
+                sizeSummary = "size=" + std::to_string(size.X) + "," + std::to_string(size.Y);
             } else if (ITextDrawable2D* text = dynamic_cast<ITextDrawable2D*>(drawable)) {
                 drawableKind = "Text";
-                int2* size = text->get_Size();
-                if (size != nullptr) {
-                    sizeSummary = "size=" + std::to_string(size->X) + "," + std::to_string(size->Y);
-                }
+                const int2 size = text->get_Size();
+                sizeSummary = "size=" + std::to_string(size.X) + "," + std::to_string(size.Y);
             } else if (ISpriteDrawable2D* sprite = dynamic_cast<ISpriteDrawable2D*>(drawable)) {
                 drawableKind = "Sprite";
-                int2* size = sprite->get_Size();
-                if (size != nullptr) {
-                    sizeSummary = "size=" + std::to_string(size->X) + "," + std::to_string(size->Y);
-                }
+                const int2 size = sprite->get_Size();
+                sizeSummary = "size=" + std::to_string(size.X) + "," + std::to_string(size.Y);
             }
 
             psp::PspBootTrace::WriteLine(

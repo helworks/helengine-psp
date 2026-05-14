@@ -246,6 +246,25 @@ public sealed class PspPlatformAssetBuilderTests {
     }
 
     /// <summary>
+    /// Verifies the PSP builder can resolve its repository root from the builder assembly location when hosted by another process.
+    /// </summary>
+    [Fact]
+    public void ResolveRepositoryRootPath_uses_builder_assembly_location() {
+        string previousRepositoryRoot = Environment.GetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT");
+        try {
+            Environment.SetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT", null);
+
+            System.Reflection.MethodInfo method = typeof(PspPlatformAssetBuilder).GetMethod("ResolveRepositoryRootPath", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+                ?? throw new InvalidOperationException("ResolveRepositoryRootPath was not found.");
+            string repositoryRootPath = Assert.IsType<string>(method.Invoke(null, null));
+
+            Assert.Equal(Path.GetFullPath("C:\\dev\\helworks\\helengine-psp"), Path.GetFullPath(repositoryRootPath));
+        } finally {
+            Environment.SetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT", previousRepositoryRoot);
+        }
+    }
+
+    /// <summary>
     /// Verifies the PSP builder stages cooked artifacts into a PSP homebrew game folder and copies the built PBP into place.
     /// </summary>
     [Fact]

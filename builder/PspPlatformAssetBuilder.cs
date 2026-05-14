@@ -365,7 +365,8 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
             return Path.GetFullPath(configuredRepositoryRootPath);
         }
 
-        string currentPath = AppContext.BaseDirectory;
+        string builderAssemblyPath = typeof(PspPlatformAssetBuilder).Assembly.Location;
+        string currentPath = Path.GetDirectoryName(builderAssemblyPath) ?? string.Empty;
         while (!string.IsNullOrWhiteSpace(currentPath)) {
             if (IsRepositoryRootPath(currentPath)) {
                 return currentPath;
