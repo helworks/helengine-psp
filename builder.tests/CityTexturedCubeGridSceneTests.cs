@@ -26,12 +26,12 @@ public sealed class CityTexturedCubeGridSceneTests {
         MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService();
         string materialPath = Path.Combine(CityProjectRootPath, Cube00MaterialRelativePath);
 
-        Assert.True(settingsService.TryLoad(materialPath, out AssetImportSettings settings));
+        Assert.True(settingsService.TryLoad(materialPath, out MaterialAssetImportSettings settings));
         Assert.NotNull(settings);
         Assert.True(settings.Processor.Platforms.ContainsKey("psp"));
-        Assert.Equal("standard-shader", settings.Processor.Platforms["psp"].Material.SchemaId);
-        Assert.True(settings.Processor.Platforms["psp"].Material.FieldValues.ContainsKey("texture-id"));
-        Assert.False(string.IsNullOrWhiteSpace(settings.Processor.Platforms["psp"].Material.FieldValues["texture-id"]));
+        Assert.Equal("standard-shader", settings.Processor.Platforms["psp"].SchemaId);
+        Assert.True(settings.Processor.Platforms["psp"].FieldValues.ContainsKey("texture-id"));
+        Assert.False(string.IsNullOrWhiteSpace(settings.Processor.Platforms["psp"].FieldValues["texture-id"]));
     }
 
     /// <summary>
@@ -42,15 +42,15 @@ public sealed class CityTexturedCubeGridSceneTests {
         MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService();
         string materialPath = Path.Combine(CityProjectRootPath, Cube00MaterialRelativePath);
 
-        Assert.True(settingsService.TryLoad(materialPath, out AssetImportSettings settings));
+        Assert.True(settingsService.TryLoad(materialPath, out MaterialAssetImportSettings settings));
         Assert.NotNull(settings);
         Assert.True(settings.Processor.Platforms.ContainsKey("psp"));
 
         MaterialAsset sourceMaterialAsset = ReadTexturedCubeGridMaterialAsset();
         Assert.False(string.IsNullOrWhiteSpace(sourceMaterialAsset.DiffuseTextureAssetId));
 
-        AssetPlatformProcessorSettings platformSettings = settings.Processor.Platforms["psp"];
-        Dictionary<string, string> fieldValues = new Dictionary<string, string>(platformSettings.Material.FieldValues) {
+        MaterialAssetProcessorSettings platformSettings = settings.Processor.Platforms["psp"];
+        Dictionary<string, string> fieldValues = new Dictionary<string, string>(platformSettings.FieldValues) {
             ["shader-asset-id"] = sourceMaterialAsset.ShaderAssetId,
             ["vertex-program"] = sourceMaterialAsset.VertexProgram,
             ["pixel-program"] = sourceMaterialAsset.PixelProgram,
@@ -63,7 +63,7 @@ public sealed class CityTexturedCubeGridSceneTests {
             "psp",
             "debug",
             "psp-forward",
-            platformSettings.Material.SchemaId,
+            platformSettings.SchemaId,
             fieldValues));
 
         MaterialAsset materialAsset = Assert.IsType<MaterialAsset>(AssetSerializer.DeserializeFromBytes(cookResult.CookedMaterialBytes));

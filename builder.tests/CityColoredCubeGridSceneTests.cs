@@ -83,11 +83,11 @@ public sealed class CityColoredCubeGridSceneTests {
         MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService();
         string materialPath = Path.Combine(CityProjectRootPath, Cube00MaterialRelativePath);
 
-        Assert.True(settingsService.TryLoad(materialPath, out AssetImportSettings settings));
+        Assert.True(settingsService.TryLoad(materialPath, out MaterialAssetImportSettings settings));
         Assert.NotNull(settings);
         Assert.True(settings.Processor.Platforms.ContainsKey("psp"));
-        Assert.Equal("standard-shader", settings.Processor.Platforms["psp"].Material.SchemaId);
-        Assert.Equal("#FF4040FF", settings.Processor.Platforms["psp"].Material.FieldValues["base-color"]);
+        Assert.Equal("standard-shader", settings.Processor.Platforms["psp"].SchemaId);
+        Assert.Equal("#FF4040FF", settings.Processor.Platforms["psp"].FieldValues["base-color"]);
     }
 
     /// <summary>
@@ -98,13 +98,13 @@ public sealed class CityColoredCubeGridSceneTests {
         MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService();
         string materialPath = Path.Combine(CityProjectRootPath, Cube00MaterialRelativePath);
 
-        Assert.True(settingsService.TryLoad(materialPath, out AssetImportSettings settings));
+        Assert.True(settingsService.TryLoad(materialPath, out MaterialAssetImportSettings settings));
         Assert.NotNull(settings);
         Assert.True(settings.Processor.Platforms.ContainsKey("psp"));
 
         MaterialAsset sourceMaterialAsset = ReadColoredCubeGridMaterialAsset();
-        AssetPlatformProcessorSettings platformSettings = settings.Processor.Platforms["psp"];
-        Dictionary<string, string> fieldValues = new Dictionary<string, string>(platformSettings.Material.FieldValues) {
+        MaterialAssetProcessorSettings platformSettings = settings.Processor.Platforms["psp"];
+        Dictionary<string, string> fieldValues = new Dictionary<string, string>(platformSettings.FieldValues) {
             ["shader-asset-id"] = sourceMaterialAsset.ShaderAssetId,
             ["vertex-program"] = sourceMaterialAsset.VertexProgram,
             ["pixel-program"] = sourceMaterialAsset.PixelProgram,
@@ -117,7 +117,7 @@ public sealed class CityColoredCubeGridSceneTests {
             "psp",
             "debug",
             "psp-forward",
-            platformSettings.Material.SchemaId,
+            platformSettings.SchemaId,
             fieldValues));
 
         MaterialAsset materialAsset = Assert.IsType<MaterialAsset>(AssetSerializer.DeserializeFromBytes(cookResult.CookedMaterialBytes));

@@ -677,8 +677,9 @@ namespace helengine::psp::rendering {
         float4x4::CreateLookAt(cameraPosition, cameraTarget, cameraUp, CurrentView);
 
         float aspectRatio = 1.0f;
-        if (get_MainWindowSize() != nullptr && get_MainWindowSize()->Y > 0) {
-            aspectRatio = static_cast<float>(get_MainWindowSize()->X) / static_cast<float>(get_MainWindowSize()->Y);
+        const int2 mainWindowSize = get_MainWindowSize();
+        if (mainWindowSize.Y > 0) {
+            aspectRatio = static_cast<float>(mainWindowSize.X) / static_cast<float>(mainWindowSize.Y);
         }
 
         constexpr float CameraFieldOfViewRadians = 0.78539816339f;

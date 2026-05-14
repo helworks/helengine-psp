@@ -12,6 +12,7 @@
 
 #include "Core.hpp"
 #include "CoreInitializationOptions.hpp"
+#include "PlatformInfo.hpp"
 #include "RenderManager2D.hpp"
 #include "RenderManager3D.hpp"
 #include "SceneAsset.hpp"
@@ -22,6 +23,7 @@
 #include "platform/psp/rendering/PspRenderManager2D.hpp"
 #include "platform/psp/rendering/PspRenderManager3D.hpp"
 #include "runtime/native_exceptions.hpp"
+#include "runtime/runtime_startup_manifest.hpp"
 
 PSP_MODULE_INFO("helengine_psp", 0, 1, 0);
 PSP_HEAP_SIZE_KB(16 * 1024);
@@ -148,6 +150,22 @@ namespace helengine::psp {
         return AppRootPath;
     }
 
+    /// Builds the runtime platform metadata embedded into the PSP generated startup manifest.
+    PlatformInfo* PspBootHost::BuildRuntimePlatformInfo() {
+        const char* platformName = he_get_runtime_platform_name();
+        if (platformName == nullptr || platformName[0] == '\0') {
+            throw std::runtime_error("Packaged runtime platform name was not embedded into the PSP build.");
+        }
+
+        const char* platformVersion = he_get_runtime_platform_version();
+        if (platformVersion == nullptr || platformVersion[0] == '\0') {
+            throw std::runtime_error("Packaged runtime platform version was not embedded into the PSP build.");
+        }
+
+        PspBootTrace::WriteLine(std::string("Runtime platform info resolved to '") + platformName + "' version '" + platformVersion + "'.");
+        return new PlatformInfo(std::string(platformName), std::string(platformVersion));
+    }
+
     /// Constructs generated core and PSP platform backends and initializes the runtime.
     void PspBootHost::InitializeCore(const std::string& appRootPath) {
         EnterBootStage(RuntimeCoreInitializationStageName);
@@ -166,10 +184,12 @@ namespace helengine::psp {
         EngineInputBackend = new PspInputBackend();
 
         EngineRenderManager3D->AddWindow(0, ScreenWidth, ScreenHeight);
+        PlatformInfo* platformInfo = BuildRuntimePlatformInfo();
         EngineCore->Initialize(
             EngineRenderManager3D,
             EngineRenderManager2D,
             EngineInputBackend,
+            platformInfo,
             EngineOptions);
 
         CompleteBootStage();
