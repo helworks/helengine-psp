@@ -11,6 +11,7 @@
 #include "float3.hpp"
 #include "float4x4.hpp"
 #include "platform/psp/rendering/PspLightingSettings.hpp"
+#include "platform/psp/rendering/PspRenderManager2D.hpp"
 #include "platform/psp/rendering/PspSceneLightingSnapshot.hpp"
 
 namespace helengine::psp::rendering {
@@ -25,6 +26,9 @@ namespace helengine::psp::rendering {
 
         /// Builds a runtime material placeholder and captures the authored base color.
         RuntimeMaterial* BuildMaterialFromRaw(MaterialAsset* materialAsset, ShaderAsset* shaderAsset) override;
+
+        /// Wires the paired PSP 2D renderer used for per-camera UI submission.
+        void SetRenderManager2D(PspRenderManager2D* renderManager2D);
 
         /// Draws every visible authored camera to the current PSP back buffer.
         void Draw() override;
@@ -53,5 +57,8 @@ namespace helengine::psp::rendering {
 
         /// Stores the active camera world-space position.
         float3 CurrentCameraPosition;
+
+        /// Stores the paired PSP 2D renderer that submits the camera's 2D queue.
+        PspRenderManager2D* RenderManager2D;
     };
 }

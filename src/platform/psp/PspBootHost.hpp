@@ -89,5 +89,6 @@ namespace helengine::psp {
 
         /// Stores the PSP input backend used by generated core.
         ::IInputBackend* EngineInputBackend;
+
     };
 }

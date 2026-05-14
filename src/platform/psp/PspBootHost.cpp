@@ -179,8 +179,11 @@ namespace helengine::psp {
         EngineOptions->set_RenderList2DInitialCapacity(8);
         EngineOptions->set_RenderList3DInitialCapacity(64);
 
-        EngineRenderManager3D = new rendering::PspRenderManager3D();
-        EngineRenderManager2D = new rendering::PspRenderManager2D();
+        rendering::PspRenderManager3D* pspRenderManager3D = new rendering::PspRenderManager3D();
+        rendering::PspRenderManager2D* pspRenderManager2D = new rendering::PspRenderManager2D();
+        pspRenderManager3D->SetRenderManager2D(pspRenderManager2D);
+        EngineRenderManager3D = pspRenderManager3D;
+        EngineRenderManager2D = pspRenderManager2D;
         EngineInputBackend = new PspInputBackend();
 
         EngineRenderManager3D->AddWindow(0, ScreenWidth, ScreenHeight);

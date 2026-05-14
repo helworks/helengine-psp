@@ -435,7 +435,8 @@ namespace helengine::psp::rendering {
     PspRenderManager3D::PspRenderManager3D()
         : CurrentView(float4x4::get_Identity()),
           CurrentProjection(float4x4::get_Identity()),
-          CurrentCameraPosition(0.0f, 0.0f, 0.0f) {
+          CurrentCameraPosition(0.0f, 0.0f, 0.0f),
+          RenderManager2D(nullptr) {
     }
 
     /// Builds a CPU-side runtime model payload from the raw mesh asset.
@@ -505,6 +506,11 @@ namespace helengine::psp::rendering {
         }
 
         return runtimeMaterial;
+    }
+
+    /// Wires the paired PSP 2D renderer used for per-camera UI submission.
+    void PspRenderManager3D::SetRenderManager2D(PspRenderManager2D* renderManager2D) {
+        RenderManager2D = renderManager2D;
     }
 
     /// Draws every visible authored camera to the current PSP back buffer.
@@ -709,6 +715,10 @@ namespace helengine::psp::rendering {
                 sceGuDisable(GU_LIGHTING);
             }
             renderQueue->VisitOrdered(this);
+        }
+
+        if (RenderManager2D != nullptr) {
+            RenderManager2D->RenderCamera(camera);
         }
     }
 }

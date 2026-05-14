@@ -1,0 +1,4 @@
+49:00:030 ExecLoader   N[BOOT]: Core\System.cpp:620 PPSSPP v1.20.3
+49:00:054 ExecLoader   E[FILESYS]: FileSystems\DirectoryFileSystem.cpp:64 DirectoryFileSystem::OpenFile('/PSP/GAME/HELENGINE/EBOOT.PBP'): FAILED, 3 - access = 1 'The system cannot find the path specified.'
+49:00:055 ExecLoader   E[LOADER]: HLE\sceKernelModule.cpp:1768 Failed to load executable ms0:/PSP/GAME/HELENGINE/EBOOT.PBP - file doesn't exist
+49:00:062 EmuThread    E[BOOT]: UI\EmuScreen.cpp:260 Boot failed: Could not find executable ms0:/PSP/GAME/HELENGINE/EBOOT.PBP
