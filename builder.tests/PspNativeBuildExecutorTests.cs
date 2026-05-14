@@ -28,10 +28,10 @@ public sealed class PspNativeBuildExecutorTests {
     }
 
     /// <summary>
-    /// Ensures the native-build executor enables isolated boot explicitly so the PSP player can stay on a blank frame during runtime bring-up.
+    /// Ensures the native-build executor invokes a clean rebuild so the packaged EBOOT cannot reuse stale native artifacts.
     /// </summary>
     [Fact]
-    public void CreateBuildArguments_whenWorkspaceIsProvided_enables_isolated_boot() {
+    public void CreateBuildArguments_whenWorkspaceIsProvided_runs_clean_rebuild() {
         PspBuildWorkspace workspace = new(
             "/repo",
             "/repo/tmp/psp-staging",
@@ -41,14 +41,15 @@ public sealed class PspNativeBuildExecutorTests {
 
         IReadOnlyList<string> arguments = PspNativeBuildExecutor.CreateBuildArguments(workspace);
 
-        Assert.Contains("HELENGINE_PSP_ISOLATED_BOOT=ON", arguments);
+        Assert.Contains("clean", arguments);
+        Assert.Contains("all", arguments);
     }
 
     /// <summary>
-    /// Ensures the native-build executor keeps checkpointed runtime startup disabled unless a bring-up build opts in explicitly.
+    /// Ensures the native-build executor enables checkpointed runtime startup for the packaged PSP player build.
     /// </summary>
     [Fact]
-    public void CreateBuildArguments_whenWorkspaceIsProvided_disables_runtime_startup_by_default() {
+    public void CreateBuildArguments_whenWorkspaceIsProvided_enables_runtime_startup() {
         PspBuildWorkspace workspace = new(
             "/repo",
             "/repo/tmp/psp-staging",
@@ -58,6 +59,6 @@ public sealed class PspNativeBuildExecutorTests {
 
         IReadOnlyList<string> arguments = PspNativeBuildExecutor.CreateBuildArguments(workspace);
 
-        Assert.Contains("HELENGINE_PSP_ENABLE_RUNTIME_STARTUP=OFF", arguments);
+        Assert.Contains("HELENGINE_PSP_ENABLE_RUNTIME_STARTUP=ON", arguments);
     }
 }

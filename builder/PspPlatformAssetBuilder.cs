@@ -60,6 +60,11 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
     readonly PspGeneratedCoreCompatibilityNormalizer GeneratedCoreCompatibilityNormalizer;
 
     /// <summary>
+    /// Writes generated runtime manifest sources consumed by the PSP native player.
+    /// </summary>
+    readonly PspRuntimeNativeManifestWriter RuntimeNativeManifestWriter;
+
+    /// <summary>
     /// Initializes the PSP builder with its typed metadata.
     /// </summary>
     public PspPlatformAssetBuilder()
@@ -74,6 +79,7 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
         NativeBuildExecutor = nativeBuildExecutor ?? throw new ArgumentNullException(nameof(nativeBuildExecutor));
         AppLayoutWriter = new PspAppLayoutWriter();
         GeneratedCoreCompatibilityNormalizer = new PspGeneratedCoreCompatibilityNormalizer();
+        RuntimeNativeManifestWriter = new PspRuntimeNativeManifestWriter();
         Descriptor = new PlatformBuilderDescriptor(
             "helengine.psp.builder",
             "1.0.0",
@@ -170,6 +176,7 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
 
         Directory.CreateDirectory(request.OutputRoot);
         Directory.CreateDirectory(request.WorkingRoot);
+        RuntimeNativeManifestWriter.Write(request.GeneratedCoreCppRootPath, request.Manifest);
 
         List<PlatformBuildDiagnostic> diagnostics = [];
         List<PlatformBuildItemOutcome> sceneOutcomes = BuildSceneOutcomes(request.Manifest.Scenes);

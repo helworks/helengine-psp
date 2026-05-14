@@ -290,6 +290,8 @@ public sealed class PspPlatformAssetBuilderTests {
                 "city",
                 "1.0.0",
                 "1.0.0",
+                "psp",
+                "1.0.0",
                 "scenes/rendering/cube_test.helen",
                 [
                     new PlatformBuildScene(
@@ -375,6 +377,117 @@ public sealed class PspPlatformAssetBuilderTests {
     }
 
     /// <summary>
+    /// Verifies the PSP builder rewrites runtime manifest sources so startup-scene and platform metadata match the current build manifest.
+    /// </summary>
+    [Fact]
+    public async Task BuildAsync_rewrites_runtime_startup_manifest_with_platform_metadata() {
+        string workingRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string outputRoot = Path.Combine(workingRoot, "out");
+        string sourceRoot = Path.Combine(workingRoot, "staging");
+        string generatedCoreRoot = Path.Combine(workingRoot, "generated-core");
+        string generatedCoreRuntimeRoot = Path.Combine(generatedCoreRoot, "runtime");
+        string repositoryRoot = Path.Combine(workingRoot, "repository");
+        string sceneSourcePath = Path.Combine(sourceRoot, "cooked", "scenes", "rendering", "textured_cube_grid.hasset");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(sceneSourcePath)!);
+        Directory.CreateDirectory(generatedCoreRuntimeRoot);
+        Directory.CreateDirectory(Path.Combine(repositoryRoot, "src", "platform", "psp"));
+
+        File.WriteAllText(sceneSourcePath, "scene payload");
+        File.WriteAllText(Path.Combine(generatedCoreRoot, "helengine_core_amalgamated.cpp"), "// generated");
+        File.WriteAllText(Path.Combine(generatedCoreRoot, "helcpp_config.hpp"), "#pragma once");
+        File.WriteAllText(Path.Combine(generatedCoreRuntimeRoot, "runtime_startup_manifest.cpp"), "// stale startup");
+        File.WriteAllText(Path.Combine(generatedCoreRuntimeRoot, "runtime_scene_catalog_manifest.cpp"), "// stale scene catalog");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Makefile"), "# fake");
+        File.WriteAllText(Path.Combine(repositoryRoot, "src", "platform", "psp", "PspBootHost.cpp"), "// fake");
+
+        string previousDirectory = Directory.GetCurrentDirectory();
+        string previousRepositoryRoot = Environment.GetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT");
+        try {
+            Directory.SetCurrentDirectory(sourceRoot);
+            Environment.SetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT", repositoryRoot);
+
+            PlatformBuildManifest manifest = new(
+                3,
+                "city",
+                "1.0.0",
+                "1.0.0",
+                "psp",
+                "1.0.0",
+                "scenes/rendering/textured_cube_grid.helen",
+                [
+                    new PlatformBuildScene(
+                        "scenes/rendering/textured_cube_grid.helen",
+                        "Textured Cube Grid",
+                        "cooked/scenes/rendering/textured_cube_grid.hasset",
+                        [],
+                        [new KeyValuePair<string, string>("cooked-relative-path", "cooked/scenes/rendering/textured_cube_grid.hasset")])
+                ],
+                Array.Empty<PlatformBuildAsset>(),
+                [
+                    new PlatformBuildArtifact("cooked/scenes/rendering/textured_cube_grid.hasset", "scene:textured-cube-grid", "sha256:scene", "scene", "shared")
+                ],
+                Array.Empty<PlatformBuildCodeModule>(),
+                Array.Empty<PlatformArtifactPlacement>(),
+                new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()));
+
+            PlatformBuildRequest request = new(
+                manifest,
+                [new PlatformBuildTargetVariant("psp-debug", "psp", "psp", "default")],
+                [new PlatformCookProfile(
+                    "default",
+                    "Default",
+                    new PlatformCookProfileCapabilities(
+                        "psp",
+                        "raw",
+                        "rgba",
+                        "psp-scene-v1",
+                        PlatformSerializationEndianness.LittleEndian))],
+                outputRoot,
+                Path.Combine(workingRoot, "tmp"),
+                selectedBuildProfileId: "debug",
+                selectedGraphicsProfileId: "psp-forward",
+                selectedCodegenProfileId: "default",
+                selectedBuildOptionValues: new Dictionary<string, string>(),
+                selectedGraphicsOptionValues: new Dictionary<string, string>(),
+                selectedCodegenOptionValues: new Dictionary<string, string>(),
+                generatedCoreCppRootPath: generatedCoreRoot,
+                selectedMediaProfileId: "psp-game-folder",
+                selectedStorageProfileId: "homebrew-app");
+
+            PspPlatformAssetBuilder builder = new(new FakePspNativeBuildExecutor());
+
+            await builder.BuildAsync(
+                request,
+                new RecordingProgressReporter(),
+                new RecordingDiagnosticReporter(),
+                CancellationToken.None);
+
+            string startupManifestContents = File.ReadAllText(Path.Combine(generatedCoreRuntimeRoot, "runtime_startup_manifest.cpp"));
+            Assert.Contains("cooked/scenes/rendering/textured_cube_grid.hasset", startupManifestContents);
+            Assert.Contains("static const char kRuntimePlatformName[] = \"psp\";", startupManifestContents);
+            Assert.Contains("static const char kRuntimePlatformVersion[] = \"1.0.0\";", startupManifestContents);
+        } finally {
+            try {
+                Directory.SetCurrentDirectory(previousDirectory);
+            } catch {
+            }
+
+            try {
+                Environment.SetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT", previousRepositoryRoot);
+            } catch {
+            }
+
+            try {
+                if (Directory.Exists(workingRoot)) {
+                    Directory.Delete(workingRoot, recursive: true);
+                }
+            } catch {
+            }
+        }
+    }
+
+    /// <summary>
     /// Verifies the PSP builder rejects requests that do not include a loadable startup scene inside the cooked scene manifest.
     /// </summary>
     [Fact]
@@ -408,6 +521,8 @@ public sealed class PspPlatformAssetBuilderTests {
                 3,
                 "city",
                 "1.0.0",
+                "1.0.0",
+                "psp",
                 "1.0.0",
                 "scenes/rendering/cube_test.helen",
                 Array.Empty<PlatformBuildScene>(),

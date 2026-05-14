@@ -4,6 +4,7 @@
 
 class Core;
 class CoreInitializationOptions;
+class PlatformInfo;
 class RenderManager2D;
 class RenderManager3D;
 class IInputBackend;
@@ -28,6 +29,9 @@ namespace helengine::psp {
 
         /// Resolves and records the PSP app root used for runtime content access.
         std::string ResolveAppRootPath();
+
+        /// Builds the runtime platform metadata embedded into the PSP generated startup manifest.
+        PlatformInfo* BuildRuntimePlatformInfo();
 
         /// Constructs generated core and PSP platform backends and initializes the runtime.
         void InitializeCore(const std::string& appRootPath);
