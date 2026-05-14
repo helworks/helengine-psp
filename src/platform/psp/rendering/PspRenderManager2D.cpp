@@ -19,11 +19,8 @@
 #include "ISpriteDrawable2D.hpp"
 #include "ITextDrawable2D.hpp"
 #include "RoundedRectComponent.hpp"
-#include "ScrollComponent.hpp"
 #include "TextComponent.hpp"
 #include "TextLayoutUtils.hpp"
-#include "ClipRectComponent.hpp"
-#include "platform/psp/PspBootTrace.hpp"
 #include "platform/psp/rendering/PspRuntimeTexture.hpp"
 
 namespace helengine::psp::rendering {
@@ -57,15 +54,6 @@ namespace helengine::psp::rendering {
             return parent != nullptr && parent->get_IsHierarchyEnabled();
         }
 
-        /// Returns whether one drawable matches the menu row orders currently under scroll-clip investigation.
-        bool ShouldTraceMenuClip(IDrawable2D* drawable) {
-            if (drawable == nullptr) {
-                return false;
-            }
-
-            const uint8_t renderOrder = drawable->get_RenderOrder2D();
-            return renderOrder == 33 || renderOrder == 34;
-        }
     }
 
     /// Builds a PSP runtime texture from raw texture metadata and reuses cached instances by asset id.
@@ -231,74 +219,10 @@ namespace helengine::psp::rendering {
         }
 
         float4 clipRect;
-        const int32_t menuRowTraceIndex = ResolveMenuRowTraceIndex(drawable);
         if (TryResolveClipRect(drawable, clipRect)) {
-            if (menuRowTraceIndex >= 0 && !MenuRowTraceFlags[menuRowTraceIndex]) {
-                Entity* parent = drawable->get_Parent();
-                const float3 parentPosition = parent != nullptr ? parent->get_Position() : float3();
-                psp::PspBootTrace::WriteLine(
-                    std::string("MenuRowClip resolved index=") + std::to_string(menuRowTraceIndex)
-                    + " y=" + std::to_string(parentPosition.Y)
-                    + " rect=" + std::to_string(clipRect.X) + "," + std::to_string(clipRect.Y) + "," + std::to_string(clipRect.Z) + "," + std::to_string(clipRect.W));
-                MenuRowTraceFlags[menuRowTraceIndex] = true;
-            }
             ApplyClipRect(clipRect);
         } else {
-            if (menuRowTraceIndex >= 0 && !MenuRowTraceFlags[menuRowTraceIndex]) {
-                Entity* parent = drawable->get_Parent();
-                const float3 parentPosition = parent != nullptr ? parent->get_Position() : float3();
-                psp::PspBootTrace::WriteLine(
-                    std::string("MenuRowClip none index=") + std::to_string(menuRowTraceIndex)
-                    + " y=" + std::to_string(parentPosition.Y));
-                MenuRowTraceFlags[menuRowTraceIndex] = true;
-            }
-            if (ShouldTraceMenuClip(drawable) && ClipDiagnosticCount < 512) {
-                Entity* parent = drawable->get_Parent();
-                const float3 parentPosition = parent != nullptr ? parent->get_Position() : float3();
-                const char* drawableKind = "Drawable2D";
-                if (dynamic_cast<IRoundedRectDrawable2D*>(drawable) != nullptr) {
-                    drawableKind = "RoundedRect";
-                } else if (dynamic_cast<ITextDrawable2D*>(drawable) != nullptr) {
-                    drawableKind = "Text";
-                } else if (dynamic_cast<ISpriteDrawable2D*>(drawable) != nullptr) {
-                    drawableKind = "Sprite";
-                }
-
-                psp::PspBootTrace::WriteLine(
-                    std::string("ClipRect none type=") + drawableKind
-                    + " parentPos=" + std::to_string(parentPosition.X) + "," + std::to_string(parentPosition.Y)
-                    + " order=" + std::to_string(drawable->get_RenderOrder2D()));
-                ClipDiagnosticCount++;
-            }
             ClearClipRect();
-        }
-
-        if (ShouldTraceMenuClip(drawable) && ClipDiagnosticCount < 1024) {
-            Entity* parent = drawable->get_Parent();
-            const float3 parentPosition = parent != nullptr ? parent->get_Position() : float3();
-            const char* drawableKind = "Drawable2D";
-            std::string sizeSummary = "size=na";
-
-            if (IRoundedRectDrawable2D* roundedRect = dynamic_cast<IRoundedRectDrawable2D*>(drawable)) {
-                drawableKind = "RoundedRect";
-                const int2 size = roundedRect->get_Size();
-                sizeSummary = "size=" + std::to_string(size.X) + "," + std::to_string(size.Y);
-            } else if (ITextDrawable2D* text = dynamic_cast<ITextDrawable2D*>(drawable)) {
-                drawableKind = "Text";
-                const int2 size = text->get_Size();
-                sizeSummary = "size=" + std::to_string(size.X) + "," + std::to_string(size.Y);
-            } else if (ISpriteDrawable2D* sprite = dynamic_cast<ISpriteDrawable2D*>(drawable)) {
-                drawableKind = "Sprite";
-                const int2 size = sprite->get_Size();
-                sizeSummary = "size=" + std::to_string(size.X) + "," + std::to_string(size.Y);
-            }
-
-            psp::PspBootTrace::WriteLine(
-                std::string("DrawableState type=") + drawableKind
-                + " parentPos=" + std::to_string(parentPosition.X) + "," + std::to_string(parentPosition.Y)
-                + " order=" + std::to_string(drawable->get_RenderOrder2D())
-                + " " + sizeSummary);
-            ClipDiagnosticCount++;
         }
 
         drawable->Draw();
@@ -521,81 +445,7 @@ namespace helengine::psp::rendering {
             clipRect = ClipRegionStackBuilder.Intersect(clipRect, ClipChain[clipIndex]->GetClipRect());
         }
 
-        if (ShouldTraceMenuClip(drawable) && ClipDiagnosticCount < 512) {
-            Entity* parent = drawable->get_Parent();
-            const float3 parentPosition = parent != nullptr ? parent->get_Position() : float3();
-            const char* drawableKind = "Drawable2D";
-            if (dynamic_cast<IRoundedRectDrawable2D*>(drawable) != nullptr) {
-                drawableKind = "RoundedRect";
-            } else if (dynamic_cast<ITextDrawable2D*>(drawable) != nullptr) {
-                drawableKind = "Text";
-            } else if (dynamic_cast<ISpriteDrawable2D*>(drawable) != nullptr) {
-                drawableKind = "Sprite";
-            }
-
-            std::string chainTypes;
-            for (int32_t clipIndex = 0; clipIndex < ClipChain.Count(); clipIndex++) {
-                if (clipIndex > 0) {
-                    chainTypes += ",";
-                }
-
-                if (dynamic_cast<ScrollComponent*>(ClipChain[clipIndex]) != nullptr) {
-                    chainTypes += "Scroll";
-                } else if (dynamic_cast<ClipRectComponent*>(ClipChain[clipIndex]) != nullptr) {
-                    chainTypes += "ClipRect";
-                } else {
-                    chainTypes += "Other";
-                }
-            }
-
-            psp::PspBootTrace::WriteLine(
-                std::string("ClipRect count=") + std::to_string(ClipChain.Count())
-                + " types=" + chainTypes
-                + " type=" + drawableKind
-                + " parentPos=" + std::to_string(parentPosition.X) + "," + std::to_string(parentPosition.Y)
-                + " order=" + std::to_string(drawable->get_RenderOrder2D())
-                + " rect=" + std::to_string(clipRect.X) + "," + std::to_string(clipRect.Y) + "," + std::to_string(clipRect.Z) + "," + std::to_string(clipRect.W));
-            ClipDiagnosticCount++;
-        }
-
         return true;
-    }
-
-    /// Returns the trace slot for one menu-row drawable position or `-1` when the drawable is outside the current investigation scope.
-    int32_t PspRenderManager2D::ResolveMenuRowTraceIndex(IDrawable2D* drawable) const {
-        if (!ShouldTraceMenuClip(drawable)) {
-            return -1;
-        }
-
-        Entity* parent = drawable->get_Parent();
-        if (parent == nullptr) {
-            return -1;
-        }
-
-        const float y = parent->get_Position().Y;
-        static constexpr float RowStarts[] = {
-            82.75f,
-            106.0f,
-            129.25f,
-            152.5f,
-            175.75f,
-            199.0f,
-            222.25f,
-            245.5f,
-            268.75f
-        };
-
-        for (int32_t rowIndex = 0; rowIndex < static_cast<int32_t>(std::size(RowStarts)); rowIndex++) {
-            if (std::fabs(y - RowStarts[rowIndex]) <= 0.51f) {
-                return rowIndex;
-            }
-
-            if (std::fabs((y - 4.5f) - RowStarts[rowIndex]) <= 0.51f) {
-                return rowIndex;
-            }
-        }
-
-        return -1;
     }
 
     /// Applies one drawable clip rectangle through the PSP GU scissor test.

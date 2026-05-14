@@ -69,12 +69,6 @@ namespace helengine::psp::rendering {
         /// Stores the current drawable-scoped clip rectangle so redundant GU state changes can be skipped.
         float4 ActiveClipRect = float4();
 
-        /// Stores how many 2D clip diagnostics have been written during the current runtime.
-        int32_t ClipDiagnosticCount = 0;
-
-        /// Stores whether each scene-list row position has already been traced during the current runtime.
-        bool MenuRowTraceFlags[32] = {};
-
         /// Draws one solid-colored screen-space quad.
         void DrawSolidQuad(const float3& position, const int2& size, const byte4& color);
 
@@ -89,9 +83,6 @@ namespace helengine::psp::rendering {
 
         /// Resolves the authored clip-region stack for one drawable into one effective screen-space clip rectangle.
         bool TryResolveClipRect(IDrawable2D* drawable, float4& clipRect);
-
-        /// Returns the trace slot for one menu-row drawable position or `-1` when the drawable is outside the current investigation scope.
-        int32_t ResolveMenuRowTraceIndex(IDrawable2D* drawable) const;
 
         /// Applies one effective clip rectangle to the PSP GU scissor state for subsequent 2D draws.
         void ApplyClipRect(const float4& clipRect);
