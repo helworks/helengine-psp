@@ -72,6 +72,13 @@ public static class PspPlatformDefinitionFactory {
                             PlatformSettingKind.Boolean,
                             "true",
                             true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "dynamic-batching-enabled",
+                            "Dynamic Batching Enabled",
+                            PlatformSettingKind.Boolean,
+                            "true",
+                            true,
                             [])
                     ])
             ],

@@ -44,6 +44,27 @@ public sealed class PspPlatformAssetBuilderTests {
     }
 
     /// <summary>
+    /// Verifies the PSP forward graphics profile exposes dynamic batching as an engine-owned runtime toggle.
+    /// </summary>
+    [Fact]
+    public void Descriptor_and_definition_expose_dynamic_batching_graphics_setting() {
+        PspPlatformAssetBuilder builder = new();
+
+        PlatformGraphicsProfileDefinition graphicsProfile = Assert.Single(
+            builder.Definition.GraphicsProfiles,
+            profile => profile.ProfileId == "psp-forward");
+
+        PlatformSettingDefinition setting = Assert.Single(
+            graphicsProfile.Settings,
+            profileSetting => profileSetting.SettingId == "dynamic-batching-enabled");
+
+        Assert.Equal("Dynamic Batching Enabled", setting.DisplayName);
+        Assert.Equal(PlatformSettingKind.Boolean, setting.SettingKind);
+        Assert.Equal("true", setting.DefaultValue);
+        Assert.True(setting.Required);
+    }
+
+    /// <summary>
     /// Verifies the PSP material schema mirrors the standard material contract used by the editor build graph.
     /// </summary>
     [Fact]
