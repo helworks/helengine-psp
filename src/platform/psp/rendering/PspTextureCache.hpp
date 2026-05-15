@@ -1,6 +1,6 @@
 #pragma once
 
-#include <string>
+#include <cstdint>
 #include <unordered_map>
 #include <vector>
 
@@ -16,6 +16,12 @@ namespace helengine::psp::rendering {
         /// Builds one PSP runtime texture from the cooked texture asset, reusing a cached instance when possible.
         RuntimeTexture* BuildTextureFromRaw(TextureAsset* data);
 
+        /// Releases one PSP runtime texture and removes any matching cache entry.
+        void ReleaseTexture(PspRuntimeTexture* texture);
+
+        /// Deletes any PSP runtime textures that were retired earlier in the frame after the renderer reaches a safe boundary.
+        void FlushReleasedTextures();
+
     private:
         /// Creates one uncached PSP runtime texture from the cooked texture payload.
         PspRuntimeTexture* CreateTexture(TextureAsset* data);
@@ -23,7 +29,10 @@ namespace helengine::psp::rendering {
         /// Converts raw RGBA bytes into PSP-ready ABGR8888 texels.
         static std::vector<std::uint32_t> ConvertRgbaBytesToAbgr8888(TextureAsset* data);
 
-        /// Stores cached PSP runtime textures by cooked texture asset id.
-        std::unordered_map<std::string, PspRuntimeTexture*> CachedTextures;
+        /// Stores cached PSP runtime textures by deterministic runtime asset id.
+        std::unordered_map<std::uint64_t, PspRuntimeTexture*> CachedTextures;
+
+        /// Stores PSP runtime textures that have been removed from cache but must not be deleted until the renderer reaches a safe frame boundary.
+        std::vector<PspRuntimeTexture*> ReleasedTextures;
     };
 }

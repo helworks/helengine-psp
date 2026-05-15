@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 class Core;
@@ -9,6 +10,7 @@ class RenderManager2D;
 class RenderManager3D;
 class IInputBackend;
 class SceneAsset;
+class SceneManager;
 
 namespace helengine::psp {
     /// Owns the PSP native boot flow, generated-core initialization, and frame presentation loop.
@@ -36,11 +38,23 @@ namespace helengine::psp {
         /// Constructs generated core and PSP platform backends and initializes the runtime.
         void InitializeCore(const std::string& appRootPath);
 
-        /// Loads the packaged startup scene asset from the PSP app content root.
-        SceneAsset* LoadStartupSceneAsset(const std::string& appRootPath);
+        /// Loads the configured startup scene through the runtime scene manager so scene lifetime stays tracked from frame one.
+        void LoadStartupScene();
 
-        /// Materializes the startup scene inside generated core.
-        void MaterializeStartupScene(SceneAsset* startupScene);
+        /// Returns the current primary loaded-scene id, or an empty string when no scene is active.
+        std::string GetPrimarySceneId() const;
+
+        /// Returns the current runtime loaded-scene count.
+        int32_t GetLoadedSceneCount() const;
+
+        /// Returns whether the PSP return bind is currently held on raw pad input.
+        bool IsReturnButtonDown() const;
+
+        /// Emits one focused runtime transition trace line with scene, memory, and input state.
+        void TraceRuntimeTransitionState(const char* phaseName, const std::string& primarySceneId, int32_t loadedSceneCount, int32_t freeMemoryBytes, bool returnButtonDown) const;
+
+        /// Emits one focused managed-runtime transition snapshot captured inside generated-core scene loading code.
+        void TraceManagedTransitionState(const char* phaseName) const;
 
         /// Runs the normal generated-core update and draw loop after startup succeeds.
         void RunMainLoop();
@@ -89,6 +103,18 @@ namespace helengine::psp {
 
         /// Stores the PSP input backend used by generated core.
         ::IInputBackend* EngineInputBackend;
+
+        /// Stores the last observed runtime loaded-scene count written to the PSP boot log.
+        int32_t LastTracedLoadedSceneCount;
+
+        /// Stores the last observed primary loaded-scene id written to the PSP boot log.
+        std::string LastTracedPrimarySceneId;
+
+        /// Stores whether the raw PSP return bind was held on the previous frame.
+        bool WasReturnButtonDownLastFrame;
+
+        /// Stores how many more frames should emit focused transition tracing after a return bind edge.
+        int32_t ReturnTransitionTraceFramesRemaining;
 
     };
 }

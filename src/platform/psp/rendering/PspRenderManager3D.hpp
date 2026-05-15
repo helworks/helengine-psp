@@ -12,6 +12,7 @@
 #include "float4x4.hpp"
 #include "platform/psp/rendering/PspLightingSettings.hpp"
 #include "platform/psp/rendering/PspRenderManager2D.hpp"
+#include "platform/psp/rendering/PspRenderProfiler.hpp"
 #include "platform/psp/rendering/PspSceneLightingSnapshot.hpp"
 
 namespace helengine::psp::rendering {

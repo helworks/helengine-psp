@@ -166,14 +166,25 @@ namespace helengine::psp::rendering {
 
         /// Binds one PSP runtime texture for GU sampling or disables texturing when no texture exists.
         void BindTexture(PspRuntimeTexture* texture) {
+            const std::uint64_t bindStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+            std::uint64_t flushMicroseconds = 0;
+            std::size_t byteCount = 0;
             if (texture == nullptr || !texture->HasPixels()) {
                 sceGuDisable(GU_TEXTURE_2D);
+                PspRenderProfiler::Record3DTextureBind(
+                    texture,
+                    byteCount,
+                    PspRenderProfiler::GetTimestampMicroseconds() - bindStartMicroseconds,
+                    flushMicroseconds);
                 return;
             }
 
+            byteCount = texture->GetPixelCount() * sizeof(std::uint32_t);
+            const std::uint64_t flushStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
             sceKernelDcacheWritebackRange(
                 const_cast<std::uint32_t*>(texture->GetPixelsAbgr8888()),
-                static_cast<unsigned int>(texture->GetPixelCount() * sizeof(std::uint32_t)));
+                static_cast<unsigned int>(byteCount));
+            flushMicroseconds = PspRenderProfiler::GetTimestampMicroseconds() - flushStartMicroseconds;
 
             sceGuEnable(GU_TEXTURE_2D);
             sceGuTexMode(GU_PSM_8888, 0, 0, 0);
@@ -181,6 +192,11 @@ namespace helengine::psp::rendering {
             sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
             sceGuTexFilter(GU_NEAREST, GU_NEAREST);
             sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+            PspRenderProfiler::Record3DTextureBind(
+                texture,
+                byteCount,
+                PspRenderProfiler::GetTimestampMicroseconds() - bindStartMicroseconds,
+                flushMicroseconds);
         }
 
         /// Converts one generated vector into the PSP GU vector layout.
@@ -515,13 +531,16 @@ namespace helengine::psp::rendering {
 
     /// Draws every visible authored camera to the current PSP back buffer.
     void PspRenderManager3D::Draw() {
+        PspRenderProfiler::BeginFrame();
         RenderManager3D::Draw();
         if (Core::get_Instance() == nullptr || Core::get_Instance()->get_ObjectManager() == nullptr) {
+            PspRenderProfiler::EndFrame();
             return;
         }
 
         List<ICamera*>* cameras = Core::get_Instance()->get_ObjectManager()->get_Cameras();
         if (cameras == nullptr || cameras->Count() == 0) {
+            PspRenderProfiler::EndFrame();
             return;
         }
 
@@ -536,6 +555,7 @@ namespace helengine::psp::rendering {
 
             RenderCamera(camera);
         }
+        PspRenderProfiler::EndFrame();
     }
 
     /// Draws one queued mesh for the active camera.
@@ -672,6 +692,7 @@ namespace helengine::psp::rendering {
 
     /// Renders the currently active 3D queue for one camera.
     void PspRenderManager3D::RenderCamera(ICamera* camera) {
+        const std::uint64_t renderStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         Entity* cameraParent = camera->get_Parent();
         float3 cameraPosition = cameraParent->get_Position();
         float4 cameraOrientation = cameraParent->get_Orientation();
@@ -706,7 +727,9 @@ namespace helengine::psp::rendering {
         sceGumLoadMatrix(reinterpret_cast<ScePspFMatrix4*>(&viewMatrix));
 
         IRenderQueue3D* renderQueue = camera->get_RenderQueue3D();
+        int32_t drawableCount = 0;
         if (renderQueue != nullptr) {
+            drawableCount = renderQueue->get_Count();
             ResolveSceneLighting();
             if (LightingSettings.Pipeline == PspLightingPipeline::FixedFunctionLambert) {
                 ConfigureFixedFunctionSceneLighting(LightingSettings, CurrentLighting);
@@ -717,8 +740,15 @@ namespace helengine::psp::rendering {
             renderQueue->VisitOrdered(this);
         }
 
+        std::uint64_t uiMicroseconds = 0;
         if (RenderManager2D != nullptr) {
+            const std::uint64_t uiStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
             RenderManager2D->RenderCamera(camera);
+            uiMicroseconds = PspRenderProfiler::GetTimestampMicroseconds() - uiStartMicroseconds;
         }
+        PspRenderProfiler::Record3DCamera(
+            drawableCount,
+            PspRenderProfiler::GetTimestampMicroseconds() - renderStartMicroseconds,
+            uiMicroseconds);
     }
 }

@@ -38,6 +38,7 @@ set(HELENGINE_PSP_SOURCES
     src/platform/psp/PspInputBackend.cpp
     src/platform/psp/PspPackagedAssetLoader.cpp
     src/platform/psp/PspRuntimeSceneCatalogFactory.cpp
+    src/platform/psp/rendering/PspRenderProfiler.cpp
     src/platform/psp/rendering/PspRenderManager2D.cpp
     src/platform/psp/rendering/PspRuntimeTexture.cpp
     src/platform/psp/rendering/PspTextureCache.cpp

@@ -14,6 +14,7 @@
 #include "Entity.hpp"
 #include "FontAsset.hpp"
 #include "FontChar.hpp"
+#include "FontInfo.hpp"
 #include "IRenderQueue2D.hpp"
 #include "IRoundedRectDrawable2D.hpp"
 #include "ISpriteDrawable2D.hpp"
@@ -21,7 +22,9 @@
 #include "RoundedRectComponent.hpp"
 #include "TextComponent.hpp"
 #include "TextLayoutUtils.hpp"
+#include "TextureAsset.hpp"
 #include "platform/psp/rendering/PspRuntimeTexture.hpp"
+#include "runtime/array.hpp"
 
 namespace helengine::psp::rendering {
     namespace {
@@ -29,25 +32,6 @@ namespace helengine::psp::rendering {
         constexpr int RoundedCornerSegmentCount = 6;
         constexpr int PspScreenWidth = 480;
         constexpr int PspScreenHeight = 272;
-
-        /// Binds one PSP runtime texture for GU sampling or disables texturing when no texture exists.
-        void BindTexture(PspRuntimeTexture* texture) {
-            if (texture == nullptr || !texture->HasPixels()) {
-                sceGuDisable(GU_TEXTURE_2D);
-                return;
-            }
-
-            sceKernelDcacheWritebackRange(
-                const_cast<std::uint32_t*>(texture->GetPixelsAbgr8888()),
-                static_cast<unsigned int>(texture->GetPixelCount() * sizeof(std::uint32_t)));
-
-            sceGuEnable(GU_TEXTURE_2D);
-            sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-            sceGuTexImage(0, texture->get_Width(), texture->get_Height(), texture->get_Width(), texture->GetPixelsAbgr8888());
-            sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
-            sceGuTexFilter(GU_NEAREST, GU_NEAREST);
-            sceGuTexWrap(GU_REPEAT, GU_REPEAT);
-        }
 
         /// Returns whether the drawable parent exists and participates in the active hierarchy.
         bool IsDrawableParentEnabled(Entity* parent) {
@@ -61,8 +45,104 @@ namespace helengine::psp::rendering {
         return TextureCache.BuildTextureFromRaw(data);
     }
 
+    /// Releases one PSP runtime texture previously created by this renderer.
+    void PspRenderManager2D::ReleaseTexture(RuntimeTexture* texture) {
+        if (texture == nullptr) {
+            throw std::invalid_argument("PSP 2D runtime texture release requires one texture instance.");
+        }
+
+        PspRuntimeTexture* pspTexture = dynamic_cast<PspRuntimeTexture*>(texture);
+        if (pspTexture == nullptr) {
+            throw std::runtime_error("PSP 2D texture release requires PSP runtime textures.");
+        }
+        if (pspTexture == WhiteTexture) {
+            return;
+        }
+
+        ClearGeometryCaches();
+        TextureCache.ReleaseTexture(pspTexture);
+    }
+
+    /// Releases one PSP font asset and its native-owned object graph.
+    void PspRenderManager2D::ReleaseFont(FontAsset* font) {
+        if (font == nullptr) {
+            throw std::invalid_argument("PSP 2D font release requires one font instance.");
+        }
+
+        ClearGeometryCaches();
+
+        TextureAsset* sourceTextureAsset = font->get_SourceTextureAsset();
+        if (sourceTextureAsset != nullptr) {
+            delete sourceTextureAsset->Colors;
+            sourceTextureAsset->Colors = nullptr;
+            delete sourceTextureAsset;
+        }
+
+        delete font->get_FontInfo();
+        delete font->get_Characters();
+        delete font;
+    }
+
+    /// Flushes deferred PSP runtime texture deletions once the renderer reaches a safe boundary before the next scene begins loading.
+    void PspRenderManager2D::FlushReleasedTextures() {
+        TextureCache.FlushReleasedTextures();
+    }
+
+    /// Binds one PSP runtime texture for GU sampling or disables texturing when no texture exists.
+    void PspRenderManager2D::BindTexture(PspRuntimeTexture* texture) {
+        const std::uint64_t bindStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+        std::uint64_t flushMicroseconds = 0;
+        std::size_t byteCount = 0;
+        if (texture == nullptr || !texture->HasPixels()) {
+            BoundTexture = nullptr;
+            sceGuDisable(GU_TEXTURE_2D);
+            PspRenderProfiler::Record2DTextureBind(
+                texture,
+                byteCount,
+                PspRenderProfiler::GetTimestampMicroseconds() - bindStartMicroseconds,
+                flushMicroseconds);
+            return;
+        } else if (BoundTexture == texture) {
+            PspRenderProfiler::Record2DTextureBind(
+                texture,
+                byteCount,
+                PspRenderProfiler::GetTimestampMicroseconds() - bindStartMicroseconds,
+                flushMicroseconds);
+            return;
+        }
+
+        byteCount = texture->GetPixelCount() * sizeof(std::uint32_t);
+        const std::uint64_t flushStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+        sceKernelDcacheWritebackRange(
+            const_cast<std::uint32_t*>(texture->GetPixelsAbgr8888()),
+            static_cast<unsigned int>(byteCount));
+        flushMicroseconds = PspRenderProfiler::GetTimestampMicroseconds() - flushStartMicroseconds;
+
+        sceGuEnable(GU_TEXTURE_2D);
+        sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+        sceGuTexImage(0, texture->get_Width(), texture->get_Height(), texture->get_Width(), texture->GetPixelsAbgr8888());
+        sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+        sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+        sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+        BoundTexture = texture;
+        PspRenderProfiler::Record2DTextureBind(
+            texture,
+            byteCount,
+            PspRenderProfiler::GetTimestampMicroseconds() - bindStartMicroseconds,
+            flushMicroseconds);
+    }
+
+    /// Clears any cached bound-texture state at camera-pass boundaries.
+    void PspRenderManager2D::ResetBoundTextureState() {
+        BoundTexture = nullptr;
+    }
+
     /// Renders one camera's queued 2D drawables in authored order.
     void PspRenderManager2D::RenderCamera(ICamera* camera) {
+        const std::uint64_t renderStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+        FlushReleasedTextures();
+        FlushPendingWhiteTriangles();
+        ResetBoundTextureState();
         if (camera == nullptr) {
             return;
         }
@@ -71,6 +151,7 @@ namespace helengine::psp::rendering {
         if (renderQueue == nullptr || renderQueue->get_Count() <= 0) {
             return;
         }
+        const int32_t drawableCount = renderQueue->get_Count();
 
         sceGuDisable(GU_LIGHT0);
         sceGuDisable(GU_LIGHTING);
@@ -80,7 +161,12 @@ namespace helengine::psp::rendering {
         sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
         ClearClipRect();
         renderQueue->VisitOrdered(this);
+        FlushPendingWhiteTriangles();
         ClearClipRect();
+        ResetBoundTextureState();
+        PspRenderProfiler::Record2DCamera(
+            drawableCount,
+            PspRenderProfiler::GetTimestampMicroseconds() - renderStartMicroseconds);
     }
 
     /// Draws a rounded rectangle using one rectangular fill and border fallback.
@@ -93,26 +179,8 @@ namespace helengine::psp::rendering {
         if (size.X <= 0 || size.Y <= 0) {
             return;
         }
-
-        const float3 position = shape->get_Parent()->get_Position();
-        const int32_t borderThickness = std::max<int32_t>(0, static_cast<int32_t>(std::lround(shape->get_BorderThickness())));
-        const float radius = std::max(0.0f, shape->get_Radius());
-
-        if (borderThickness > 0) {
-            DrawFilledRoundedRect(position, size, radius, shape->get_BorderColor());
-        }
-
-        const int32_t innerWidth = size.X - (borderThickness * 2);
-        const int32_t innerHeight = size.Y - (borderThickness * 2);
-        if (innerWidth <= 0 || innerHeight <= 0) {
-            return;
-        }
-
-        DrawFilledRoundedRect(
-            float3(position.X + borderThickness, position.Y + borderThickness, position.Z),
-            int2(innerWidth, innerHeight),
-            std::max(0.0f, radius - borderThickness),
-            shape->get_FillColor());
+        const RoundedRectGeometryCacheEntry& cacheEntry = GetOrBuildRoundedRectGeometryCacheEntry(shape);
+        DrawCachedRoundedRectGeometry(cacheEntry);
     }
 
     /// Draws a textured sprite quad with the authored tint and source rectangle.
@@ -137,8 +205,9 @@ namespace helengine::psp::rendering {
             sprite->get_Color());
     }
 
-    /// Draws bitmap-font text by emitting one glyph quad per visible character.
+    /// Draws bitmap-font text by batching all visible glyphs into one textured triangle submission.
     void PspRenderManager2D::DrawText(ITextDrawable2D* text) {
+        const std::uint64_t drawStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         if (text == nullptr || !IsDrawableParentEnabled(text->get_Parent())) {
             return;
         }
@@ -148,68 +217,22 @@ namespace helengine::psp::rendering {
             return;
         }
 
-        RuntimeTexture* atlasTexture = font->get_Texture();
-        const float3 position = text->get_Parent()->get_Position();
-        const byte4 color = text->get_Color();
-        const double fontScale = std::max(static_cast<double>(text->get_FontScale()), 0.0001d);
-        std::string content = text->get_Text();
-
-        if (text->get_WrapText()) {
-            const int2 textSize = text->get_Size();
-            const int32_t wrapWidth = std::max<int32_t>(
-                1,
-                static_cast<int32_t>(std::lround(std::max<int32_t>(static_cast<int32_t>(textSize.X), 1) / fontScale)));
-            content = TextLayoutUtils::WrapText(content, font, wrapWidth);
-        }
-
-        double offsetX = 0.0;
-        double offsetY = 0.0;
-        const double lineHeight = std::max(static_cast<double>(font->get_LineHeight()) * fontScale, 1.0d);
-        const double baseX = std::round(position.X);
-        const double baseY = std::round(position.Y);
-
-        for (char character : content) {
-            if (character == '\n') {
-                offsetY += lineHeight;
-                offsetX = 0.0;
-                continue;
-            }
-
-            if (character == ' ') {
-                offsetX += font->get_FontInfo()->get_SpaceWidth() * fontScale;
-                continue;
-            }
-
-            FontChar glyph;
-            if (!font->get_Characters()->TryGetValue(character, glyph)) {
-                continue;
-            }
-
-            const double glyphWidth = glyph.SourceRect.Z * font->get_AtlasWidth() * fontScale;
-            const double glyphHeight = glyph.SourceRect.W * font->get_AtlasHeight() * fontScale;
-            const double snappedLineOffsetY = std::round(offsetY);
-            const double drawX = std::round(baseX + offsetX);
-            const double drawY = std::round(baseY + snappedLineOffsetY + (glyph.OffsetY * fontScale));
-            const double drawRight = std::round(baseX + offsetX + glyphWidth);
-            const double drawBottom = std::round(baseY + snappedLineOffsetY + (glyph.OffsetY * fontScale) + glyphHeight);
-
+        TextGeometryCacheEntry& cacheEntry = GetOrBuildTextGeometryCacheEntry(text);
+        if (cacheEntry.UsesStaticSurface && cacheEntry.StaticSurfaceTexture != nullptr) {
             DrawTexturedQuad(
-                atlasTexture,
-                float3(
-                    static_cast<float>(drawX),
-                    static_cast<float>(drawY),
-                    position.Z),
-                int2(
-                    std::max<int32_t>(1, static_cast<int32_t>(drawRight - drawX)),
-                    std::max<int32_t>(1, static_cast<int32_t>(drawBottom - drawY))),
-                glyph.SourceRect,
-                color);
-
-            const double advanceWidth = glyph.AdvanceWidth > 0.0f
-                ? glyph.AdvanceWidth * fontScale
-                : glyphWidth;
-            offsetX += advanceWidth;
+                cacheEntry.StaticSurfaceTexture,
+                cacheEntry.StaticSurfacePosition,
+                cacheEntry.StaticSurfaceSize,
+                float4(0.0f, 0.0f, 1.0f, 1.0f),
+                byte4(255, 255, 255, 255));
+        } else if (!cacheEntry.Vertices.empty()) {
+            DrawTexturedTriangles(cacheEntry.Vertices.data(), cacheEntry.Vertices.size(), cacheEntry.Texture);
         }
+
+        PspRenderProfiler::Record2DText(
+            cacheEntry.GlyphCount,
+            static_cast<int32_t>(cacheEntry.Content.size()),
+            PspRenderProfiler::GetTimestampMicroseconds() - drawStartMicroseconds);
     }
 
     /// Visits one queued 2D drawable and dispatches it back through generated-core.
@@ -234,12 +257,7 @@ namespace helengine::psp::rendering {
             return;
         }
 
-        DrawTexturedQuad(
-            GetWhiteTexture(),
-            position,
-            size,
-            float4(0.0f, 0.0f, 1.0f, 1.0f),
-            color);
+        AppendSolidQuadToWhiteBatch(position, size, color);
     }
 
     /// Draws one filled rounded rectangle using textured white geometry and triangle fans for the corners.
@@ -366,11 +384,497 @@ namespace helengine::psp::rendering {
                 position.Z
             });
         }
-        DrawTexturedTriangles(vertices.data(), vertices.size(), GetWhiteTexture());
+        AppendWhiteTrianglesToBatch(vertices);
+    }
+
+    /// Draws one cached rounded rectangle using geometry that only rebuilds when the authored inputs change.
+    void PspRenderManager2D::DrawCachedRoundedRectGeometry(const RoundedRectGeometryCacheEntry& entry) {
+        if (entry.HasBorder) {
+            if (entry.BorderUsesSolidQuad) {
+                AppendSolidQuadToWhiteBatch(entry.BorderPosition, entry.BorderSize, entry.BorderColor);
+            } else if (!entry.BorderVertices.empty()) {
+                AppendWhiteTrianglesToBatch(entry.BorderVertices);
+            }
+        }
+
+        if (entry.HasInnerFill) {
+            if (entry.InnerFillUsesSolidQuad) {
+                AppendSolidQuadToWhiteBatch(entry.InnerFillPosition, entry.InnerFillSize, entry.FillColor);
+            } else if (!entry.InnerFillVertices.empty()) {
+                AppendWhiteTrianglesToBatch(entry.InnerFillVertices);
+            }
+        }
+    }
+
+    /// Appends one solid-colored quad to the pending white-texture batch.
+    void PspRenderManager2D::AppendSolidQuadToWhiteBatch(const float3& position, const int2& size, const byte4& color) {
+        const std::uint32_t packedColor = ConvertColorToAbgr(color);
+        const float left = position.X;
+        const float top = position.Y;
+        const float right = position.X + size.X;
+        const float bottom = position.Y + size.Y;
+        const float z = position.Z;
+
+        PendingWhiteTriangles.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, left, top, z });
+        PendingWhiteTriangles.push_back(Psp2DVertex { 1.0f, 0.0f, packedColor, right, top, z });
+        PendingWhiteTriangles.push_back(Psp2DVertex { 0.0f, 1.0f, packedColor, left, bottom, z });
+        PendingWhiteTriangles.push_back(Psp2DVertex { 0.0f, 1.0f, packedColor, left, bottom, z });
+        PendingWhiteTriangles.push_back(Psp2DVertex { 1.0f, 0.0f, packedColor, right, top, z });
+        PendingWhiteTriangles.push_back(Psp2DVertex { 1.0f, 1.0f, packedColor, right, bottom, z });
+    }
+
+    /// Appends one list of white-texture triangles to the pending batch.
+    void PspRenderManager2D::AppendWhiteTrianglesToBatch(const std::vector<Psp2DVertex>& vertices) {
+        if (vertices.empty()) {
+            return;
+        }
+
+        PendingWhiteTriangles.insert(PendingWhiteTriangles.end(), vertices.begin(), vertices.end());
+    }
+
+    /// Flushes any pending white-texture batch before state changes or frame completion.
+    void PspRenderManager2D::FlushPendingWhiteTriangles() {
+        if (PendingWhiteTriangles.empty()) {
+            return;
+        }
+
+        DrawTexturedTriangles(PendingWhiteTriangles.data(), PendingWhiteTriangles.size(), GetWhiteTexture());
+        PendingWhiteTriangles.clear();
+    }
+
+    /// Finds or rebuilds the cached text geometry for one drawable.
+    PspRenderManager2D::TextGeometryCacheEntry& PspRenderManager2D::GetOrBuildTextGeometryCacheEntry(ITextDrawable2D* text) {
+        for (TextGeometryCacheEntry& entry : TextGeometryCacheEntries) {
+            if (entry.Drawable != text) {
+                continue;
+            }
+
+            FontAsset* font = text->get_Font();
+            RuntimeTexture* texture = font != nullptr ? font->get_Texture() : nullptr;
+            const float3 position = text->get_Parent()->get_Position();
+            const int2 size = text->get_Size();
+            const byte4 color = text->get_Color();
+            const bool wrapText = text->get_WrapText();
+            const float fontScale = text->get_FontScale();
+            const std::string textValue = text->get_Text();
+            const bool usesStaticSurface = ShouldUseStaticTextSurface(text);
+            if (entry.Texture == texture
+                && entry.Position.X == position.X
+                && entry.Position.Y == position.Y
+                && entry.Position.Z == position.Z
+                && entry.Size.X == size.X
+                && entry.Size.Y == size.Y
+                && entry.Color.X == color.X
+                && entry.Color.Y == color.Y
+                && entry.Color.Z == color.Z
+                && entry.Color.W == color.W
+                && entry.WrapText == wrapText
+                && entry.FontScale == fontScale
+                && entry.UsesStaticSurface == usesStaticSurface
+                && entry.RawText == textValue) {
+                return entry;
+            }
+
+            RebuildTextGeometryCacheEntry(entry, text);
+            return entry;
+        }
+
+        TextGeometryCacheEntries.push_back(TextGeometryCacheEntry());
+        TextGeometryCacheEntries.back().Drawable = text;
+        RebuildTextGeometryCacheEntry(TextGeometryCacheEntries.back(), text);
+        return TextGeometryCacheEntries.back();
+    }
+
+    /// Finds or rebuilds the cached rounded-rectangle geometry for one drawable.
+    PspRenderManager2D::RoundedRectGeometryCacheEntry& PspRenderManager2D::GetOrBuildRoundedRectGeometryCacheEntry(IRoundedRectDrawable2D* shape) {
+        for (RoundedRectGeometryCacheEntry& entry : RoundedRectGeometryCacheEntries) {
+            if (entry.Drawable != shape) {
+                continue;
+            }
+
+            const float3 position = shape->get_Parent()->get_Position();
+            const int2 size = shape->get_Size();
+            const float radius = shape->get_Radius();
+            const float borderThickness = shape->get_BorderThickness();
+            const byte4 fillColor = shape->get_FillColor();
+            const byte4 borderColor = shape->get_BorderColor();
+            if (entry.Position.X == position.X
+                && entry.Position.Y == position.Y
+                && entry.Position.Z == position.Z
+                && entry.Size.X == size.X
+                && entry.Size.Y == size.Y
+                && entry.Radius == radius
+                && entry.BorderThickness == borderThickness
+                && entry.FillColor.X == fillColor.X
+                && entry.FillColor.Y == fillColor.Y
+                && entry.FillColor.Z == fillColor.Z
+                && entry.FillColor.W == fillColor.W
+                && entry.BorderColor.X == borderColor.X
+                && entry.BorderColor.Y == borderColor.Y
+                && entry.BorderColor.Z == borderColor.Z
+                && entry.BorderColor.W == borderColor.W) {
+                return entry;
+            }
+
+            RebuildRoundedRectGeometryCacheEntry(entry, shape);
+            return entry;
+        }
+
+        RoundedRectGeometryCacheEntries.push_back(RoundedRectGeometryCacheEntry());
+        RoundedRectGeometryCacheEntries.back().Drawable = shape;
+        RebuildRoundedRectGeometryCacheEntry(RoundedRectGeometryCacheEntries.back(), shape);
+        return RoundedRectGeometryCacheEntries.back();
+    }
+
+    /// Rebuilds one cached text-geometry entry from the drawable's current authored state.
+    void PspRenderManager2D::RebuildTextGeometryCacheEntry(TextGeometryCacheEntry& cacheEntry, ITextDrawable2D* text) {
+        FontAsset* font = text->get_Font();
+        RuntimeTexture* atlasTexture = font->get_Texture();
+        const float3 position = text->get_Parent()->get_Position();
+        const byte4 color = text->get_Color();
+        const float fontScaleValue = text->get_FontScale();
+        const double fontScale = std::max(static_cast<double>(fontScaleValue), 0.0001d);
+        std::string content = text->get_Text();
+
+        if (text->get_WrapText()) {
+            const int2 textSize = text->get_Size();
+            const int32_t wrapWidth = std::max<int32_t>(
+                1,
+                static_cast<int32_t>(std::lround(std::max<int32_t>(static_cast<int32_t>(textSize.X), 1) / fontScale)));
+            content = TextLayoutUtils::WrapText(content, font, wrapWidth);
+        }
+
+        cacheEntry.Texture = atlasTexture;
+        cacheEntry.Content = content;
+        cacheEntry.RawText = text->get_Text();
+        cacheEntry.Position = position;
+        cacheEntry.Size = text->get_Size();
+        cacheEntry.Color = color;
+        cacheEntry.WrapText = text->get_WrapText();
+        cacheEntry.FontScale = fontScaleValue;
+        cacheEntry.GlyphCount = 0;
+        cacheEntry.UsesStaticSurface = ShouldUseStaticTextSurface(text);
+        cacheEntry.Vertices.clear();
+        cacheEntry.Vertices.reserve(static_cast<std::size_t>(content.size()) * 6u);
+        if (!cacheEntry.UsesStaticSurface) {
+            ReleaseStaticTextSurface(cacheEntry);
+        }
+
+        double offsetX = 0.0;
+        double offsetY = 0.0;
+        const double lineHeight = std::max(static_cast<double>(font->get_LineHeight()) * fontScale, 1.0d);
+        const double baseX = std::round(position.X);
+        const double baseY = std::round(position.Y);
+        const std::uint32_t packedColor = ConvertColorToAbgr(color);
+
+        for (char character : content) {
+            if (character == '\n') {
+                offsetY += lineHeight;
+                offsetX = 0.0;
+                continue;
+            }
+
+            if (character == ' ') {
+                offsetX += font->get_FontInfo()->get_SpaceWidth() * fontScale;
+                continue;
+            }
+
+            FontChar glyph;
+            if (!font->get_Characters()->TryGetValue(character, glyph)) {
+                continue;
+            }
+            cacheEntry.GlyphCount++;
+
+            const double glyphWidth = glyph.SourceRect.Z * font->get_AtlasWidth() * fontScale;
+            const double glyphHeight = glyph.SourceRect.W * font->get_AtlasHeight() * fontScale;
+            const double snappedLineOffsetY = std::round(offsetY);
+            const double drawX = std::round(baseX + offsetX);
+            const double drawY = std::round(baseY + snappedLineOffsetY + (glyph.OffsetY * fontScale));
+            const double drawRight = std::round(baseX + offsetX + glyphWidth);
+            const double drawBottom = std::round(baseY + snappedLineOffsetY + (glyph.OffsetY * fontScale) + glyphHeight);
+            const float4 textureSourceRect = ConvertSourceRectToTexturePixels(glyph.SourceRect, atlasTexture);
+            const float left = static_cast<float>(drawX);
+            const float top = static_cast<float>(drawY);
+            const float right = static_cast<float>(std::max(drawX + 1.0, drawRight));
+            const float bottom = static_cast<float>(std::max(drawY + 1.0, drawBottom));
+            const float z = position.Z;
+            const float sourceLeft = textureSourceRect.X;
+            const float sourceTop = textureSourceRect.Y;
+            const float sourceRight = textureSourceRect.X + textureSourceRect.Z;
+            const float sourceBottom = textureSourceRect.Y + textureSourceRect.W;
+
+            cacheEntry.Vertices.push_back(Psp2DVertex { sourceLeft, sourceTop, packedColor, left, top, z });
+            cacheEntry.Vertices.push_back(Psp2DVertex { sourceRight, sourceTop, packedColor, right, top, z });
+            cacheEntry.Vertices.push_back(Psp2DVertex { sourceLeft, sourceBottom, packedColor, left, bottom, z });
+            cacheEntry.Vertices.push_back(Psp2DVertex { sourceLeft, sourceBottom, packedColor, left, bottom, z });
+            cacheEntry.Vertices.push_back(Psp2DVertex { sourceRight, sourceTop, packedColor, right, top, z });
+            cacheEntry.Vertices.push_back(Psp2DVertex { sourceRight, sourceBottom, packedColor, right, bottom, z });
+
+            const double advanceWidth = glyph.AdvanceWidth > 0.0f
+                ? glyph.AdvanceWidth * fontScale
+                : glyphWidth;
+            offsetX += advanceWidth;
+        }
+
+        if (cacheEntry.UsesStaticSurface) {
+            RebuildStaticTextSurface(cacheEntry, font);
+            cacheEntry.Vertices.clear();
+        }
+    }
+
+    /// Rebuilds one cached rounded-rectangle entry from the drawable's current authored state.
+    void PspRenderManager2D::RebuildRoundedRectGeometryCacheEntry(RoundedRectGeometryCacheEntry& cacheEntry, IRoundedRectDrawable2D* shape) {
+        const float3 position = shape->get_Parent()->get_Position();
+        const int2 size = shape->get_Size();
+        const int32_t borderThickness = std::max<int32_t>(0, static_cast<int32_t>(std::lround(shape->get_BorderThickness())));
+        const float radius = std::max(0.0f, shape->get_Radius());
+        const int32_t innerWidth = size.X - (borderThickness * 2);
+        const int32_t innerHeight = size.Y - (borderThickness * 2);
+
+        cacheEntry.Position = position;
+        cacheEntry.Size = size;
+        cacheEntry.Radius = shape->get_Radius();
+        cacheEntry.BorderThickness = shape->get_BorderThickness();
+        cacheEntry.FillColor = shape->get_FillColor();
+        cacheEntry.BorderColor = shape->get_BorderColor();
+        cacheEntry.HasBorder = borderThickness > 0;
+        cacheEntry.HasInnerFill = innerWidth > 0 && innerHeight > 0;
+        cacheEntry.BorderPosition = position;
+        cacheEntry.BorderSize = size;
+        cacheEntry.BorderRadius = radius;
+        cacheEntry.InnerFillPosition = float3(position.X + borderThickness, position.Y + borderThickness, position.Z);
+        cacheEntry.InnerFillSize = int2(innerWidth, innerHeight);
+        cacheEntry.InnerFillRadius = std::max(0.0f, radius - borderThickness);
+        cacheEntry.BorderVertices.clear();
+        cacheEntry.InnerFillVertices.clear();
+        cacheEntry.BorderUsesSolidQuad = false;
+        cacheEntry.InnerFillUsesSolidQuad = false;
+
+        if (cacheEntry.HasBorder) {
+            const float clampedBorderRadius = std::min(
+                std::max(cacheEntry.BorderRadius, 0.0f),
+                std::min(cacheEntry.BorderSize.X, cacheEntry.BorderSize.Y) * 0.5f);
+            if (clampedBorderRadius <= 0.0f) {
+                cacheEntry.BorderUsesSolidQuad = true;
+            } else {
+                const int32_t roundedRadius = std::max<int32_t>(1, static_cast<int32_t>(std::lround(clampedBorderRadius)));
+                AppendRoundedCornerVertices(cacheEntry.BorderVertices, cacheEntry.BorderPosition, cacheEntry.BorderSize, roundedRadius, cacheEntry.BorderColor);
+            }
+        }
+
+        if (cacheEntry.HasInnerFill) {
+            const float clampedInnerRadius = std::min(
+                std::max(cacheEntry.InnerFillRadius, 0.0f),
+                std::min(cacheEntry.InnerFillSize.X, cacheEntry.InnerFillSize.Y) * 0.5f);
+            if (clampedInnerRadius <= 0.0f) {
+                cacheEntry.InnerFillUsesSolidQuad = true;
+            } else {
+                const int32_t roundedRadius = std::max<int32_t>(1, static_cast<int32_t>(std::lround(clampedInnerRadius)));
+                AppendRoundedCornerVertices(cacheEntry.InnerFillVertices, cacheEntry.InnerFillPosition, cacheEntry.InnerFillSize, roundedRadius, cacheEntry.FillColor);
+            }
+        }
+    }
+
+    /// Appends rounded-corner triangle fan geometry to the supplied vertex list.
+    void PspRenderManager2D::AppendRoundedCornerVertices(std::vector<Psp2DVertex>& vertices, const float3& position, const int2& size, int32_t roundedRadius, const byte4& color) {
+        vertices.reserve(static_cast<std::size_t>(RoundedCornerSegmentCount * 3 * 4));
+        const std::uint32_t packedColor = ConvertColorToAbgr(color);
+
+        for (int segmentIndex = 0; segmentIndex < RoundedCornerSegmentCount; segmentIndex++) {
+            const double angle0 = Pi + ((Pi * 0.5 * segmentIndex) / RoundedCornerSegmentCount);
+            const double angle1 = Pi + ((Pi * 0.5 * (segmentIndex + 1)) / RoundedCornerSegmentCount);
+
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, position.X + roundedRadius, position.Y + roundedRadius, position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + roundedRadius) + (std::cos(angle0) * roundedRadius)), static_cast<float>((position.Y + roundedRadius) + (std::sin(angle0) * roundedRadius)), position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + roundedRadius) + (std::cos(angle1) * roundedRadius)), static_cast<float>((position.Y + roundedRadius) + (std::sin(angle1) * roundedRadius)), position.Z });
+        }
+
+        for (int segmentIndex = 0; segmentIndex < RoundedCornerSegmentCount; segmentIndex++) {
+            const double angle0 = (Pi * 1.5) + ((Pi * 0.5 * segmentIndex) / RoundedCornerSegmentCount);
+            const double angle1 = (Pi * 1.5) + ((Pi * 0.5 * (segmentIndex + 1)) / RoundedCornerSegmentCount);
+
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, position.X + size.X - roundedRadius, position.Y + roundedRadius, position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle0) * roundedRadius)), static_cast<float>((position.Y + roundedRadius) + (std::sin(angle0) * roundedRadius)), position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle1) * roundedRadius)), static_cast<float>((position.Y + roundedRadius) + (std::sin(angle1) * roundedRadius)), position.Z });
+        }
+
+        for (int segmentIndex = 0; segmentIndex < RoundedCornerSegmentCount; segmentIndex++) {
+            const double angle0 = (Pi * 0.5 * segmentIndex) / RoundedCornerSegmentCount;
+            const double angle1 = (Pi * 0.5 * (segmentIndex + 1)) / RoundedCornerSegmentCount;
+
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, position.X + size.X - roundedRadius, position.Y + size.Y - roundedRadius, position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle0) * roundedRadius)), static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle0) * roundedRadius)), position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle1) * roundedRadius)), static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle1) * roundedRadius)), position.Z });
+        }
+
+        for (int segmentIndex = 0; segmentIndex < RoundedCornerSegmentCount; segmentIndex++) {
+            const double angle0 = (Pi * 0.5) + ((Pi * 0.5 * segmentIndex) / RoundedCornerSegmentCount);
+            const double angle1 = (Pi * 0.5) + ((Pi * 0.5 * (segmentIndex + 1)) / RoundedCornerSegmentCount);
+
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, position.X + roundedRadius, position.Y + size.Y - roundedRadius, position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + roundedRadius) + (std::cos(angle0) * roundedRadius)), static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle0) * roundedRadius)), position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + roundedRadius) + (std::cos(angle1) * roundedRadius)), static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle1) * roundedRadius)), position.Z });
+        }
+    }
+
+    /// Returns whether one text drawable should render through a pre-rendered static surface.
+    bool PspRenderManager2D::ShouldUseStaticTextSurface(ITextDrawable2D* text) const {
+        if (text == nullptr) {
+            return false;
+        }
+
+        Entity* parent = text->get_Parent();
+        if (parent == nullptr) {
+            return false;
+        }
+
+        return parent->get_Static();
+    }
+
+    /// Rebuilds the pre-rendered static text surface for one cached entry.
+    void PspRenderManager2D::RebuildStaticTextSurface(TextGeometryCacheEntry& cacheEntry, FontAsset* font) {
+        if (font == nullptr || cacheEntry.Content.empty() || cacheEntry.GlyphCount <= 0 || cacheEntry.Vertices.empty()) {
+            ReleaseStaticTextSurface(cacheEntry);
+            return;
+        }
+
+        PspRuntimeTexture* atlasTexture = dynamic_cast<PspRuntimeTexture*>(font->get_Texture());
+        if (atlasTexture == nullptr || !atlasTexture->HasPixels()) {
+            ReleaseStaticTextSurface(cacheEntry);
+            return;
+        }
+
+        float minimumX = std::numeric_limits<float>::max();
+        float minimumY = std::numeric_limits<float>::max();
+        float maximumX = std::numeric_limits<float>::lowest();
+        float maximumY = std::numeric_limits<float>::lowest();
+        for (const Psp2DVertex& vertex : cacheEntry.Vertices) {
+            minimumX = std::min(minimumX, vertex.X);
+            minimumY = std::min(minimumY, vertex.Y);
+            maximumX = std::max(maximumX, vertex.X);
+            maximumY = std::max(maximumY, vertex.Y);
+        }
+
+        if (minimumX >= maximumX || minimumY >= maximumY) {
+            ReleaseStaticTextSurface(cacheEntry);
+            return;
+        }
+
+        const int32_t surfaceWidth = std::max<int32_t>(1, static_cast<int32_t>(std::ceil(maximumX - minimumX)));
+        const int32_t surfaceHeight = std::max<int32_t>(1, static_cast<int32_t>(std::ceil(maximumY - minimumY)));
+        std::vector<std::uint32_t> surfacePixels(static_cast<std::size_t>(surfaceWidth) * static_cast<std::size_t>(surfaceHeight), 0u);
+
+        const std::uint32_t* atlasPixels = atlasTexture->GetPixelsAbgr8888();
+        const int32_t atlasWidth = atlasTexture->get_Width();
+        const int32_t atlasHeight = atlasTexture->get_Height();
+        const double fontScale = std::max(static_cast<double>(cacheEntry.FontScale), 0.0001d);
+        const double lineHeight = std::max(static_cast<double>(font->get_LineHeight()) * fontScale, 1.0d);
+        const double baseX = std::round(cacheEntry.Position.X);
+        const double baseY = std::round(cacheEntry.Position.Y);
+
+        double offsetX = 0.0;
+        double offsetY = 0.0;
+        for (char character : cacheEntry.Content) {
+            if (character == '\n') {
+                offsetY += lineHeight;
+                offsetX = 0.0;
+                continue;
+            }
+
+            if (character == ' ') {
+                offsetX += font->get_FontInfo()->get_SpaceWidth() * fontScale;
+                continue;
+            }
+
+            FontChar glyph;
+            if (!font->get_Characters()->TryGetValue(character, glyph)) {
+                continue;
+            }
+
+            const double glyphWidth = glyph.SourceRect.Z * font->get_AtlasWidth() * fontScale;
+            const double glyphHeight = glyph.SourceRect.W * font->get_AtlasHeight() * fontScale;
+            const double snappedLineOffsetY = std::round(offsetY);
+            const double drawX = std::round(baseX + offsetX);
+            const double drawY = std::round(baseY + snappedLineOffsetY + (glyph.OffsetY * fontScale));
+            const double drawRight = std::round(baseX + offsetX + glyphWidth);
+            const double drawBottom = std::round(baseY + snappedLineOffsetY + (glyph.OffsetY * fontScale) + glyphHeight);
+            const int32_t destinationLeft = std::max<int32_t>(0, static_cast<int32_t>(std::lround(drawX - minimumX)));
+            const int32_t destinationTop = std::max<int32_t>(0, static_cast<int32_t>(std::lround(drawY - minimumY)));
+            const int32_t destinationRight = std::min<int32_t>(surfaceWidth, static_cast<int32_t>(std::lround(std::max(drawX + 1.0, drawRight) - minimumX)));
+            const int32_t destinationBottom = std::min<int32_t>(surfaceHeight, static_cast<int32_t>(std::lround(std::max(drawY + 1.0, drawBottom) - minimumY)));
+            const int32_t destinationWidth = destinationRight - destinationLeft;
+            const int32_t destinationHeight = destinationBottom - destinationTop;
+            if (destinationWidth > 0 && destinationHeight > 0) {
+                const float4 atlasSourceRect = ConvertSourceRectToTexturePixels(glyph.SourceRect, atlasTexture);
+                const int32_t sourceLeft = static_cast<int32_t>(std::floor(static_cast<double>(atlasSourceRect.X)));
+                const int32_t sourceTop = static_cast<int32_t>(std::floor(static_cast<double>(atlasSourceRect.Y)));
+                const int32_t sourceWidth = std::max<int32_t>(1, static_cast<int32_t>(std::round(atlasSourceRect.Z)));
+                const int32_t sourceHeight = std::max<int32_t>(1, static_cast<int32_t>(std::round(atlasSourceRect.W)));
+
+                for (int32_t destinationY = 0; destinationY < destinationHeight; destinationY++) {
+                    const int32_t targetY = destinationTop + destinationY;
+                    const int32_t sourceSampleOffsetY = (destinationY * sourceHeight) / destinationHeight;
+                    const int32_t sampleY = std::clamp<int32_t>(
+                        sourceTop + sourceSampleOffsetY,
+                        0,
+                        static_cast<int32_t>(atlasHeight - 1));
+                    for (int32_t destinationX = 0; destinationX < destinationWidth; destinationX++) {
+                        const int32_t targetX = destinationLeft + destinationX;
+                        const int32_t sourceSampleOffsetX = (destinationX * sourceWidth) / destinationWidth;
+                        const int32_t sampleX = std::clamp<int32_t>(
+                            sourceLeft + sourceSampleOffsetX,
+                            0,
+                            static_cast<int32_t>(atlasWidth - 1));
+                        std::uint32_t tintedPixel = MultiplyAbgrColor(
+                            atlasPixels[(sampleY * atlasWidth) + sampleX],
+                            cacheEntry.Color);
+                        BlendAbgrPixel(
+                            tintedPixel,
+                            surfacePixels[(targetY * surfaceWidth) + targetX]);
+                    }
+                }
+            }
+
+            const double advanceWidth = glyph.AdvanceWidth > 0.0f
+                ? glyph.AdvanceWidth * fontScale
+                : glyphWidth;
+            offsetX += advanceWidth;
+        }
+
+        ReleaseStaticTextSurface(cacheEntry);
+        cacheEntry.StaticSurfaceTexture = new PspRuntimeTexture();
+        cacheEntry.StaticSurfaceTexture->set_Id("engine:psp:static-text-surface");
+        cacheEntry.StaticSurfaceTexture->set_Width(surfaceWidth);
+        cacheEntry.StaticSurfaceTexture->set_Height(surfaceHeight);
+        cacheEntry.StaticSurfaceTexture->SetPixelsAbgr8888(std::move(surfacePixels));
+        cacheEntry.StaticSurfacePosition = float3(minimumX, minimumY, cacheEntry.Position.Z);
+        cacheEntry.StaticSurfaceSize = int2(surfaceWidth, surfaceHeight);
+    }
+
+    /// Releases one cached static text surface texture when the cache entry changes ownership.
+    void PspRenderManager2D::ReleaseStaticTextSurface(TextGeometryCacheEntry& cacheEntry) {
+        if (cacheEntry.StaticSurfaceTexture != nullptr) {
+            delete cacheEntry.StaticSurfaceTexture;
+            cacheEntry.StaticSurfaceTexture = nullptr;
+        }
+
+        cacheEntry.StaticSurfacePosition = float3();
+        cacheEntry.StaticSurfaceSize = int2();
+    }
+
+    /// Clears all cached 2D geometry so subsequent draws rebuild from current authored state.
+    void PspRenderManager2D::ClearGeometryCaches() {
+        for (TextGeometryCacheEntry& entry : TextGeometryCacheEntries) {
+            ReleaseStaticTextSurface(entry);
+        }
+        TextGeometryCacheEntries.clear();
+        RoundedRectGeometryCacheEntries.clear();
+        PendingWhiteTriangles.clear();
     }
 
     /// Draws one textured screen-space quad using PSP 2D texel-space UV coordinates.
     void PspRenderManager2D::DrawTexturedQuad(RuntimeTexture* texture, const float3& position, const int2& size, const float4& sourceRect, const byte4& color) {
+        const std::uint64_t drawStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         if (texture == nullptr || size.X <= 0 || size.Y <= 0) {
             return;
         }
@@ -378,6 +882,10 @@ namespace helengine::psp::rendering {
         PspRuntimeTexture* pspTexture = dynamic_cast<PspRuntimeTexture*>(texture);
         if (pspTexture == nullptr) {
             throw std::runtime_error("PSP 2D textures must be PSP runtime textures.");
+        }
+
+        if (pspTexture != GetWhiteTexture()) {
+            FlushPendingWhiteTriangles();
         }
 
         BindTexture(pspTexture);
@@ -401,16 +909,24 @@ namespace helengine::psp::rendering {
         vertices[1].Y = position.Y + size.Y;
         vertices[1].Z = position.Z;
 
+        const std::uint64_t drawArrayStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         sceGuDrawArray(
             GU_SPRITES,
             GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D,
             2,
             nullptr,
             vertices);
+        const std::uint64_t drawArrayMicroseconds = PspRenderProfiler::GetTimestampMicroseconds() - drawArrayStartMicroseconds;
+        PspRenderProfiler::Record2DTexturedQuad(
+            pspTexture,
+            size,
+            PspRenderProfiler::GetTimestampMicroseconds() - drawStartMicroseconds,
+            drawArrayMicroseconds);
     }
 
     /// Draws one textured 2D triangle list using the PSP GU textured vertex path.
     void PspRenderManager2D::DrawTexturedTriangles(const Psp2DVertex* vertices, std::size_t vertexCount, RuntimeTexture* texture) {
+        const std::uint64_t drawStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         if (vertices == nullptr || vertexCount < 3 || texture == nullptr) {
             return;
         }
@@ -420,17 +936,28 @@ namespace helengine::psp::rendering {
             throw std::runtime_error("PSP 2D triangle draws must use PSP runtime textures.");
         }
 
+        if (pspTexture != GetWhiteTexture()) {
+            FlushPendingWhiteTriangles();
+        }
+
         BindTexture(pspTexture);
         sceGuDisable(GU_DEPTH_TEST);
         Psp2DVertex* drawVertices = static_cast<Psp2DVertex*>(sceGuGetMemory(sizeof(Psp2DVertex) * vertexCount));
         std::copy(vertices, vertices + vertexCount, drawVertices);
 
+        const std::uint64_t drawArrayStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         sceGuDrawArray(
             GU_TRIANGLES,
             GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D,
             static_cast<int>(vertexCount),
             nullptr,
             drawVertices);
+        const std::uint64_t drawArrayMicroseconds = PspRenderProfiler::GetTimestampMicroseconds() - drawArrayStartMicroseconds;
+        PspRenderProfiler::Record2DTexturedTriangles(
+            pspTexture,
+            vertexCount,
+            PspRenderProfiler::GetTimestampMicroseconds() - drawStartMicroseconds,
+            drawArrayMicroseconds);
     }
 
     /// Resolves one drawable's nested clip regions into one effective rectangle in screen coordinates.
@@ -450,6 +977,7 @@ namespace helengine::psp::rendering {
 
     /// Applies one drawable clip rectangle through the PSP GU scissor test.
     void PspRenderManager2D::ApplyClipRect(const float4& clipRect) {
+        FlushPendingWhiteTriangles();
         if (HasActiveClipRect
             && ActiveClipRect.X == clipRect.X
             && ActiveClipRect.Y == clipRect.Y
@@ -472,6 +1000,7 @@ namespace helengine::psp::rendering {
 
     /// Clears the drawable clip rectangle so subsequent 2D draws are unrestricted.
     void PspRenderManager2D::ClearClipRect() {
+        FlushPendingWhiteTriangles();
         if (!HasActiveClipRect) {
             sceGuDisable(GU_SCISSOR_TEST);
             return;
@@ -503,6 +1032,54 @@ namespace helengine::psp::rendering {
             sourceRect.W * texture->get_Height());
     }
 
+    /// Modulates one ABGR8888 source pixel by the supplied drawable tint.
+    std::uint32_t PspRenderManager2D::MultiplyAbgrColor(std::uint32_t sourcePixel, const byte4& tint) {
+        const std::uint32_t sourceRed = sourcePixel & 0xffu;
+        const std::uint32_t sourceGreen = (sourcePixel >> 8) & 0xffu;
+        const std::uint32_t sourceBlue = (sourcePixel >> 16) & 0xffu;
+        const std::uint32_t sourceAlpha = (sourcePixel >> 24) & 0xffu;
+        const std::uint32_t multipliedRed = (sourceRed * tint.X) / 255u;
+        const std::uint32_t multipliedGreen = (sourceGreen * tint.Y) / 255u;
+        const std::uint32_t multipliedBlue = (sourceBlue * tint.Z) / 255u;
+        const std::uint32_t multipliedAlpha = (sourceAlpha * tint.W) / 255u;
+
+        return (multipliedAlpha << 24)
+            | (multipliedBlue << 16)
+            | (multipliedGreen << 8)
+            | multipliedRed;
+    }
+
+    /// Blends one ABGR8888 source pixel over one destination pixel using standard source-alpha composition.
+    void PspRenderManager2D::BlendAbgrPixel(std::uint32_t sourcePixel, std::uint32_t& destinationPixel) {
+        const std::uint32_t sourceAlpha = (sourcePixel >> 24) & 0xffu;
+        if (sourceAlpha == 0u) {
+            return;
+        }
+
+        if (sourceAlpha == 255u) {
+            destinationPixel = sourcePixel;
+            return;
+        }
+
+        const std::uint32_t destinationRed = destinationPixel & 0xffu;
+        const std::uint32_t destinationGreen = (destinationPixel >> 8) & 0xffu;
+        const std::uint32_t destinationBlue = (destinationPixel >> 16) & 0xffu;
+        const std::uint32_t destinationAlpha = (destinationPixel >> 24) & 0xffu;
+        const std::uint32_t sourceRed = sourcePixel & 0xffu;
+        const std::uint32_t sourceGreen = (sourcePixel >> 8) & 0xffu;
+        const std::uint32_t sourceBlue = (sourcePixel >> 16) & 0xffu;
+        const std::uint32_t inverseSourceAlpha = 255u - sourceAlpha;
+        const std::uint32_t blendedRed = sourceRed + ((destinationRed * inverseSourceAlpha) / 255u);
+        const std::uint32_t blendedGreen = sourceGreen + ((destinationGreen * inverseSourceAlpha) / 255u);
+        const std::uint32_t blendedBlue = sourceBlue + ((destinationBlue * inverseSourceAlpha) / 255u);
+        const std::uint32_t blendedAlpha = sourceAlpha + ((destinationAlpha * inverseSourceAlpha) / 255u);
+
+        destinationPixel = (std::min<std::uint32_t>(255u, blendedAlpha) << 24)
+            | (std::min<std::uint32_t>(255u, blendedBlue) << 16)
+            | (std::min<std::uint32_t>(255u, blendedGreen) << 8)
+            | std::min<std::uint32_t>(255u, blendedRed);
+    }
+
     /// Returns the reusable white runtime texture used to render solid 2D quads.
     PspRuntimeTexture* PspRenderManager2D::GetWhiteTexture() {
         if (WhiteTexture != nullptr) {
@@ -519,4 +1096,5 @@ namespace helengine::psp::rendering {
         WhiteTexture->SetPixelsAbgr8888(std::move(pixels));
         return WhiteTexture;
     }
+
 }
