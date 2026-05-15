@@ -36,6 +36,16 @@ namespace helengine::psp::rendering {
             MetricStat TwoDTriangleDrawArray;
             MetricStat TwoDText;
             MetricStat TwoDCamera;
+            MetricStat ThreeDSceneLightResolve;
+            MetricStat ThreeDCameraSetup;
+            MetricStat ThreeDQueueVisit;
+            MetricStat ThreeDTimestampCalibration;
+            MetricStat ThreeDMaterialResolve;
+            MetricStat ThreeDWorldMatrixBuild;
+            MetricStat ThreeDModelMatrixLoad;
+            MetricStat ThreeDFixedFunctionMaterialSetup;
+            MetricStat ThreeDFixedFunctionDraw;
+            MetricStat ThreeDVisit;
             MetricStat ThreeDCamera;
             MetricStat ThreeDCameraUi;
 
@@ -71,6 +81,16 @@ namespace helengine::psp::rendering {
             ResetMetric(CurrentFrame.TwoDTriangleDrawArray);
             ResetMetric(CurrentFrame.TwoDText);
             ResetMetric(CurrentFrame.TwoDCamera);
+            ResetMetric(CurrentFrame.ThreeDSceneLightResolve);
+            ResetMetric(CurrentFrame.ThreeDCameraSetup);
+            ResetMetric(CurrentFrame.ThreeDQueueVisit);
+            ResetMetric(CurrentFrame.ThreeDTimestampCalibration);
+            ResetMetric(CurrentFrame.ThreeDMaterialResolve);
+            ResetMetric(CurrentFrame.ThreeDWorldMatrixBuild);
+            ResetMetric(CurrentFrame.ThreeDModelMatrixLoad);
+            ResetMetric(CurrentFrame.ThreeDFixedFunctionMaterialSetup);
+            ResetMetric(CurrentFrame.ThreeDFixedFunctionDraw);
+            ResetMetric(CurrentFrame.ThreeDVisit);
             ResetMetric(CurrentFrame.ThreeDCamera);
             ResetMetric(CurrentFrame.ThreeDCameraUi);
             CurrentFrame.TwoDTextureBindBytes = 0;
@@ -183,6 +203,15 @@ namespace helengine::psp::rendering {
                 + " " + DescribeMetric("flush", CurrentFrame.TwoDTextureFlush));
             PspBootTrace::WriteLine(
                 std::string("PspPerfFrame3D frame=") + std::to_string(CurrentFrame.FrameIndex)
+                + " " + DescribeMetric("sceneLight", CurrentFrame.ThreeDSceneLightResolve)
+                + " " + DescribeMetric("setup", CurrentFrame.ThreeDCameraSetup)
+                + " " + DescribeMetric("queue", CurrentFrame.ThreeDQueueVisit)
+                + " " + DescribeMetric("material", CurrentFrame.ThreeDMaterialResolve)
+                + " " + DescribeMetric("world", CurrentFrame.ThreeDWorldMatrixBuild)
+                + " " + DescribeMetric("modelLoad", CurrentFrame.ThreeDModelMatrixLoad)
+                + " " + DescribeMetric("ffMaterial", CurrentFrame.ThreeDFixedFunctionMaterialSetup)
+                + " " + DescribeMetric("ffDraw", CurrentFrame.ThreeDFixedFunctionDraw)
+                + " " + DescribeMetric("visit", CurrentFrame.ThreeDVisit)
                 + " " + DescribeMetric("camera", CurrentFrame.ThreeDCamera)
                 + " " + DescribeMetric("ui", CurrentFrame.ThreeDCameraUi)
                 + " " + DescribeMetric("bind", CurrentFrame.ThreeDTextureBind)
@@ -210,12 +239,14 @@ namespace helengine::psp::rendering {
         }
 
         CurrentFrame.Last2DTexturePointer = texturePointer;
-        AppendDetailedLine(
-            std::string("PspPerfCall frame=") + std::to_string(CurrentFrame.FrameIndex)
-            + " category=2D op=BindTexture totalUs=" + std::to_string(totalMicroseconds)
-            + " flushUs=" + std::to_string(flushMicroseconds)
-            + " bytes=" + std::to_string(byteCount)
-            + " " + DescribeTexture(texture));
+        if (CurrentFrame.IsDetailedFrame) {
+            AppendDetailedLine(
+                std::string("PspPerfCall frame=") + std::to_string(CurrentFrame.FrameIndex)
+                + " category=2D op=BindTexture totalUs=" + std::to_string(totalMicroseconds)
+                + " flushUs=" + std::to_string(flushMicroseconds)
+                + " bytes=" + std::to_string(byteCount)
+                + " " + DescribeTexture(texture));
+        }
     }
 
     /// Records one 3D texture bind, including total bind time and the texture writeback portion.
@@ -233,12 +264,14 @@ namespace helengine::psp::rendering {
         }
 
         CurrentFrame.Last3DTexturePointer = texturePointer;
-        AppendDetailedLine(
-            std::string("PspPerfCall frame=") + std::to_string(CurrentFrame.FrameIndex)
-            + " category=3D op=BindTexture totalUs=" + std::to_string(totalMicroseconds)
-            + " flushUs=" + std::to_string(flushMicroseconds)
-            + " bytes=" + std::to_string(byteCount)
-            + " " + DescribeTexture(texture));
+        if (CurrentFrame.IsDetailedFrame) {
+            AppendDetailedLine(
+                std::string("PspPerfCall frame=") + std::to_string(CurrentFrame.FrameIndex)
+                + " category=3D op=BindTexture totalUs=" + std::to_string(totalMicroseconds)
+                + " flushUs=" + std::to_string(flushMicroseconds)
+                + " bytes=" + std::to_string(byteCount)
+                + " " + DescribeTexture(texture));
+        }
     }
 
     /// Records one 2D textured-quad draw.
@@ -249,12 +282,14 @@ namespace helengine::psp::rendering {
 
         RecordMetric(CurrentFrame.TwoDTexturedQuad, totalMicroseconds);
         RecordMetric(CurrentFrame.TwoDQuadDrawArray, drawMicroseconds);
-        AppendDetailedLine(
-            std::string("PspPerfCall frame=") + std::to_string(CurrentFrame.FrameIndex)
-            + " category=2D op=DrawTexturedQuad totalUs=" + std::to_string(totalMicroseconds)
-            + " drawUs=" + std::to_string(drawMicroseconds)
-            + " size=" + std::to_string(size.X) + "x" + std::to_string(size.Y)
-            + " " + DescribeTexture(texture));
+        if (CurrentFrame.IsDetailedFrame) {
+            AppendDetailedLine(
+                std::string("PspPerfCall frame=") + std::to_string(CurrentFrame.FrameIndex)
+                + " category=2D op=DrawTexturedQuad totalUs=" + std::to_string(totalMicroseconds)
+                + " drawUs=" + std::to_string(drawMicroseconds)
+                + " size=" + std::to_string(size.X) + "x" + std::to_string(size.Y)
+                + " " + DescribeTexture(texture));
+        }
     }
 
     /// Records one 2D textured-triangle draw.
@@ -265,12 +300,14 @@ namespace helengine::psp::rendering {
 
         RecordMetric(CurrentFrame.TwoDTexturedTriangles, totalMicroseconds);
         RecordMetric(CurrentFrame.TwoDTriangleDrawArray, drawMicroseconds);
-        AppendDetailedLine(
-            std::string("PspPerfCall frame=") + std::to_string(CurrentFrame.FrameIndex)
-            + " category=2D op=DrawTexturedTriangles totalUs=" + std::to_string(totalMicroseconds)
-            + " drawUs=" + std::to_string(drawMicroseconds)
-            + " vertices=" + std::to_string(vertexCount)
-            + " " + DescribeTexture(texture));
+        if (CurrentFrame.IsDetailedFrame) {
+            AppendDetailedLine(
+                std::string("PspPerfCall frame=") + std::to_string(CurrentFrame.FrameIndex)
+                + " category=2D op=DrawTexturedTriangles totalUs=" + std::to_string(totalMicroseconds)
+                + " drawUs=" + std::to_string(drawMicroseconds)
+                + " vertices=" + std::to_string(vertexCount)
+                + " " + DescribeTexture(texture));
+        }
     }
 
     /// Records one 2D text draw and the amount of visible glyph work it submitted.
@@ -282,11 +319,13 @@ namespace helengine::psp::rendering {
         RecordMetric(CurrentFrame.TwoDText, totalMicroseconds);
         CurrentFrame.TwoDTextGlyphCount += glyphCount;
         CurrentFrame.TwoDTextContentLength += contentLength;
-        AppendDetailedLine(
-            std::string("PspPerfCall frame=") + std::to_string(CurrentFrame.FrameIndex)
-            + " category=2D op=DrawText totalUs=" + std::to_string(totalMicroseconds)
-            + " glyphs=" + std::to_string(glyphCount)
-            + " chars=" + std::to_string(contentLength));
+        if (CurrentFrame.IsDetailedFrame) {
+            AppendDetailedLine(
+                std::string("PspPerfCall frame=") + std::to_string(CurrentFrame.FrameIndex)
+                + " category=2D op=DrawText totalUs=" + std::to_string(totalMicroseconds)
+                + " glyphs=" + std::to_string(glyphCount)
+                + " chars=" + std::to_string(contentLength));
+        }
     }
 
     /// Records one complete 2D camera pass.
@@ -297,10 +336,93 @@ namespace helengine::psp::rendering {
 
         RecordMetric(CurrentFrame.TwoDCamera, totalMicroseconds);
         CurrentFrame.TwoDDrawableCount += drawableCount;
-        AppendDetailedLine(
-            std::string("PspPerfCall frame=") + std::to_string(CurrentFrame.FrameIndex)
-            + " category=2D op=RenderCamera totalUs=" + std::to_string(totalMicroseconds)
-            + " drawables=" + std::to_string(drawableCount));
+        if (CurrentFrame.IsDetailedFrame) {
+            AppendDetailedLine(
+                std::string("PspPerfCall frame=") + std::to_string(CurrentFrame.FrameIndex)
+                + " category=2D op=RenderCamera totalUs=" + std::to_string(totalMicroseconds)
+                + " drawables=" + std::to_string(drawableCount));
+        }
+    }
+
+    /// Records one scene-light resolve pass inside the 3D camera.
+    void PspRenderProfiler::Record3DSceneLightResolve(std::uint64_t totalMicroseconds) {
+        if (!CurrentFrame.FrameActive) {
+            return;
+        }
+
+        RecordMetric(CurrentFrame.ThreeDSceneLightResolve, totalMicroseconds);
+    }
+
+    /// Records one pre-queue 3D camera setup phase before scene-light resolve and drawable traversal.
+    void PspRenderProfiler::Record3DCameraSetup(std::uint64_t totalMicroseconds) {
+        if (!CurrentFrame.FrameActive) {
+            return;
+        }
+
+        RecordMetric(CurrentFrame.ThreeDCameraSetup, totalMicroseconds);
+    }
+
+    /// Records one ordered 3D render-queue traversal call.
+    void PspRenderProfiler::Record3DQueueVisit(std::uint64_t totalMicroseconds) {
+        if (!CurrentFrame.FrameActive) {
+            return;
+        }
+
+        RecordMetric(CurrentFrame.ThreeDQueueVisit, totalMicroseconds);
+    }
+
+    /// Records one runtime-material root resolve inside one 3D drawable visit.
+    void PspRenderProfiler::Record3DMaterialResolve(std::uint64_t totalMicroseconds) {
+        if (!CurrentFrame.FrameActive) {
+            return;
+        }
+
+        RecordMetric(CurrentFrame.ThreeDMaterialResolve, totalMicroseconds);
+    }
+
+    /// Records one world-matrix build inside one 3D drawable visit.
+    void PspRenderProfiler::Record3DWorldMatrixBuild(std::uint64_t totalMicroseconds) {
+        if (!CurrentFrame.FrameActive) {
+            return;
+        }
+
+        RecordMetric(CurrentFrame.ThreeDWorldMatrixBuild, totalMicroseconds);
+    }
+
+    /// Records one GU model-matrix load inside one 3D drawable visit.
+    void PspRenderProfiler::Record3DModelMatrixLoad(std::uint64_t totalMicroseconds) {
+        if (!CurrentFrame.FrameActive) {
+            return;
+        }
+
+        RecordMetric(CurrentFrame.ThreeDModelMatrixLoad, totalMicroseconds);
+    }
+
+    /// Records one fixed-function material-state setup inside one 3D drawable visit.
+    void PspRenderProfiler::Record3DFixedFunctionMaterialSetup(std::uint64_t totalMicroseconds) {
+        if (!CurrentFrame.FrameActive) {
+            return;
+        }
+
+        RecordMetric(CurrentFrame.ThreeDFixedFunctionMaterialSetup, totalMicroseconds);
+    }
+
+    /// Records one fixed-function GU draw submission inside one 3D drawable visit.
+    void PspRenderProfiler::Record3DFixedFunctionDraw(std::uint64_t totalMicroseconds) {
+        if (!CurrentFrame.FrameActive) {
+            return;
+        }
+
+        RecordMetric(CurrentFrame.ThreeDFixedFunctionDraw, totalMicroseconds);
+    }
+
+    /// Records one complete 3D drawable visit.
+    void PspRenderProfiler::Record3DVisit(std::uint64_t totalMicroseconds) {
+        if (!CurrentFrame.FrameActive) {
+            return;
+        }
+
+        RecordMetric(CurrentFrame.ThreeDVisit, totalMicroseconds);
     }
 
     /// Records one complete 3D camera pass and the time spent in its nested 2D UI phase.
@@ -312,10 +434,12 @@ namespace helengine::psp::rendering {
         RecordMetric(CurrentFrame.ThreeDCamera, totalMicroseconds);
         RecordMetric(CurrentFrame.ThreeDCameraUi, uiMicroseconds);
         CurrentFrame.ThreeDDrawableCount += drawableCount;
-        AppendDetailedLine(
-            std::string("PspPerfCall frame=") + std::to_string(CurrentFrame.FrameIndex)
-            + " category=3D op=RenderCamera totalUs=" + std::to_string(totalMicroseconds)
-            + " uiUs=" + std::to_string(uiMicroseconds)
-            + " drawables=" + std::to_string(drawableCount));
+        if (CurrentFrame.IsDetailedFrame) {
+            AppendDetailedLine(
+                std::string("PspPerfCall frame=") + std::to_string(CurrentFrame.FrameIndex)
+                + " category=3D op=RenderCamera totalUs=" + std::to_string(totalMicroseconds)
+                + " uiUs=" + std::to_string(uiMicroseconds)
+                + " drawables=" + std::to_string(drawableCount));
+        }
     }
 }

@@ -26,14 +26,6 @@
 
 namespace helengine::psp::rendering {
     namespace {
-        /// Stores one raw PSP mesh payload keyed by the generated runtime-model instance.
-        struct PspMeshRecord {
-            std::vector<float3> Positions;
-            std::vector<float3> Normals;
-            std::vector<float2> TexCoords;
-            std::vector<std::uint32_t> Indices;
-        };
-
         /// Stores one GU vertex with per-vertex color and position.
         struct PspLitVertex {
             std::uint32_t Color;
@@ -52,34 +44,11 @@ namespace helengine::psp::rendering {
             float Z;
         };
 
-        /// Stores one GU fixed-function vertex with a local normal and position.
-        struct PspFixedFunctionVertex {
-            float NX;
-            float NY;
-            float NZ;
-            float X;
-            float Y;
-            float Z;
-        };
-
-        /// Stores one GU fixed-function textured vertex with UVs, a local normal, and position.
-        struct PspFixedFunctionTexturedVertex {
-            float U;
-            float V;
-            float NX;
-            float NY;
-            float NZ;
-            float X;
-            float Y;
-            float Z;
-        };
-
         /// Stores one raw 4x4 float buffer that can be reinterpreted as a PSP GU matrix.
         struct alignas(16) PspMatrixBuffer {
             float M[4][4];
         };
 
-        std::unordered_map<const RuntimeModel*, PspMeshRecord> MeshRecords;
         std::unordered_map<std::string, RuntimeModel*> CachedModels;
 
         /// Converts one generated matrix into the column-major layout expected by PSP GU.
@@ -117,6 +86,128 @@ namespace helengine::psp::rendering {
             std::uint32_t blue = ClampColorChannel(color.Z);
             std::uint32_t alpha = ClampColorChannel(color.W);
             return (alpha << 24) | (blue << 16) | (green << 8) | red;
+        }
+
+        /// Returns the default local-space normal used when authored mesh data omits normals.
+        float3 GetFallbackNormal() {
+            return float3(0.0f, 0.0f, 1.0f);
+        }
+
+        /// Returns the number of vertices submitted after expanding the authored index stream.
+        std::size_t GetExpandedVertexCount(ModelAsset* data) {
+            if (data == nullptr || data->Positions == nullptr) {
+                return 0;
+            }
+
+            if (data->Indices32 != nullptr && data->Indices32->Length > 0) {
+                return static_cast<std::size_t>(data->Indices32->Length);
+            }
+
+            if (data->Indices16 != nullptr && data->Indices16->Length > 0) {
+                return static_cast<std::size_t>(data->Indices16->Length);
+            }
+
+            return static_cast<std::size_t>(data->Positions->Length);
+        }
+
+        /// Resolves one authored source vertex index from the packed mesh data.
+        std::uint32_t ResolveExpandedSourceIndex(ModelAsset* data, int32_t expandedVertexIndex) {
+            if (data == nullptr || data->Positions == nullptr || data->Positions->Length <= 0) {
+                throw std::runtime_error("PSP runtime-model generation requires authored mesh positions.");
+            }
+
+            if (data->Indices32 != nullptr && data->Indices32->Length > 0) {
+                if (expandedVertexIndex < 0 || expandedVertexIndex >= data->Indices32->Length) {
+                    throw std::runtime_error("PSP runtime-model generation submitted an out-of-range 32-bit index lookup.");
+                }
+
+                return (*data->Indices32)[expandedVertexIndex];
+            }
+
+            if (data->Indices16 != nullptr && data->Indices16->Length > 0) {
+                if (expandedVertexIndex < 0 || expandedVertexIndex >= data->Indices16->Length) {
+                    throw std::runtime_error("PSP runtime-model generation submitted an out-of-range 16-bit index lookup.");
+                }
+
+                return (*data->Indices16)[expandedVertexIndex];
+            }
+
+            return static_cast<std::uint32_t>(expandedVertexIndex);
+        }
+
+        /// Builds the ready-to-submit untextured fixed-function PSP vertex stream for one authored mesh.
+        std::vector<PspRuntimeModel::FixedFunctionVertex> BuildFixedFunctionVertices(ModelAsset* data) {
+            std::size_t vertexCount = GetExpandedVertexCount(data);
+            std::vector<PspRuntimeModel::FixedFunctionVertex> vertices;
+            if (vertexCount == 0) {
+                return vertices;
+            }
+
+            vertices.reserve(vertexCount);
+            for (int32_t expandedVertexIndex = 0; expandedVertexIndex < static_cast<int32_t>(vertexCount); expandedVertexIndex++) {
+                std::uint32_t sourceIndex = ResolveExpandedSourceIndex(data, expandedVertexIndex);
+                if (sourceIndex >= static_cast<std::uint32_t>(data->Positions->Length)) {
+                    throw std::runtime_error("PSP runtime-model generation submitted an out-of-range mesh position index.");
+                }
+
+                const float3& position = (*data->Positions)[sourceIndex];
+                const float3 sourceNormal = data->Normals != nullptr && sourceIndex < static_cast<std::uint32_t>(data->Normals->Length)
+                    ? (*data->Normals)[sourceIndex]
+                    : GetFallbackNormal();
+
+                vertices.push_back(PspRuntimeModel::FixedFunctionVertex {
+                    sourceNormal.X,
+                    sourceNormal.Y,
+                    sourceNormal.Z,
+                    position.X,
+                    position.Y,
+                    position.Z
+                });
+            }
+
+            return vertices;
+        }
+
+        /// Builds the ready-to-submit textured fixed-function PSP vertex stream for one authored mesh.
+        std::vector<PspRuntimeModel::FixedFunctionTexturedVertex> BuildFixedFunctionTexturedVertices(ModelAsset* data) {
+            std::vector<PspRuntimeModel::FixedFunctionTexturedVertex> vertices;
+            if (data == nullptr || data->TexCoords == nullptr || data->TexCoords->Length <= 0) {
+                return vertices;
+            }
+
+            std::size_t vertexCount = GetExpandedVertexCount(data);
+            if (vertexCount == 0) {
+                return vertices;
+            }
+
+            vertices.reserve(vertexCount);
+            for (int32_t expandedVertexIndex = 0; expandedVertexIndex < static_cast<int32_t>(vertexCount); expandedVertexIndex++) {
+                std::uint32_t sourceIndex = ResolveExpandedSourceIndex(data, expandedVertexIndex);
+                if (sourceIndex >= static_cast<std::uint32_t>(data->Positions->Length)) {
+                    throw std::runtime_error("PSP runtime-model generation submitted an out-of-range mesh position index.");
+                } else if (sourceIndex >= static_cast<std::uint32_t>(data->TexCoords->Length)) {
+                    throw std::runtime_error("PSP runtime-model generation submitted an out-of-range mesh texcoord index.");
+                }
+
+                const float3& position = (*data->Positions)[sourceIndex];
+                const float3 sourceNormal = data->Normals != nullptr && sourceIndex < static_cast<std::uint32_t>(data->Normals->Length)
+                    ? (*data->Normals)[sourceIndex]
+                    : GetFallbackNormal();
+                const float2& texCoord = (*data->TexCoords)[sourceIndex];
+
+                vertices.push_back(PspRuntimeModel::FixedFunctionTexturedVertex {
+                    texCoord.X,
+                    texCoord.Y,
+                    sourceNormal.X,
+                    sourceNormal.Y,
+                    sourceNormal.Z,
+                    position.X,
+                    position.Y,
+                    position.Z
+                });
+            }
+
+            return vertices;
         }
 
         /// Builds one world matrix from the generated entity transform.
@@ -164,41 +255,6 @@ namespace helengine::psp::rendering {
                 std::min(std::max(color.W, 0.0f), 1.0f));
         }
 
-        /// Binds one PSP runtime texture for GU sampling or disables texturing when no texture exists.
-        void BindTexture(PspRuntimeTexture* texture) {
-            const std::uint64_t bindStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
-            std::uint64_t flushMicroseconds = 0;
-            std::size_t byteCount = 0;
-            if (texture == nullptr || !texture->HasPixels()) {
-                sceGuDisable(GU_TEXTURE_2D);
-                PspRenderProfiler::Record3DTextureBind(
-                    texture,
-                    byteCount,
-                    PspRenderProfiler::GetTimestampMicroseconds() - bindStartMicroseconds,
-                    flushMicroseconds);
-                return;
-            }
-
-            byteCount = texture->GetPixelCount() * sizeof(std::uint32_t);
-            const std::uint64_t flushStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
-            sceKernelDcacheWritebackRange(
-                const_cast<std::uint32_t*>(texture->GetPixelsAbgr8888()),
-                static_cast<unsigned int>(byteCount));
-            flushMicroseconds = PspRenderProfiler::GetTimestampMicroseconds() - flushStartMicroseconds;
-
-            sceGuEnable(GU_TEXTURE_2D);
-            sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-            sceGuTexImage(0, texture->get_Width(), texture->get_Height(), texture->get_Width(), texture->GetPixelsAbgr8888());
-            sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
-            sceGuTexFilter(GU_NEAREST, GU_NEAREST);
-            sceGuTexWrap(GU_REPEAT, GU_REPEAT);
-            PspRenderProfiler::Record3DTextureBind(
-                texture,
-                byteCount,
-                PspRenderProfiler::GetTimestampMicroseconds() - bindStartMicroseconds,
-                flushMicroseconds);
-        }
-
         /// Converts one generated vector into the PSP GU vector layout.
         ScePspFVector3 CreatePspVector3(const float3& value) {
             ScePspFVector3 result {};
@@ -240,91 +296,29 @@ namespace helengine::psp::rendering {
                 baseColor.W));
         }
 
-        /// Configures the scene-wide fixed-function lighting state for the active camera pass.
-        void ConfigureFixedFunctionSceneLighting(
-            const PspLightingSettings& lightingSettings,
-            const PspSceneLightingSnapshot& lightingSnapshot) {
-            sceGuDisable(GU_TEXTURE_2D);
-            sceGuLightMode(GU_SINGLE_COLOR);
-            sceGuSpecular(0.0f);
-            sceGuAmbient(ConvertColorToAbgr(float4(
-                lightingSettings.AmbientIntensity,
-                lightingSettings.AmbientIntensity,
-                lightingSettings.AmbientIntensity,
-                1.0f)));
-
-            if (!lightingSnapshot.HasDirectionalLight) {
-                sceGuDisable(GU_LIGHT0);
-                return;
-            }
-
-            const float3 normalizedDirection = float3::Normalize(lightingSnapshot.DirectionalLightDirection);
-            const float3 scaledDirectionalColor = float3(
-                lightingSnapshot.DirectionalLightColor.X * lightingSnapshot.DirectionalLightIntensity,
-                lightingSnapshot.DirectionalLightColor.Y * lightingSnapshot.DirectionalLightIntensity,
-                lightingSnapshot.DirectionalLightColor.Z * lightingSnapshot.DirectionalLightIntensity);
-            const ScePspFVector3 lightVector = CreatePspVector3(normalizedDirection);
-
-            sceGuEnable(GU_LIGHT0);
-            sceGuLight(0, GU_DIRECTIONAL, GU_DIFFUSE, &lightVector);
-            sceGuLightAtt(0, 1.0f, 0.0f, 0.0f);
-            sceGuLightColor(0, GU_AMBIENT, 0);
-            sceGuLightColor(0, GU_DIFFUSE, ConvertColorToAbgr(float4(
-                scaledDirectionalColor.X,
-                scaledDirectionalColor.Y,
-                scaledDirectionalColor.Z,
-                1.0f)));
-            sceGuLightColor(0, GU_SPECULAR, 0);
-        }
-
-        /// Configures the per-draw fixed-function material state for one PSP runtime material.
-        void ConfigureFixedFunctionMaterial(const float4& baseColor, bool useLighting, bool hasDirectionalLight) {
-            const std::uint32_t baseColorAbgr = ConvertColorToAbgr(baseColor);
-
-            sceGuColor(baseColorAbgr);
-            sceGuAmbientColor(baseColorAbgr);
-            sceGuModelColor(0, baseColorAbgr, baseColorAbgr, 0);
-
-            if (!useLighting) {
-                sceGuDisable(GU_LIGHT0);
-                sceGuDisable(GU_LIGHTING);
-                return;
-            }
-
-            sceGuEnable(GU_LIGHTING);
-            if (hasDirectionalLight) {
-                sceGuEnable(GU_LIGHT0);
-            } else {
-                sceGuDisable(GU_LIGHT0);
-            }
-        }
-
         /// Submits one drawable through the existing CPU-lit vertex path.
         void SubmitCpuLitDrawable(
             IDrawable3D* drawable,
-            const PspMeshRecord& record,
+            const PspRuntimeModel* runtimeModel,
             const float4& baseColor,
             bool useLighting,
             const PspLightingSettings& lightingSettings,
             const PspSceneLightingSnapshot& lightingSnapshot) {
-            int32_t vertexCount = static_cast<int32_t>(record.Indices.empty() ? record.Positions.size() : record.Indices.size());
+            if (runtimeModel == nullptr || !runtimeModel->HasFixedFunctionVertices()) {
+                return;
+            }
+
+            int32_t vertexCount = runtimeModel->GetFixedFunctionVertexCount();
             if (vertexCount < 3) {
                 return;
             }
 
             PspLitVertex* vertices = static_cast<PspLitVertex*>(sceGuGetMemory(sizeof(PspLitVertex) * static_cast<std::size_t>(vertexCount)));
+            const PspRuntimeModel::FixedFunctionVertex* sourceVertices = runtimeModel->GetFixedFunctionVertices();
             for (int32_t index = 0; index < vertexCount; index++) {
-                std::uint32_t sourceIndex = record.Indices.empty()
-                    ? static_cast<std::uint32_t>(index)
-                    : record.Indices[static_cast<std::size_t>(index)];
-                if (sourceIndex >= record.Positions.size()) {
-                    return;
-                }
-
-                const float3& position = record.Positions[sourceIndex];
-                const float3 sourceNormal = sourceIndex < record.Normals.size()
-                    ? record.Normals[sourceIndex]
-                    : float3(0.0f, 0.0f, 1.0f);
+                const PspRuntimeModel::FixedFunctionVertex& sourceVertex = sourceVertices[index];
+                const float3 position(sourceVertex.X, sourceVertex.Y, sourceVertex.Z);
+                const float3 sourceNormal(sourceVertex.NX, sourceVertex.NY, sourceVertex.NZ);
                 const float3 worldNormal = float3::Normalize(RotateNormal(sourceNormal, drawable->get_Parent()));
                 const float4 litColor = EvaluateCpuLitColor(baseColor, worldNormal, useLighting, lightingSettings, lightingSnapshot);
 
@@ -344,107 +338,6 @@ namespace helengine::psp::rendering {
                 vertices);
         }
 
-        /// Submits one drawable through the current fixed-function untextured lighting path.
-        void SubmitFixedFunctionDrawable(
-            const PspMeshRecord& record,
-            const float4& baseColor,
-            bool useLighting,
-            bool hasDirectionalLight) {
-            int32_t vertexCount = static_cast<int32_t>(record.Indices.empty() ? record.Positions.size() : record.Indices.size());
-            if (vertexCount < 3) {
-                return;
-            }
-
-            BindTexture(nullptr);
-            ConfigureFixedFunctionMaterial(baseColor, useLighting, hasDirectionalLight);
-
-            PspFixedFunctionVertex* vertices = static_cast<PspFixedFunctionVertex*>(sceGuGetMemory(sizeof(PspFixedFunctionVertex) * static_cast<std::size_t>(vertexCount)));
-            for (int32_t index = 0; index < vertexCount; index++) {
-                std::uint32_t sourceIndex = record.Indices.empty()
-                    ? static_cast<std::uint32_t>(index)
-                    : record.Indices[static_cast<std::size_t>(index)];
-                if (sourceIndex >= record.Positions.size()) {
-                    throw std::runtime_error("PSP fixed-function draw submitted an out-of-range mesh index.");
-                }
-
-                const float3& position = record.Positions[sourceIndex];
-                const float3 sourceNormal = sourceIndex < record.Normals.size()
-                    ? record.Normals[sourceIndex]
-                    : float3(0.0f, 0.0f, 1.0f);
-
-                vertices[index] = PspFixedFunctionVertex {
-                    sourceNormal.X,
-                    sourceNormal.Y,
-                    sourceNormal.Z,
-                    position.X,
-                    position.Y,
-                    position.Z
-                };
-            }
-
-            sceGumDrawArray(
-                GU_TRIANGLES,
-                GU_NORMAL_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
-                vertexCount,
-                nullptr,
-                vertices);
-        }
-
-        /// Submits one drawable through the current fixed-function textured lighting path.
-        void SubmitFixedFunctionTexturedDrawable(
-            const PspMeshRecord& record,
-            const float4& baseColor,
-            bool useLighting,
-            bool hasDirectionalLight,
-            PspRuntimeTexture* texture) {
-            int32_t vertexCount = static_cast<int32_t>(record.Indices.empty() ? record.Positions.size() : record.Indices.size());
-            if (vertexCount < 3) {
-                return;
-            }
-
-            if (texture == nullptr || !texture->HasPixels()) {
-                throw std::runtime_error("PSP fixed-function textured draws require a valid runtime texture.");
-            } else if (record.TexCoords.empty()) {
-                throw std::runtime_error("PSP fixed-function textured draws require mesh texcoords.");
-            }
-
-            BindTexture(texture);
-            ConfigureFixedFunctionMaterial(baseColor, useLighting, hasDirectionalLight);
-
-            PspFixedFunctionTexturedVertex* vertices = static_cast<PspFixedFunctionTexturedVertex*>(sceGuGetMemory(sizeof(PspFixedFunctionTexturedVertex) * static_cast<std::size_t>(vertexCount)));
-            for (int32_t index = 0; index < vertexCount; index++) {
-                std::uint32_t sourceIndex = record.Indices.empty()
-                    ? static_cast<std::uint32_t>(index)
-                    : record.Indices[static_cast<std::size_t>(index)];
-                if (sourceIndex >= record.Positions.size() || sourceIndex >= record.TexCoords.size()) {
-                    throw std::runtime_error("PSP fixed-function textured draw submitted an out-of-range mesh index.");
-                }
-
-                const float3& position = record.Positions[sourceIndex];
-                const float3 sourceNormal = sourceIndex < record.Normals.size()
-                    ? record.Normals[sourceIndex]
-                    : float3(0.0f, 0.0f, 1.0f);
-                const float2& texCoord = record.TexCoords[sourceIndex];
-
-                vertices[index] = PspFixedFunctionTexturedVertex {
-                    texCoord.X,
-                    texCoord.Y,
-                    sourceNormal.X,
-                    sourceNormal.Y,
-                    sourceNormal.Z,
-                    position.X,
-                    position.Y,
-                    position.Z
-                };
-            }
-
-            sceGumDrawArray(
-                GU_TRIANGLES,
-                GU_TEXTURE_32BITF | GU_NORMAL_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
-                vertexCount,
-                nullptr,
-                vertices);
-        }
     }
 
     /// Creates the PSP 3D render manager.
@@ -452,7 +345,230 @@ namespace helengine::psp::rendering {
         : CurrentView(float4x4::get_Identity()),
           CurrentProjection(float4x4::get_Identity()),
           CurrentCameraPosition(0.0f, 0.0f, 0.0f),
-          RenderManager2D(nullptr) {
+          RenderManager2D(nullptr),
+          HasCachedTextureEnabledState(false),
+          CachedTextureEnabledState(false),
+          CachedTexture(nullptr),
+          HasCachedLightingEnabledState(false),
+          CachedLightingEnabledState(false),
+          HasCachedLight0EnabledState(false),
+          CachedLight0EnabledState(false) {
+    }
+
+    /// Resets the renderer-owned GU state cache before one camera pass begins.
+    void PspRenderManager3D::ResetCachedGuState() {
+        HasCachedTextureEnabledState = false;
+        CachedTextureEnabledState = false;
+        CachedTexture = nullptr;
+        HasCachedLightingEnabledState = false;
+        CachedLightingEnabledState = false;
+        HasCachedLight0EnabledState = false;
+        CachedLight0EnabledState = false;
+    }
+
+    /// Applies the requested PSP texturing state only when it differs from the active GU cache.
+    void PspRenderManager3D::SetTextureEnabled(bool enabled) {
+        if (HasCachedTextureEnabledState && CachedTextureEnabledState == enabled) {
+            return;
+        }
+
+        HasCachedTextureEnabledState = true;
+        CachedTextureEnabledState = enabled;
+        if (enabled) {
+            sceGuEnable(GU_TEXTURE_2D);
+            return;
+        }
+
+        sceGuDisable(GU_TEXTURE_2D);
+        CachedTexture = nullptr;
+    }
+
+    /// Applies the requested PSP lighting state only when it differs from the active GU cache.
+    void PspRenderManager3D::SetLightingEnabled(bool enabled) {
+        if (HasCachedLightingEnabledState && CachedLightingEnabledState == enabled) {
+            return;
+        }
+
+        HasCachedLightingEnabledState = true;
+        CachedLightingEnabledState = enabled;
+        if (enabled) {
+            sceGuEnable(GU_LIGHTING);
+            return;
+        }
+
+        sceGuDisable(GU_LIGHTING);
+    }
+
+    /// Applies the requested PSP directional-light state only when it differs from the active GU cache.
+    void PspRenderManager3D::SetLight0Enabled(bool enabled) {
+        if (HasCachedLight0EnabledState && CachedLight0EnabledState == enabled) {
+            return;
+        }
+
+        HasCachedLight0EnabledState = true;
+        CachedLight0EnabledState = enabled;
+        if (enabled) {
+            sceGuEnable(GU_LIGHT0);
+            return;
+        }
+
+        sceGuDisable(GU_LIGHT0);
+    }
+
+    /// Binds one PSP runtime texture for GU sampling or disables texturing when no texture exists.
+    void PspRenderManager3D::BindTexture(PspRuntimeTexture* texture) {
+        const std::uint64_t bindStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+        std::uint64_t flushMicroseconds = 0;
+        std::size_t byteCount = 0;
+        if (texture == nullptr || !texture->HasPixels()) {
+            SetTextureEnabled(false);
+            PspRenderProfiler::Record3DTextureBind(
+                texture,
+                byteCount,
+                PspRenderProfiler::GetTimestampMicroseconds() - bindStartMicroseconds,
+                flushMicroseconds);
+            return;
+        }
+
+        byteCount = texture->GetPixelCount() * sizeof(std::uint32_t);
+        const bool needsTextureUpload = !HasCachedTextureEnabledState
+            || !CachedTextureEnabledState
+            || CachedTexture != texture;
+        if (needsTextureUpload) {
+            const std::uint64_t flushStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+            sceKernelDcacheWritebackRange(
+                const_cast<std::uint32_t*>(texture->GetPixelsAbgr8888()),
+                static_cast<unsigned int>(byteCount));
+            flushMicroseconds = PspRenderProfiler::GetTimestampMicroseconds() - flushStartMicroseconds;
+
+            SetTextureEnabled(true);
+            sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+            sceGuTexImage(0, texture->get_Width(), texture->get_Height(), texture->get_Width(), texture->GetPixelsAbgr8888());
+            sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+            sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+            sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+            CachedTexture = texture;
+        }
+
+        PspRenderProfiler::Record3DTextureBind(
+            texture,
+            byteCount,
+            PspRenderProfiler::GetTimestampMicroseconds() - bindStartMicroseconds,
+            flushMicroseconds);
+    }
+
+    /// Configures the scene-wide fixed-function lighting state for the active camera pass.
+    void PspRenderManager3D::ConfigureFixedFunctionSceneLighting() {
+        SetTextureEnabled(false);
+        sceGuLightMode(GU_SINGLE_COLOR);
+        sceGuSpecular(0.0f);
+        sceGuAmbient(ConvertColorToAbgr(float4(
+            LightingSettings.AmbientIntensity,
+            LightingSettings.AmbientIntensity,
+            LightingSettings.AmbientIntensity,
+            1.0f)));
+
+        if (!CurrentLighting.HasDirectionalLight) {
+            SetLight0Enabled(false);
+            return;
+        }
+
+        const float3 normalizedDirection = float3::Normalize(CurrentLighting.DirectionalLightDirection);
+        const float3 scaledDirectionalColor = float3(
+            CurrentLighting.DirectionalLightColor.X * CurrentLighting.DirectionalLightIntensity,
+            CurrentLighting.DirectionalLightColor.Y * CurrentLighting.DirectionalLightIntensity,
+            CurrentLighting.DirectionalLightColor.Z * CurrentLighting.DirectionalLightIntensity);
+        const ScePspFVector3 lightVector = CreatePspVector3(normalizedDirection);
+
+        SetLight0Enabled(true);
+        sceGuLight(0, GU_DIRECTIONAL, GU_DIFFUSE, &lightVector);
+        sceGuLightAtt(0, 1.0f, 0.0f, 0.0f);
+        sceGuLightColor(0, GU_AMBIENT, 0);
+        sceGuLightColor(0, GU_DIFFUSE, ConvertColorToAbgr(float4(
+            scaledDirectionalColor.X,
+            scaledDirectionalColor.Y,
+            scaledDirectionalColor.Z,
+            1.0f)));
+        sceGuLightColor(0, GU_SPECULAR, 0);
+    }
+
+    /// Configures the per-draw fixed-function material state for one PSP runtime material.
+    void PspRenderManager3D::ConfigureFixedFunctionMaterial(const float4& baseColor, bool useLighting) {
+        const std::uint32_t baseColorAbgr = ConvertColorToAbgr(baseColor);
+
+        sceGuColor(baseColorAbgr);
+        sceGuAmbientColor(baseColorAbgr);
+        sceGuModelColor(0, baseColorAbgr, baseColorAbgr, 0);
+
+        if (!useLighting) {
+            SetLight0Enabled(false);
+            SetLightingEnabled(false);
+            return;
+        }
+
+        SetLightingEnabled(true);
+        SetLight0Enabled(CurrentLighting.HasDirectionalLight);
+    }
+
+    /// Submits one drawable through the current fixed-function untextured lighting path.
+    void PspRenderManager3D::SubmitFixedFunctionDrawable(
+        const PspRuntimeModel* runtimeModel,
+        const float4& baseColor,
+        bool useLighting) {
+        if (runtimeModel == nullptr || !runtimeModel->HasFixedFunctionVertices()) {
+            return;
+        }
+
+        int32_t vertexCount = runtimeModel->GetFixedFunctionVertexCount();
+        if (vertexCount < 3) {
+            return;
+        }
+
+        BindTexture(nullptr);
+        const std::uint64_t materialSetupStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+        ConfigureFixedFunctionMaterial(baseColor, useLighting);
+        PspRenderProfiler::Record3DFixedFunctionMaterialSetup(PspRenderProfiler::GetTimestampMicroseconds() - materialSetupStartMicroseconds);
+
+        const std::uint64_t drawStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+        sceGumDrawArray(
+            GU_TRIANGLES,
+            GU_NORMAL_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
+            vertexCount,
+            nullptr,
+            runtimeModel->GetFixedFunctionVertices());
+        PspRenderProfiler::Record3DFixedFunctionDraw(PspRenderProfiler::GetTimestampMicroseconds() - drawStartMicroseconds);
+    }
+
+    /// Submits one drawable through the current fixed-function textured lighting path.
+    void PspRenderManager3D::SubmitFixedFunctionTexturedDrawable(
+        const PspRuntimeModel* runtimeModel,
+        const float4& baseColor,
+        bool useLighting,
+        PspRuntimeTexture* texture) {
+        if (runtimeModel == nullptr || !runtimeModel->HasFixedFunctionTexturedVertices()) {
+            return;
+        }
+
+        int32_t vertexCount = runtimeModel->GetFixedFunctionTexturedVertexCount();
+        if (vertexCount < 3) {
+            return;
+        } else if (texture == nullptr || !texture->HasPixels()) {
+            throw std::runtime_error("PSP fixed-function textured draws require a valid runtime texture.");
+        }
+
+        BindTexture(texture);
+        const std::uint64_t materialSetupStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+        ConfigureFixedFunctionMaterial(baseColor, useLighting);
+        PspRenderProfiler::Record3DFixedFunctionMaterialSetup(PspRenderProfiler::GetTimestampMicroseconds() - materialSetupStartMicroseconds);
+
+        const std::uint64_t drawStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+        sceGumDrawArray(
+            GU_TRIANGLES,
+            GU_TEXTURE_32BITF | GU_NORMAL_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
+            vertexCount,
+            nullptr,
+            runtimeModel->GetFixedFunctionTexturedVertices());
+        PspRenderProfiler::Record3DFixedFunctionDraw(PspRenderProfiler::GetTimestampMicroseconds() - drawStartMicroseconds);
     }
 
     /// Builds a CPU-side runtime model payload from the raw mesh asset.
@@ -465,45 +581,12 @@ namespace helengine::psp::rendering {
         }
 
         PspRuntimeModel* runtimeModel = new PspRuntimeModel();
-        PspMeshRecord record;
-
         if (data != nullptr) {
             runtimeModel->set_Id(data->get_Id());
-            if (data->Positions != nullptr && data->Positions->Length > 0) {
-                record.Positions.reserve(static_cast<std::size_t>(data->Positions->Length));
-                for (int32_t index = 0; index < data->Positions->Length; index++) {
-                    record.Positions.push_back((*data->Positions)[index]);
-                }
-            }
-
-            if (data->Normals != nullptr && data->Normals->Length > 0) {
-                record.Normals.reserve(static_cast<std::size_t>(data->Normals->Length));
-                for (int32_t index = 0; index < data->Normals->Length; index++) {
-                    record.Normals.push_back((*data->Normals)[index]);
-                }
-            }
-
-            if (data->TexCoords != nullptr && data->TexCoords->Length > 0) {
-                record.TexCoords.reserve(static_cast<std::size_t>(data->TexCoords->Length));
-                for (int32_t index = 0; index < data->TexCoords->Length; index++) {
-                    record.TexCoords.push_back((*data->TexCoords)[index]);
-                }
-            }
-
-            if (data->Indices32 != nullptr && data->Indices32->Length > 0) {
-                record.Indices.reserve(static_cast<std::size_t>(data->Indices32->Length));
-                for (int32_t index = 0; index < data->Indices32->Length; index++) {
-                    record.Indices.push_back((*data->Indices32)[index]);
-                }
-            } else if (data->Indices16 != nullptr && data->Indices16->Length > 0) {
-                record.Indices.reserve(static_cast<std::size_t>(data->Indices16->Length));
-                for (int32_t index = 0; index < data->Indices16->Length; index++) {
-                    record.Indices.push_back((*data->Indices16)[index]);
-                }
-            }
+            runtimeModel->SetFixedFunctionVertices(BuildFixedFunctionVertices(data));
+            runtimeModel->SetFixedFunctionTexturedVertices(BuildFixedFunctionTexturedVertices(data));
         }
 
-        MeshRecords[runtimeModel] = record;
         if (data != nullptr && !data->get_Id().empty()) {
             CachedModels.emplace(data->get_Id(), runtimeModel);
         }
@@ -560,37 +643,41 @@ namespace helengine::psp::rendering {
 
     /// Draws one queued mesh for the active camera.
     void PspRenderManager3D::Visit(IDrawable3D* drawable) {
+        const std::uint64_t visitStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         if (drawable == nullptr || drawable->get_Parent() == nullptr || !drawable->get_Parent()->get_IsHierarchyEnabled()) {
             return;
         }
 
+        Entity* drawableParent = drawable->get_Parent();
         RuntimeModel* runtimeModel = drawable->get_Model();
         if (runtimeModel == nullptr) {
             return;
         }
 
-        auto meshRecordIterator = MeshRecords.find(runtimeModel);
-        if (meshRecordIterator == MeshRecords.end()) {
-            return;
-        }
-
-        const PspMeshRecord& record = meshRecordIterator->second;
-        if (record.Positions.empty()) {
+        PspRuntimeModel* pspRuntimeModelData = static_cast<PspRuntimeModel*>(runtimeModel);
+        if (!pspRuntimeModelData->HasFixedFunctionVertices()) {
             return;
         }
 
         RuntimeMaterial* runtimeMaterial = drawable->get_Material();
+        const std::uint64_t materialResolveStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         RuntimeMaterial* rootMaterial = runtimeMaterial != nullptr ? runtimeMaterial->ResolveRootMaterial() : nullptr;
-        PspRuntimeMaterial* pspRuntimeMaterial = dynamic_cast<PspRuntimeMaterial*>(rootMaterial);
-        if (pspRuntimeMaterial == nullptr) {
+        PspRenderProfiler::Record3DMaterialResolve(PspRenderProfiler::GetTimestampMicroseconds() - materialResolveStartMicroseconds);
+        if (rootMaterial == nullptr) {
             return;
         }
+        
+        PspRuntimeMaterial* pspRuntimeMaterial = static_cast<PspRuntimeMaterial*>(rootMaterial);
 
-        float4x4 world = BuildWorldMatrix(drawable->get_Parent());
+        const std::uint64_t worldMatrixBuildStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+        float4x4 world = BuildWorldMatrix(drawableParent);
+        PspRenderProfiler::Record3DWorldMatrixBuild(PspRenderProfiler::GetTimestampMicroseconds() - worldMatrixBuildStartMicroseconds);
         PspMatrixBuffer worldMatrix = CreatePspMatrixBuffer(world);
 
+        const std::uint64_t modelMatrixLoadStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         sceGumMatrixMode(GU_MODEL);
         sceGumLoadMatrix(reinterpret_cast<ScePspFMatrix4*>(&worldMatrix));
+        PspRenderProfiler::Record3DModelMatrixLoad(PspRenderProfiler::GetTimestampMicroseconds() - modelMatrixLoadStartMicroseconds);
 
         const float4& baseColor = pspRuntimeMaterial->GetBaseColor();
         const bool useLighting = UsesDirectionalLighting(pspRuntimeMaterial);
@@ -598,46 +685,40 @@ namespace helengine::psp::rendering {
         const bool hasTexture = pspRuntimeMaterial->TryResolveTexture(texture);
         if (LightingSettings.Pipeline == PspLightingPipeline::FixedFunctionLambert) {
             if (hasTexture) {
-                SubmitFixedFunctionTexturedDrawable(record, baseColor, useLighting, CurrentLighting.HasDirectionalLight, texture);
+                SubmitFixedFunctionTexturedDrawable(pspRuntimeModelData, baseColor, useLighting, texture);
+                PspRenderProfiler::Record3DVisit(PspRenderProfiler::GetTimestampMicroseconds() - visitStartMicroseconds);
                 return;
             }
 
-            SubmitFixedFunctionDrawable(record, baseColor, useLighting, CurrentLighting.HasDirectionalLight);
+            SubmitFixedFunctionDrawable(pspRuntimeModelData, baseColor, useLighting);
+            PspRenderProfiler::Record3DVisit(PspRenderProfiler::GetTimestampMicroseconds() - visitStartMicroseconds);
             return;
         }
 
-        if (hasTexture && record.TexCoords.empty()) {
+        if (hasTexture && !pspRuntimeModelData->HasFixedFunctionTexturedVertices()) {
             throw std::runtime_error("Textured PSP drawables require mesh texcoords.");
         }
 
         BindTexture(texture);
 
         if (hasTexture) {
-            int32_t vertexCount = static_cast<int32_t>(record.Indices.empty() ? record.Positions.size() : record.Indices.size());
+            int32_t vertexCount = pspRuntimeModelData->GetFixedFunctionTexturedVertexCount();
             if (vertexCount < 3) {
                 return;
             }
 
             PspTexturedLitVertex* vertices = static_cast<PspTexturedLitVertex*>(sceGuGetMemory(sizeof(PspTexturedLitVertex) * static_cast<std::size_t>(vertexCount)));
+            const PspRuntimeModel::FixedFunctionTexturedVertex* sourceVertices = pspRuntimeModelData->GetFixedFunctionTexturedVertices();
             for (int32_t index = 0; index < vertexCount; index++) {
-                std::uint32_t sourceIndex = record.Indices.empty()
-                    ? static_cast<std::uint32_t>(index)
-                    : record.Indices[static_cast<std::size_t>(index)];
-                if (sourceIndex >= record.Positions.size() || sourceIndex >= record.TexCoords.size()) {
-                    throw std::runtime_error("PSP textured draw submitted an out-of-range mesh index.");
-                }
-
-                const float3& position = record.Positions[sourceIndex];
-                const float3 sourceNormal = sourceIndex < record.Normals.size()
-                    ? record.Normals[sourceIndex]
-                    : float3(0.0f, 0.0f, 1.0f);
-                const float3 worldNormal = float3::Normalize(RotateNormal(sourceNormal, drawable->get_Parent()));
-                const float2& texCoord = record.TexCoords[sourceIndex];
+                const PspRuntimeModel::FixedFunctionTexturedVertex& sourceVertex = sourceVertices[index];
+                const float3 position(sourceVertex.X, sourceVertex.Y, sourceVertex.Z);
+                const float3 sourceNormal(sourceVertex.NX, sourceVertex.NY, sourceVertex.NZ);
+                const float3 worldNormal = float3::Normalize(RotateNormal(sourceNormal, drawableParent));
                 const float4 litColor = EvaluateCpuLitColor(baseColor, worldNormal, useLighting, LightingSettings, CurrentLighting);
 
                 vertices[index] = PspTexturedLitVertex {
-                    texCoord.X,
-                    texCoord.Y,
+                    sourceVertex.U,
+                    sourceVertex.V,
                     ConvertColorToAbgr(litColor),
                     position.X,
                     position.Y,
@@ -651,10 +732,12 @@ namespace helengine::psp::rendering {
                 vertexCount,
                 nullptr,
                 vertices);
+            PspRenderProfiler::Record3DVisit(PspRenderProfiler::GetTimestampMicroseconds() - visitStartMicroseconds);
             return;
         }
 
-        SubmitCpuLitDrawable(drawable, record, baseColor, useLighting, LightingSettings, CurrentLighting);
+        SubmitCpuLitDrawable(drawable, pspRuntimeModelData, baseColor, useLighting, LightingSettings, CurrentLighting);
+        PspRenderProfiler::Record3DVisit(PspRenderProfiler::GetTimestampMicroseconds() - visitStartMicroseconds);
     }
 
     /// Resolves the active scene lighting for the current render pass.
@@ -662,31 +745,23 @@ namespace helengine::psp::rendering {
         CurrentLighting = PspSceneLightingSnapshot();
 
         Core* core = Core::get_Instance();
-        if (core == nullptr || core->get_ObjectManager() == nullptr || core->get_ObjectManager()->get_Entities() == nullptr) {
+        if (core == nullptr || core->get_ObjectManager() == nullptr || core->get_ObjectManager()->get_DirectionalLights() == nullptr) {
             return;
         }
 
-        List<Entity*>* entities = core->get_ObjectManager()->get_Entities();
-        for (int32_t entityIndex = 0; entityIndex < entities->Count(); entityIndex++) {
-            Entity* entity = (*entities)[entityIndex];
-            if (entity == nullptr || entity->get_Components() == nullptr || !entity->get_IsHierarchyEnabled()) {
+        List<DirectionalLightComponent*>* directionalLights = core->get_ObjectManager()->get_DirectionalLights();
+        for (int32_t lightIndex = 0; lightIndex < directionalLights->Count(); lightIndex++) {
+            DirectionalLightComponent* directionalLight = (*directionalLights)[lightIndex];
+            if (directionalLight == nullptr || directionalLight->get_Parent() == nullptr || !directionalLight->get_Parent()->get_IsHierarchyEnabled()) {
                 continue;
             }
 
-            List<Component*>* components = entity->get_Components();
-            for (int32_t componentIndex = 0; componentIndex < components->Count(); componentIndex++) {
-                DirectionalLightComponent* directionalLight = dynamic_cast<DirectionalLightComponent*>((*components)[componentIndex]);
-                if (directionalLight == nullptr || directionalLight->get_Parent() == nullptr) {
-                    continue;
-                }
-
-                CurrentLighting.HasDirectionalLight = true;
-                const float3 lightForward = float4::RotateVector(float3(0.0f, 0.0f, -1.0f), directionalLight->get_Parent()->get_Orientation());
-                CurrentLighting.DirectionalLightDirection = float3(-lightForward.X, -lightForward.Y, -lightForward.Z);
-                CurrentLighting.DirectionalLightColor = directionalLight->get_Color();
-                CurrentLighting.DirectionalLightIntensity = directionalLight->get_Intensity();
-                return;
-            }
+            CurrentLighting.HasDirectionalLight = true;
+            const float3 lightForward = float4::RotateVector(float3(0.0f, 0.0f, -1.0f), directionalLight->get_Parent()->get_Orientation());
+            CurrentLighting.DirectionalLightDirection = float3(-lightForward.X, -lightForward.Y, -lightForward.Z);
+            CurrentLighting.DirectionalLightColor = directionalLight->get_Color();
+            CurrentLighting.DirectionalLightIntensity = directionalLight->get_Intensity();
+            return;
         }
     }
 
@@ -717,7 +792,8 @@ namespace helengine::psp::rendering {
         PspMatrixBuffer viewMatrix = CreatePspMatrixBuffer(CurrentView);
         PspMatrixBuffer projectionMatrix = CreatePspMatrixBuffer(CurrentProjection);
 
-        sceGuDisable(GU_TEXTURE_2D);
+        ResetCachedGuState();
+        SetTextureEnabled(false);
         sceGuEnable(GU_DEPTH_TEST);
         sceGuDisable(GU_CULL_FACE);
 
@@ -725,19 +801,24 @@ namespace helengine::psp::rendering {
         sceGumLoadMatrix(reinterpret_cast<ScePspFMatrix4*>(&projectionMatrix));
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadMatrix(reinterpret_cast<ScePspFMatrix4*>(&viewMatrix));
+        PspRenderProfiler::Record3DCameraSetup(PspRenderProfiler::GetTimestampMicroseconds() - renderStartMicroseconds);
 
         IRenderQueue3D* renderQueue = camera->get_RenderQueue3D();
         int32_t drawableCount = 0;
         if (renderQueue != nullptr) {
             drawableCount = renderQueue->get_Count();
+            const std::uint64_t sceneLightResolveStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
             ResolveSceneLighting();
+            PspRenderProfiler::Record3DSceneLightResolve(PspRenderProfiler::GetTimestampMicroseconds() - sceneLightResolveStartMicroseconds);
             if (LightingSettings.Pipeline == PspLightingPipeline::FixedFunctionLambert) {
-                ConfigureFixedFunctionSceneLighting(LightingSettings, CurrentLighting);
+                ConfigureFixedFunctionSceneLighting();
             } else {
-                sceGuDisable(GU_LIGHT0);
-                sceGuDisable(GU_LIGHTING);
+                SetLight0Enabled(false);
+                SetLightingEnabled(false);
             }
+            const std::uint64_t queueVisitStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
             renderQueue->VisitOrdered(this);
+            PspRenderProfiler::Record3DQueueVisit(PspRenderProfiler::GetTimestampMicroseconds() - queueVisitStartMicroseconds);
         }
 
         std::uint64_t uiMicroseconds = 0;

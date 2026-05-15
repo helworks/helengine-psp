@@ -28,8 +28,11 @@
 #include "platform/psp/rendering/PspRenderManager2D.hpp"
 #include "platform/psp/rendering/PspRenderManager3D.hpp"
 #include "runtime/native_exceptions.hpp"
+
+#if defined(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP) && HELENGINE_PSP_ENABLE_RUNTIME_STARTUP
 #include "runtime/runtime_scene_catalog_manifest.hpp"
 #include "runtime/runtime_startup_manifest.hpp"
+#endif
 
 PSP_MODULE_INFO("helengine_psp", 0, 1, 0);
 PSP_HEAP_SIZE_KB(16 * 1024);
@@ -142,10 +145,14 @@ namespace helengine::psp {
 
     /// Runs the explicit PSP runtime-startup checkpoints through startup-scene materialization.
     void PspBootHost::RunCheckpointedStartup() {
+#if defined(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP) && HELENGINE_PSP_ENABLE_RUNTIME_STARTUP
         std::string appRootPath = ResolveAppRootPath();
         InitializeCore(appRootPath);
         LoadStartupScene();
         RunMainLoop();
+#else
+        throw std::runtime_error("Checkpointed runtime startup was not compiled into this PSP build.");
+#endif
     }
 
     /// Resolves and records the PSP app root used for runtime content access.
@@ -161,6 +168,7 @@ namespace helengine::psp {
 
     /// Builds the runtime platform metadata embedded into the PSP generated startup manifest.
     PlatformInfo* PspBootHost::BuildRuntimePlatformInfo() {
+#if defined(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP) && HELENGINE_PSP_ENABLE_RUNTIME_STARTUP
         const char* platformName = he_get_runtime_platform_name();
         if (platformName == nullptr || platformName[0] == '\0') {
             throw std::runtime_error("Packaged runtime platform name was not embedded into the PSP build.");
@@ -173,6 +181,9 @@ namespace helengine::psp {
 
         PspBootTrace::WriteLine(std::string("Runtime platform info resolved to '") + platformName + "' version '" + platformVersion + "'.");
         return new PlatformInfo(std::string(platformName), std::string(platformVersion));
+#else
+        throw std::runtime_error("Runtime platform info is only available when PSP runtime startup is enabled.");
+#endif
     }
 
     /// Constructs generated core and PSP platform backends and initializes the runtime.
@@ -211,6 +222,7 @@ namespace helengine::psp {
 
     /// Loads the configured startup scene through the runtime scene manager so scene lifetime stays tracked from frame one.
     void PspBootHost::LoadStartupScene() {
+#if defined(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP) && HELENGINE_PSP_ENABLE_RUNTIME_STARTUP
         EnterBootStage(RuntimeStartupSceneAssetLoadStageName);
         const char* startupSceneRelativePath = he_get_runtime_startup_scene_relative_path();
         if (startupSceneRelativePath == nullptr || startupSceneRelativePath[0] == '\0') {
@@ -246,6 +258,9 @@ namespace helengine::psp {
         EngineCore->get_SceneManager()->LoadScene(startupSceneId, SceneLoadMode::Single);
         PspBootTrace::WriteLine("Startup scene instantiated.");
         CompleteBootStage();
+#else
+        throw std::runtime_error("Startup scene loading is only available when PSP runtime startup is enabled.");
+#endif
     }
 
     /// Returns the current primary loaded-scene id, or an empty string when no scene is active.

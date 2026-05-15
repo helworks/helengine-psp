@@ -5,6 +5,38 @@ namespace helengine.psp.builder.tests;
 /// </summary>
 public sealed class PspGeneratedCoreCompatibilityNormalizerTests {
     /// <summary>
+    /// Ensures clean generated serializer sources stay untouched so PSP builds rely on engine-side codegen fixes instead of post-processing.
+    /// </summary>
+    [Fact]
+    public void Normalize_whenEditorAssetBinarySerializerIsAlreadyClean_doesNotInjectObsoleteHelpers() {
+        string generatedCoreRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(generatedCoreRoot);
+
+        string headerPath = Path.Combine(generatedCoreRoot, "EditorAssetBinarySerializer.hpp");
+        string sourcePath = Path.Combine(generatedCoreRoot, "EditorAssetBinarySerializer.cpp");
+        string headerContents =
+            "class EditorAssetBinarySerializer\n"
+            + "{\n"
+            + "    static ::SceneEntityPlatformAddedComponentAsset* ReadSceneEntityPlatformAddedComponentAsset(::EngineBinaryReader* reader, uint8_t sceneEntityPayloadVersion);\n"
+            + "    static ::SceneEntityPlatformAddedComponentAsset* ReadSceneEntityPlatformAddedComponentAssetValue(::EngineBinaryReader* reader);\n"
+            + "};\n";
+        string sourceContents =
+            "::SceneEntityPlatformAddedComponentAsset* EditorAssetBinarySerializer::ReadSceneEntityPlatformAddedComponentAssetValue(::EngineBinaryReader* reader)\n"
+            + "{\n"
+            + "return ReadSceneEntityPlatformAddedComponentAsset(reader, SceneEntityPayloadVersion);\n"
+            + "}\n";
+        File.WriteAllText(headerPath, headerContents);
+        File.WriteAllText(sourcePath, sourceContents);
+
+        new PspGeneratedCoreCompatibilityNormalizer().Normalize(generatedCoreRoot);
+
+        Assert.Equal(headerContents, File.ReadAllText(headerPath));
+        Assert.Equal(sourceContents, File.ReadAllText(sourcePath));
+        Assert.DoesNotContain("ReadSceneEntityPlatformAddedComponentAssetCurrentVersion", File.ReadAllText(headerPath), StringComparison.Ordinal);
+        Assert.DoesNotContain("WriteSceneComponentAssetRecordCurrentVersion", File.ReadAllText(sourcePath), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures generated <c>EngineBinaryReader::ReadString()</c> null-string reads are rewritten without altering pointer-returning readers.
     /// </summary>
     [Fact]

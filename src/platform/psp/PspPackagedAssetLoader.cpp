@@ -6,7 +6,10 @@
 #include "AssetSerializer.hpp"
 #include "SceneAsset.hpp"
 #include "platform/psp/PspBootTrace.hpp"
+
+#if defined(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP) && HELENGINE_PSP_ENABLE_RUNTIME_STARTUP
 #include "runtime/runtime_startup_manifest.hpp"
+#endif
 #include "system/io/file.hpp"
 
 namespace helengine::psp {
@@ -84,11 +87,15 @@ namespace helengine::psp {
 
     /// Loads the configured startup scene using the generated startup manifest.
     SceneAsset* PspPackagedAssetLoader::LoadStartupScene() const {
+#if defined(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP) && HELENGINE_PSP_ENABLE_RUNTIME_STARTUP
         const char* startupSceneRelativePath = he_get_runtime_startup_scene_relative_path();
         if (startupSceneRelativePath == nullptr || startupSceneRelativePath[0] == '\0') {
             throw std::runtime_error("PSP runtime startup manifest did not define a startup scene.");
         }
 
         return static_cast<SceneAsset*>(LoadAsset(startupSceneRelativePath));
+#else
+        throw std::runtime_error("Startup scene loading is only available when PSP runtime startup is enabled.");
+#endif
     }
 }

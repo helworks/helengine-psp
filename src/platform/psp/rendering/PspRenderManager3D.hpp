@@ -38,6 +38,40 @@ namespace helengine::psp::rendering {
         void Visit(IDrawable3D* drawable) override;
 
     private:
+        /// Resets the renderer-owned GU state cache before one camera pass begins.
+        void ResetCachedGuState();
+
+        /// Applies the requested PSP texturing state only when it differs from the active GU cache.
+        void SetTextureEnabled(bool enabled);
+
+        /// Applies the requested PSP lighting state only when it differs from the active GU cache.
+        void SetLightingEnabled(bool enabled);
+
+        /// Applies the requested PSP directional-light state only when it differs from the active GU cache.
+        void SetLight0Enabled(bool enabled);
+
+        /// Binds one PSP runtime texture for GU sampling or disables texturing when no texture exists.
+        void BindTexture(class PspRuntimeTexture* texture);
+
+        /// Configures the scene-wide fixed-function lighting state for the active camera pass.
+        void ConfigureFixedFunctionSceneLighting();
+
+        /// Configures the per-draw fixed-function material state for one PSP runtime material.
+        void ConfigureFixedFunctionMaterial(const float4& baseColor, bool useLighting);
+
+        /// Submits one drawable through the current fixed-function untextured lighting path.
+        void SubmitFixedFunctionDrawable(
+            const class PspRuntimeModel* runtimeModel,
+            const float4& baseColor,
+            bool useLighting);
+
+        /// Submits one drawable through the current fixed-function textured lighting path.
+        void SubmitFixedFunctionTexturedDrawable(
+            const class PspRuntimeModel* runtimeModel,
+            const float4& baseColor,
+            bool useLighting,
+            class PspRuntimeTexture* texture);
+
         /// Resolves the active scene lighting for the current render pass.
         void ResolveSceneLighting();
 
@@ -61,5 +95,26 @@ namespace helengine::psp::rendering {
 
         /// Stores the paired PSP 2D renderer that submits the camera's 2D queue.
         PspRenderManager2D* RenderManager2D;
+
+        /// Tracks whether the cached GU texturing state has been initialized for the current camera pass.
+        bool HasCachedTextureEnabledState;
+
+        /// Tracks the active GU texturing state for the current camera pass.
+        bool CachedTextureEnabledState;
+
+        /// Stores the currently bound PSP runtime texture for the current camera pass.
+        class PspRuntimeTexture* CachedTexture;
+
+        /// Tracks whether the cached GU lighting state has been initialized for the current camera pass.
+        bool HasCachedLightingEnabledState;
+
+        /// Tracks the active GU lighting state for the current camera pass.
+        bool CachedLightingEnabledState;
+
+        /// Tracks whether the cached GU directional-light state has been initialized for the current camera pass.
+        bool HasCachedLight0EnabledState;
+
+        /// Tracks the active GU directional-light state for the current camera pass.
+        bool CachedLight0EnabledState;
     };
 }

@@ -9,6 +9,12 @@ set(CMAKE_CXX_EXTENSIONS ON)
 option(HELENGINE_PSP_ISOLATED_BOOT "Build the PSP player in isolated blank-frame boot mode." ON)
 option(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP "Build the PSP player with checkpointed runtime startup enabled." OFF)
 
+if(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP)
+    set(HELENGINE_PSP_REQUIRES_RUNTIME_MANIFESTS ON)
+else()
+    set(HELENGINE_PSP_REQUIRES_RUNTIME_MANIFESTS OFF)
+endif()
+
 if("${HELENGINE_CORE_CPP_ROOT}" STREQUAL "")
     message(FATAL_ERROR "HELENGINE_CORE_CPP_ROOT must point at the generated helengine.core C++ output folder.")
 endif()
@@ -21,12 +27,14 @@ if(NOT EXISTS "${HELENGINE_CORE_CPP_ROOT}/helengine_core_amalgamated.cpp")
     message(FATAL_ERROR "HELENGINE_CORE_CPP_ROOT does not contain helengine_core_amalgamated.cpp. Regenerate helengine.core C++ output first.")
 endif()
 
-if(NOT EXISTS "${HELENGINE_CORE_CPP_ROOT}/runtime/runtime_startup_manifest.cpp")
-    message(FATAL_ERROR "HELENGINE_CORE_CPP_ROOT does not contain runtime/runtime_startup_manifest.cpp. Regenerate helengine.core C++ output first.")
-endif()
+if(HELENGINE_PSP_REQUIRES_RUNTIME_MANIFESTS)
+    if(NOT EXISTS "${HELENGINE_CORE_CPP_ROOT}/runtime/runtime_startup_manifest.cpp")
+        message(FATAL_ERROR "HELENGINE_CORE_CPP_ROOT does not contain runtime/runtime_startup_manifest.cpp. Regenerate helengine.core C++ output first.")
+    endif()
 
-if(NOT EXISTS "${HELENGINE_CORE_CPP_ROOT}/runtime/runtime_scene_catalog_manifest.cpp")
-    message(FATAL_ERROR "HELENGINE_CORE_CPP_ROOT does not contain runtime/runtime_scene_catalog_manifest.cpp. Regenerate helengine.core C++ output first.")
+    if(NOT EXISTS "${HELENGINE_CORE_CPP_ROOT}/runtime/runtime_scene_catalog_manifest.cpp")
+        message(FATAL_ERROR "HELENGINE_CORE_CPP_ROOT does not contain runtime/runtime_scene_catalog_manifest.cpp. Regenerate helengine.core C++ output first.")
+    endif()
 endif()
 
 set(HELENGINE_PSP_SOURCES
@@ -46,9 +54,14 @@ set(HELENGINE_PSP_SOURCES
     src/platform/psp/rendering/PspRuntimeModel.cpp
     src/platform/psp/rendering/PspRenderManager3D.cpp
     "${HELENGINE_CORE_CPP_ROOT}/helengine_core_amalgamated.cpp"
-    "${HELENGINE_CORE_CPP_ROOT}/runtime/runtime_startup_manifest.cpp"
-    "${HELENGINE_CORE_CPP_ROOT}/runtime/runtime_scene_catalog_manifest.cpp"
 )
+
+if(HELENGINE_PSP_REQUIRES_RUNTIME_MANIFESTS)
+    list(APPEND HELENGINE_PSP_SOURCES
+        "${HELENGINE_CORE_CPP_ROOT}/runtime/runtime_startup_manifest.cpp"
+        "${HELENGINE_CORE_CPP_ROOT}/runtime/runtime_scene_catalog_manifest.cpp"
+    )
+endif()
 
 if(EXISTS "${HELENGINE_CORE_CPP_ROOT}/runtime/runtime_code_module_manifest.cpp")
     list(APPEND HELENGINE_PSP_SOURCES "${HELENGINE_CORE_CPP_ROOT}/runtime/runtime_code_module_manifest.cpp")

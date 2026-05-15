@@ -16,7 +16,6 @@ public sealed class PspGeneratedCoreCompatibilityNormalizer {
         }
 
         NormalizePlatformConfiguration(generatedCoreRootPath);
-        NormalizeEditorAssetBinarySerializer(generatedCoreRootPath);
         NormalizeEngineBinaryReader(generatedCoreRootPath);
         NormalizeContentManager(generatedCoreRootPath);
         NormalizePathRootDetection(generatedCoreRootPath);
@@ -40,82 +39,6 @@ public sealed class PspGeneratedCoreCompatibilityNormalizer {
 
         if (!string.Equals(headerContents, updatedHeaderContents, StringComparison.Ordinal)) {
             File.WriteAllText(headerPath, updatedHeaderContents);
-        }
-    }
-
-    /// <summary>
-    /// Rewrites malformed callback expressions inside the generated scene serializer so PSP native compilation can succeed.
-    /// </summary>
-    /// <param name="generatedCoreRootPath">Absolute generated-core source root produced by the editor build graph.</param>
-    static void NormalizeEditorAssetBinarySerializer(string generatedCoreRootPath) {
-        string headerPath = Path.Combine(generatedCoreRootPath, "EditorAssetBinarySerializer.hpp");
-        string sourcePath = Path.Combine(generatedCoreRootPath, "EditorAssetBinarySerializer.cpp");
-        if (!File.Exists(headerPath) || !File.Exists(sourcePath)) {
-            return;
-        }
-
-        string headerContents = File.ReadAllText(headerPath);
-        string sourceContents = File.ReadAllText(sourcePath);
-        string newline = sourceContents.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-
-        string updatedHeaderContents = headerContents;
-        string addedComponentHelperDeclaration = "    static ::SceneEntityPlatformAddedComponentAsset* ReadSceneEntityPlatformAddedComponentAssetCurrentVersion(::EngineBinaryReader* reader);";
-        if (!updatedHeaderContents.Contains(addedComponentHelperDeclaration, StringComparison.Ordinal)) {
-            updatedHeaderContents = updatedHeaderContents.Replace(
-                "    static ::SceneEntityPlatformAddedComponentAsset* ReadSceneEntityPlatformAddedComponentAsset(::EngineBinaryReader* reader, uint8_t sceneEntityPayloadVersion);",
-                "    static ::SceneEntityPlatformAddedComponentAsset* ReadSceneEntityPlatformAddedComponentAsset(::EngineBinaryReader* reader, uint8_t sceneEntityPayloadVersion);" + newline + newline + addedComponentHelperDeclaration,
-                StringComparison.Ordinal);
-        }
-
-        string sceneRecordWriterHelperDeclaration = "    static void WriteSceneComponentAssetRecordCurrentVersion(::EngineBinaryWriter* writer, ::SceneComponentAssetRecord* record);";
-        if (!updatedHeaderContents.Contains(sceneRecordWriterHelperDeclaration, StringComparison.Ordinal)) {
-            updatedHeaderContents = updatedHeaderContents.Replace(
-                "    static void WriteSceneComponentAssetRecord(::EngineBinaryWriter* writer, ::SceneComponentAssetRecord* record, uint8_t sceneEntityPayloadVersion);",
-                "    static void WriteSceneComponentAssetRecord(::EngineBinaryWriter* writer, ::SceneComponentAssetRecord* record, uint8_t sceneEntityPayloadVersion);" + newline + newline + sceneRecordWriterHelperDeclaration,
-                StringComparison.Ordinal);
-        }
-
-        string updatedSourceContents = sourceContents
-            .Replace(
-                "new Func<EngineBinaryReader*, std::string>(valueReader => valueReader->ReadString())",
-                "new Func<EngineBinaryReader*, std::string>(&EditorAssetBinarySerializer::ReadStringValue)",
-                StringComparison.Ordinal)
-            .Replace(
-                "new Func<EngineBinaryReader*, SceneEntityPlatformAddedComponentAsset*>(valueReader => ReadSceneEntityPlatformAddedComponentAsset(valueReader, SceneEntityPayloadVersion))",
-                "new Func<EngineBinaryReader*, SceneEntityPlatformAddedComponentAsset*>(&EditorAssetBinarySerializer::ReadSceneEntityPlatformAddedComponentAssetCurrentVersion)",
-                StringComparison.Ordinal);
-
-        updatedSourceContents = Regex.Replace(
-            updatedSourceContents,
-            @"new Action<EngineBinaryWriter\*, SceneComponentAssetRecord\*>\(\(valueWriter, value\) => WriteSceneComponentAssetRecord\(valueWriter, value, SceneEntityPayloadVersion\);\s*\)\)",
-            "new Action<EngineBinaryWriter*, SceneComponentAssetRecord*>(&EditorAssetBinarySerializer::WriteSceneComponentAssetRecordCurrentVersion))",
-            RegexOptions.CultureInvariant);
-        updatedSourceContents = Regex.Replace(
-            updatedSourceContents,
-            @"new Action<EngineBinaryWriter\*, std::string>\(\(valueWriter, value\) => valueWriter->WriteString\(value\);\s*\)\)",
-            "new Action<EngineBinaryWriter*, std::string>(&EditorAssetBinarySerializer::WriteStringValue))",
-            RegexOptions.CultureInvariant);
-
-        string addedComponentReaderHelperDefinition = "::SceneEntityPlatformAddedComponentAsset* EditorAssetBinarySerializer::ReadSceneEntityPlatformAddedComponentAssetCurrentVersion(::EngineBinaryReader* reader)" + newline
-            + "{" + newline
-            + "return ReadSceneEntityPlatformAddedComponentAsset(reader, SceneEntityPayloadVersion);" + newline
-            + "}";
-        string sceneRecordWriterHelperDefinition = "void EditorAssetBinarySerializer::WriteSceneComponentAssetRecordCurrentVersion(::EngineBinaryWriter* writer, ::SceneComponentAssetRecord* record)" + newline
-            + "{" + newline
-            + "WriteSceneComponentAssetRecord(writer, record, SceneEntityPayloadVersion);" + newline
-            + "}";
-        if (!updatedSourceContents.Contains("::SceneEntityPlatformAddedComponentAsset* EditorAssetBinarySerializer::ReadSceneEntityPlatformAddedComponentAssetCurrentVersion(", StringComparison.Ordinal)) {
-            updatedSourceContents += newline + newline + addedComponentReaderHelperDefinition;
-        }
-        if (!updatedSourceContents.Contains("void EditorAssetBinarySerializer::WriteSceneComponentAssetRecordCurrentVersion(", StringComparison.Ordinal)) {
-            updatedSourceContents += newline + newline + sceneRecordWriterHelperDefinition;
-        }
-
-        if (!string.Equals(headerContents, updatedHeaderContents, StringComparison.Ordinal)) {
-            File.WriteAllText(headerPath, updatedHeaderContents);
-        }
-        if (!string.Equals(sourceContents, updatedSourceContents, StringComparison.Ordinal)) {
-            File.WriteAllText(sourcePath, updatedSourceContents);
         }
     }
 
