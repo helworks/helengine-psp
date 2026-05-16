@@ -24,21 +24,53 @@ public sealed class CityColoredCubeGridSceneTests {
     const string ReturnToMenuComponentTypeId = "city.menu.DemoDiscReturnToMenuComponent, gameplay";
 
     /// <summary>
-    /// Relative authored material path for the first colored cube material.
+    /// Stable serialized type id for the authored colored-cube gameplay tower-spin component.
     /// </summary>
-    const string Cube00MaterialRelativePath = @"assets\Materials\rendering\colored_cube_grid\Cube00.helmat";
+    const string GameplayTowerSpinComponentTypeId = "gameplay.rendering.DirectionalShadowTowerSpinComponent, gameplay";
 
     /// <summary>
-    /// Ensures the authored colored cube-grid scene encodes the engine-owned tower-spin payload using the runtime binary contract.
+    /// Relative authored material paths for the sixteen colored cube materials.
+    /// </summary>
+    static readonly string[] CubeMaterialRelativePaths = [
+        @"assets\Materials\rendering\colored_cube_grid\Cube00.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube01.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube02.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube03.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube04.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube05.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube06.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube07.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube08.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube09.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube10.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube11.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube12.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube13.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube14.hasset",
+        @"assets\Materials\rendering\colored_cube_grid\Cube15.hasset"
+    ];
+
+    /// <summary>
+    /// Authored PSP base colors expected for the sixteen cube materials.
+    /// </summary>
+    static readonly string[] ExpectedCubeMaterialColors = [
+        "#FF4040FF", "#FF8040FF", "#FFC040FF", "#FFFF40FF",
+        "#C0FF40FF", "#80FF40FF", "#40FF40FF", "#40FF80FF",
+        "#40FFC0FF", "#40FFFFFF", "#40C0FFFF", "#4080FFFF",
+        "#4040FFFF", "#8040FFFF", "#C040FFFF", "#FF40FFFF"
+    ];
+
+    /// <summary>
+    /// Ensures the authored colored cube-grid scene encodes the gameplay tower-spin payload using the runtime binary contract.
     /// </summary>
     [Fact]
-    public void ColoredCubeGridScene_writes_engine_owned_tower_spin_payload() {
+    public void ColoredCubeGridScene_writes_gameplay_tower_spin_payload() {
         SceneAsset sceneAsset = ReadColoredCubeGridSceneAsset();
         List<SceneComponentAssetRecord> towerSpinRecords = new List<SceneComponentAssetRecord>();
 
         CollectComponentsByTypeId(
             sceneAsset.RootEntities ?? Array.Empty<SceneEntityAsset>(),
-            DirectionalShadowTowerSpinComponent.SerializedComponentTypeId,
+            GameplayTowerSpinComponentTypeId,
             towerSpinRecords);
 
         Assert.Equal(16, towerSpinRecords.Count);
@@ -51,7 +83,7 @@ public sealed class CityColoredCubeGridSceneTests {
     }
 
     /// <summary>
-    /// Ensures the authored colored cube-grid scene writes the demo-disc return-to-menu component using the automatic scripted runtime payload contract.
+    /// Ensures the authored colored cube-grid scene writes the demo-disc return-to-menu component using the tagged editor scripted-component payload contract.
     /// </summary>
     [Fact]
     public void ColoredCubeGridScene_writes_return_to_menu_payload() {
@@ -64,71 +96,75 @@ public sealed class CityColoredCubeGridSceneTests {
             returnToMenuRecords);
 
         SceneComponentAssetRecord returnToMenuRecord = Assert.Single(returnToMenuRecords);
-        using MemoryStream stream = new MemoryStream(returnToMenuRecord.Payload ?? Array.Empty<byte>(), false);
-        using EngineBinaryReader reader = EngineBinaryReader.Create(stream, EngineBinaryEndianness.LittleEndian);
-        byte version = reader.ReadByte();
-        int memberCount = reader.ReadInt32();
-        byte updateOrder = reader.ReadByte();
+        EditorTaggedSceneComponentFieldReader reader = new EditorTaggedSceneComponentFieldReader(returnToMenuRecord.Payload ?? Array.Empty<byte>());
 
-        Assert.Equal(AutomaticScriptComponentRuntimeDeserializer.CurrentVersion, version);
-        Assert.Equal(1, memberCount);
-        Assert.Equal(0, updateOrder);
+        Assert.True(reader.TryGetFieldReader("UpdateOrder", out EngineBinaryReader updateOrderReader));
+        using (updateOrderReader) {
+            Assert.Equal((byte)0, updateOrderReader.ReadByte());
+        }
     }
 
     /// <summary>
-    /// Ensures the generated city colored cube material sidecar includes PSP material settings with the authored base color.
+    /// Ensures all sixteen colored-cube PSP material settings preserve their authored base colors.
     /// </summary>
     [Fact]
-    public void ColoredCubeGridMaterialSettings_include_psp_base_color() {
+    public void ColoredCubeGridMaterialSettings_preserve_all_psp_base_colors() {
         MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService();
-        string materialPath = Path.Combine(CityProjectRootPath, Cube00MaterialRelativePath);
 
-        Assert.True(settingsService.TryLoad(materialPath, out MaterialAssetImportSettings settings));
-        Assert.NotNull(settings);
-        Assert.True(settings.Processor.Platforms.ContainsKey("psp"));
-        Assert.Equal("standard-shader", settings.Processor.Platforms["psp"].SchemaId);
-        Assert.Equal("#FF4040FF", settings.Processor.Platforms["psp"].FieldValues["base-color"]);
+        for (int cubeIndex = 0; cubeIndex < CubeMaterialRelativePaths.Length; cubeIndex++) {
+            string materialPath = Path.Combine(CityProjectRootPath, CubeMaterialRelativePaths[cubeIndex]);
+
+            Assert.True(settingsService.TryLoadPlatformSettings(materialPath, "psp", out MaterialAssetProcessorSettings platformSettings));
+            Assert.NotNull(platformSettings);
+            Assert.Equal("standard-shader", platformSettings.SchemaId);
+            Assert.Equal(
+                ExpectedCubeMaterialColors[cubeIndex],
+                platformSettings.FieldValues["base-color"]);
+        }
     }
 
     /// <summary>
-    /// Ensures the generated city colored cube material cooks into a PSP base-color buffer that preserves the authored color.
+    /// Ensures all sixteen colored cube materials cook into PSP base-color buffers that preserve the authored colors.
     /// </summary>
     [Fact]
-    public void ColoredCubeGridMaterialCook_preserves_psp_base_color() {
+    public void ColoredCubeGridMaterialCook_preserves_all_psp_base_colors() {
         MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService();
-        string materialPath = Path.Combine(CityProjectRootPath, Cube00MaterialRelativePath);
-
-        Assert.True(settingsService.TryLoad(materialPath, out MaterialAssetImportSettings settings));
-        Assert.NotNull(settings);
-        Assert.True(settings.Processor.Platforms.ContainsKey("psp"));
-
-        MaterialAsset sourceMaterialAsset = ReadColoredCubeGridMaterialAsset();
-        MaterialAssetProcessorSettings platformSettings = settings.Processor.Platforms["psp"];
-        Dictionary<string, string> fieldValues = new Dictionary<string, string>(platformSettings.FieldValues) {
-            ["shader-asset-id"] = sourceMaterialAsset.ShaderAssetId,
-            ["vertex-program"] = sourceMaterialAsset.VertexProgram,
-            ["pixel-program"] = sourceMaterialAsset.PixelProgram,
-            ["variant"] = sourceMaterialAsset.Variant
-        };
         PspPlatformAssetBuilder builder = new PspPlatformAssetBuilder();
-        PlatformMaterialCookResult cookResult = builder.CookMaterial(new PlatformMaterialCookRequest(
-            Cube00MaterialRelativePath.Replace('\\', '/'),
-            Cube00MaterialRelativePath.Replace('\\', '/'),
-            "psp",
-            "debug",
-            "psp-forward",
-            platformSettings.SchemaId,
-            fieldValues));
 
-        MaterialAsset materialAsset = Assert.IsType<MaterialAsset>(AssetSerializer.DeserializeFromBytes(cookResult.CookedMaterialBytes));
-        MaterialConstantBufferAsset baseColorBuffer = Assert.Single(
-            materialAsset.ConstantBuffers,
-            buffer => buffer.Name == "BaseColorBuffer");
+        for (int cubeIndex = 0; cubeIndex < CubeMaterialRelativePaths.Length; cubeIndex++) {
+            string materialRelativePath = CubeMaterialRelativePaths[cubeIndex];
+            string materialPath = Path.Combine(CityProjectRootPath, materialRelativePath);
 
-        Assert.Equal(1.0f, BitConverter.ToSingle(baseColorBuffer.Data, 0));
-        Assert.Equal(64.0f / 255.0f, BitConverter.ToSingle(baseColorBuffer.Data, 4), 5);
-        Assert.Equal(64.0f / 255.0f, BitConverter.ToSingle(baseColorBuffer.Data, 8), 5);
-        Assert.Equal(1.0f, BitConverter.ToSingle(baseColorBuffer.Data, 12));
+            Assert.True(settingsService.TryLoadPlatformSettings(materialPath, "psp", out MaterialAssetProcessorSettings platformSettings));
+            Assert.NotNull(platformSettings);
+
+            MaterialAsset sourceMaterialAsset = LoadMaterialAsset(materialPath);
+            Dictionary<string, string> fieldValues = new Dictionary<string, string>(platformSettings.FieldValues) {
+                ["shader-asset-id"] = sourceMaterialAsset.ShaderAssetId,
+                ["vertex-program"] = sourceMaterialAsset.VertexProgram,
+                ["pixel-program"] = sourceMaterialAsset.PixelProgram,
+                ["variant"] = sourceMaterialAsset.Variant
+            };
+            PlatformMaterialCookResult cookResult = builder.CookMaterial(new PlatformMaterialCookRequest(
+                materialRelativePath.Replace('\\', '/'),
+                materialRelativePath.Replace('\\', '/'),
+                "psp",
+                "debug",
+                "psp-forward",
+                platformSettings.SchemaId,
+                fieldValues));
+
+            MaterialAsset cookedMaterialAsset = Assert.IsType<MaterialAsset>(AssetSerializer.DeserializeFromBytes(cookResult.CookedMaterialBytes));
+            MaterialConstantBufferAsset baseColorBuffer = Assert.Single(
+                cookedMaterialAsset.ConstantBuffers,
+                buffer => buffer.Name == "BaseColorBuffer");
+            float4 expectedColor = ParseExpectedColor(ExpectedCubeMaterialColors[cubeIndex]);
+
+            Assert.Equal(expectedColor.X, BitConverter.ToSingle(baseColorBuffer.Data, 0), 5);
+            Assert.Equal(expectedColor.Y, BitConverter.ToSingle(baseColorBuffer.Data, 4), 5);
+            Assert.Equal(expectedColor.Z, BitConverter.ToSingle(baseColorBuffer.Data, 8), 5);
+            Assert.Equal(expectedColor.W, BitConverter.ToSingle(baseColorBuffer.Data, 12), 5);
+        }
     }
 
     /// <summary>
@@ -144,15 +180,39 @@ public sealed class CityColoredCubeGridSceneTests {
     }
 
     /// <summary>
-    /// Reads the authored first colored-cube material asset from disk.
+    /// Loads one authored material asset through the material settings service for the PSP platform.
     /// </summary>
-    /// <returns>Deserialized authored material asset.</returns>
-    MaterialAsset ReadColoredCubeGridMaterialAsset() {
-        string materialPath = Path.Combine(CityProjectRootPath, Cube00MaterialRelativePath);
-        Assert.True(File.Exists(materialPath));
+    /// <param name="materialPath">Absolute authored material path.</param>
+    /// <returns>Resolved PSP runtime-facing material asset.</returns>
+    MaterialAsset LoadMaterialAsset(string materialPath) {
+        if (string.IsNullOrWhiteSpace(materialPath)) {
+            throw new ArgumentException("Material path must be provided.", nameof(materialPath));
+        }
 
-        using FileStream stream = File.OpenRead(materialPath);
-        return Assert.IsType<MaterialAsset>(EditorAssetBinarySerializer.Deserialize(stream));
+        Assert.True(File.Exists(materialPath));
+        MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService();
+        return settingsService.LoadMaterialAsset(materialPath, "psp");
+    }
+
+    /// <summary>
+    /// Parses one expected #RRGGBBAA color string into normalized float channels.
+    /// </summary>
+    /// <param name="hexColor">Authored color string.</param>
+    /// <returns>Normalized color.</returns>
+    static float4 ParseExpectedColor(string hexColor) {
+        Assert.StartsWith("#", hexColor, StringComparison.Ordinal);
+        Assert.Equal(9, hexColor.Length);
+
+        byte red = Convert.ToByte(hexColor.Substring(1, 2), 16);
+        byte green = Convert.ToByte(hexColor.Substring(3, 2), 16);
+        byte blue = Convert.ToByte(hexColor.Substring(5, 2), 16);
+        byte alpha = Convert.ToByte(hexColor.Substring(7, 2), 16);
+
+        return new float4(
+            red / 255f,
+            green / 255f,
+            blue / 255f,
+            alpha / 255f);
     }
 
     /// <summary>
@@ -191,7 +251,7 @@ public sealed class CityColoredCubeGridSceneTests {
     }
 
     /// <summary>
-    /// Reads one serialized tower-spin component payload using the engine runtime binary contract.
+    /// Reads one serialized tower-spin component payload using the tagged editor scripted-component payload contract.
     /// </summary>
     /// <param name="componentRecord">Serialized component record to decode.</param>
     /// <returns>Tower-spin component reconstructed from the payload bytes.</returns>
@@ -200,10 +260,19 @@ public sealed class CityColoredCubeGridSceneTests {
             throw new ArgumentNullException(nameof(componentRecord));
         }
 
-        using MemoryStream stream = new MemoryStream(componentRecord.Payload ?? Array.Empty<byte>(), false);
-        using EngineBinaryReader reader = EngineBinaryReader.Create(stream, EngineBinaryEndianness.LittleEndian);
-        byte version = reader.ReadByte();
-        Assert.Equal(DirectionalShadowMotionComponentScenePayloadSerializer.CurrentVersion, version);
-        return DirectionalShadowMotionComponentScenePayloadSerializer.ReadTowerSpin(reader);
+        EditorTaggedSceneComponentFieldReader reader = new EditorTaggedSceneComponentFieldReader(componentRecord.Payload ?? Array.Empty<byte>());
+        DirectionalShadowTowerSpinComponent component = new DirectionalShadowTowerSpinComponent();
+
+        Assert.True(reader.TryGetFieldReader("BaseYawRadians", out EngineBinaryReader baseYawReader));
+        using (baseYawReader) {
+            component.BaseYawRadians = baseYawReader.ReadSingle();
+        }
+
+        Assert.True(reader.TryGetFieldReader("AngularSpeedRadians", out EngineBinaryReader angularSpeedReader));
+        using (angularSpeedReader) {
+            component.AngularSpeedRadians = angularSpeedReader.ReadSingle();
+        }
+
+        return component;
     }
 }
