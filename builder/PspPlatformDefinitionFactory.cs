@@ -21,6 +21,18 @@ public static class PspPlatformDefinitionFactory {
     }
 
     /// <summary>
+    /// Creates the serialized default PSP font-atlas texture settings contract used when fonts do not provide an explicit PSP override.
+    /// </summary>
+    /// <returns>Serialized default PSP font-atlas texture settings.</returns>
+    static string CreateDefaultSerializedFontAtlasTextureCookSettings() {
+        return PspTextureCookSettingsSerializer.Serialize(new TextureAssetProcessorSettings {
+            MaxResolution = 0,
+            ColorFormat = TextureAssetColorFormat.Indexed8,
+            AlphaPrecision = TextureAssetAlphaPrecision.A8
+        });
+    }
+
+    /// <summary>
     /// Creates the PSP platform definition for the first city cube-test milestone.
     /// </summary>
     /// <returns>The PSP platform definition.</returns>
@@ -255,16 +267,38 @@ public static class PspPlatformDefinitionFactory {
             assetCookCapabilities: [
                 new PlatformAssetCookCapabilityDefinition(
                     "texture",
-                    "texture",
+                    "runtime-texture",
                     PlatformAssetCookOwnershipKind.BuilderOwned,
                     "psp-texture",
-                    CreateDefaultSerializedTextureCookSettings()),
+                    CreateDefaultSerializedTextureCookSettings(),
+                    CreateTextureFormatCapabilities()),
                 new PlatformAssetCookCapabilityDefinition(
                     "font-atlas-texture",
-                    "font",
+                    "runtime-texture",
                     PlatformAssetCookOwnershipKind.BuilderOwned,
                     "psp-font-atlas-texture",
-                    CreateDefaultSerializedTextureCookSettings())
+                    CreateDefaultSerializedFontAtlasTextureCookSettings(),
+                    CreateTextureFormatCapabilities())
+            ]);
+    }
+
+    /// <summary>
+    /// Creates the generic texture format capability metadata supported by the PSP texture cooker.
+    /// </summary>
+    /// <returns>Texture capability metadata for PSP builder-owned texture cook contracts.</returns>
+    static PlatformTextureFormatCapabilityDefinition CreateTextureFormatCapabilities() {
+        return new PlatformTextureFormatCapabilityDefinition(
+            [
+                TextureAssetColorFormat.Rgba4444,
+                TextureAssetColorFormat.Indexed8
+            ],
+            [
+                TextureAssetAlphaPrecision.A4,
+                TextureAssetAlphaPrecision.A8
+            ],
+            [
+                new PlatformTextureFormatCombinationDefinition(TextureAssetColorFormat.Rgba4444, TextureAssetAlphaPrecision.A4),
+                new PlatformTextureFormatCombinationDefinition(TextureAssetColorFormat.Indexed8, TextureAssetAlphaPrecision.A8)
             ]);
     }
 }
