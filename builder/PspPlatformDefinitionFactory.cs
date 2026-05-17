@@ -8,6 +8,16 @@ namespace helengine.psp.builder;
 /// </summary>
 public static class PspPlatformDefinitionFactory {
     /// <summary>
+    /// Default serialized PSP texture settings used for generic image textures when no explicit PSP override exists.
+    /// </summary>
+    const string DefaultTextureSerializedSettings = "{\"maxResolution\":0,\"colorFormat\":\"Rgba4444\",\"alphaPrecision\":\"A4\"}";
+
+    /// <summary>
+    /// Default serialized PSP texture settings used for font atlas textures when no explicit PSP override exists.
+    /// </summary>
+    const string DefaultFontAtlasTextureSerializedSettings = "{\"maxResolution\":0,\"colorFormat\":\"Indexed8\",\"alphaPrecision\":\"A8\"}";
+
+    /// <summary>
     /// Creates the PSP platform definition for the first city cube-test milestone.
     /// </summary>
     /// <returns>The PSP platform definition.</returns>
@@ -238,6 +248,53 @@ public static class PspPlatformDefinitionFactory {
                     PlatformMediaLayoutKind.InstallTree,
                     allowPhysicalDuplication: false,
                     preferLocalityOverDeduplication: true)
+            ],
+            null,
+            null,
+            CreateAssetCookCapabilities());
+    }
+
+    /// <summary>
+    /// Creates the generic asset-cook capabilities published by the PSP builder.
+    /// </summary>
+    /// <returns>Builder-owned PSP cook capabilities for textures and font atlas textures.</returns>
+    static PlatformAssetCookCapabilityDefinition[] CreateAssetCookCapabilities() {
+        PlatformTextureFormatCapabilityDefinition textureFormatCapabilities = CreateTextureFormatCapabilities();
+        return [
+            new PlatformAssetCookCapabilityDefinition(
+                "texture",
+                "runtime-texture",
+                PlatformAssetCookOwnershipKind.BuilderOwned,
+                "psp-texture",
+                DefaultTextureSerializedSettings,
+                textureFormatCapabilities),
+            new PlatformAssetCookCapabilityDefinition(
+                "font-atlas-texture",
+                "runtime-texture",
+                PlatformAssetCookOwnershipKind.BuilderOwned,
+                "psp-font-atlas-texture",
+                DefaultFontAtlasTextureSerializedSettings,
+                textureFormatCapabilities)
+        ];
+    }
+
+    /// <summary>
+    /// Creates the generic texture format capability metadata supported by the PSP texture cooker.
+    /// </summary>
+    /// <returns>Texture capability metadata for PSP builder-owned texture cook contracts.</returns>
+    static PlatformTextureFormatCapabilityDefinition CreateTextureFormatCapabilities() {
+        return new PlatformTextureFormatCapabilityDefinition(
+            [
+                TextureAssetColorFormat.Rgba4444,
+                TextureAssetColorFormat.Indexed8
+            ],
+            [
+                TextureAssetAlphaPrecision.A4,
+                TextureAssetAlphaPrecision.A8
+            ],
+            [
+                new PlatformTextureFormatCombinationDefinition(TextureAssetColorFormat.Rgba4444, TextureAssetAlphaPrecision.A4),
+                new PlatformTextureFormatCombinationDefinition(TextureAssetColorFormat.Indexed8, TextureAssetAlphaPrecision.A8)
             ]);
     }
 }

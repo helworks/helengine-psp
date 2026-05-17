@@ -44,6 +44,33 @@ public sealed class PspPlatformAssetBuilderTests {
     }
 
     /// <summary>
+    /// Ensures the PSP builder publishes generic texture-format capability metadata for both image textures and font atlas textures.
+    /// </summary>
+    [Fact]
+    public void Descriptor_and_definition_expose_texture_format_capabilities() {
+        PspPlatformAssetBuilder builder = new();
+
+        Assert.Collection(
+            builder.Definition.AssetCookCapabilities,
+            capability => {
+                Assert.Equal("texture", capability.SourceAssetKind);
+                Assert.Equal("runtime-texture", capability.TargetArtifactKind);
+                Assert.Equal(PlatformAssetCookOwnershipKind.BuilderOwned, capability.OwnershipKind);
+                Assert.Equal("psp-texture", capability.SettingsContractId);
+                Assert.Equal("{\"maxResolution\":0,\"colorFormat\":\"Rgba4444\",\"alphaPrecision\":\"A4\"}", capability.DefaultSerializedPlatformSettings);
+                AssertTextureFormatCapabilities(capability.TextureFormatCapabilities);
+            },
+            capability => {
+                Assert.Equal("font-atlas-texture", capability.SourceAssetKind);
+                Assert.Equal("runtime-texture", capability.TargetArtifactKind);
+                Assert.Equal(PlatformAssetCookOwnershipKind.BuilderOwned, capability.OwnershipKind);
+                Assert.Equal("psp-font-atlas-texture", capability.SettingsContractId);
+                Assert.Equal("{\"maxResolution\":0,\"colorFormat\":\"Indexed8\",\"alphaPrecision\":\"A8\"}", capability.DefaultSerializedPlatformSettings);
+                AssertTextureFormatCapabilities(capability.TextureFormatCapabilities);
+            });
+    }
+
+    /// <summary>
     /// Verifies the PSP material schema mirrors the standard material contract used by the editor build graph.
     /// </summary>
     [Fact]
@@ -112,6 +139,30 @@ public sealed class PspPlatformAssetBuilderTests {
                 Assert.Equal(PlatformMaterialFieldKind.Boolean, field.FieldKind);
                 Assert.Equal("true", field.DefaultValue);
                 Assert.False(field.Required);
+            });
+    }
+
+    /// <summary>
+    /// Verifies one PSP texture cook capability advertises the expected supported formats and valid combinations.
+    /// </summary>
+    /// <param name="textureFormatCapabilities">Texture capability metadata to validate.</param>
+    static void AssertTextureFormatCapabilities(PlatformTextureFormatCapabilityDefinition textureFormatCapabilities) {
+        Assert.NotNull(textureFormatCapabilities);
+        Assert.Equal(
+            [TextureAssetColorFormat.Rgba4444, TextureAssetColorFormat.Indexed8],
+            textureFormatCapabilities.SupportedColorFormats);
+        Assert.Equal(
+            [TextureAssetAlphaPrecision.A4, TextureAssetAlphaPrecision.A8],
+            textureFormatCapabilities.SupportedAlphaPrecisions);
+        Assert.Collection(
+            textureFormatCapabilities.SupportedCombinations,
+            combination => {
+                Assert.Equal(TextureAssetColorFormat.Rgba4444, combination.ColorFormat);
+                Assert.Equal(TextureAssetAlphaPrecision.A4, combination.AlphaPrecision);
+            },
+            combination => {
+                Assert.Equal(TextureAssetColorFormat.Indexed8, combination.ColorFormat);
+                Assert.Equal(TextureAssetAlphaPrecision.A8, combination.AlphaPrecision);
             });
     }
 
@@ -258,7 +309,9 @@ public sealed class PspPlatformAssetBuilderTests {
                 ?? throw new InvalidOperationException("ResolveRepositoryRootPath was not found.");
             string repositoryRootPath = Assert.IsType<string>(method.Invoke(null, null));
 
-            Assert.Equal(Path.GetFullPath("C:\\dev\\helworks\\helengine-psp"), Path.GetFullPath(repositoryRootPath));
+            Assert.True(Directory.Exists(Path.Combine(repositoryRootPath, "builder")));
+            Assert.True(File.Exists(Path.Combine(repositoryRootPath, "CMakeLists.txt")));
+            Assert.True(File.Exists(Path.Combine(repositoryRootPath, "builder", "helengine.psp.builder.csproj")));
         } finally {
             Environment.SetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT", previousRepositoryRoot);
         }
