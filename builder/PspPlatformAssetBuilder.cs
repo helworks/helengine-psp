@@ -7,6 +7,7 @@ using helengine.baseplatform.Reporting;
 using helengine.baseplatform.Requests;
 using helengine.baseplatform.Results;
 using helengine;
+using helengine.editor;
 
 namespace helengine.psp.builder;
 
@@ -65,10 +66,15 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
     readonly PspRuntimeNativeManifestWriter RuntimeNativeManifestWriter;
 
     /// <summary>
+    /// Imports source assets and converts them into final runtime payloads for builder-owned PSP cook work items.
+    /// </summary>
+    readonly IPspPlatformCookSourceProcessor PlatformCookSourceProcessor;
+
+    /// <summary>
     /// Initializes the PSP builder with its typed metadata.
     /// </summary>
     public PspPlatformAssetBuilder()
-        : this(new PspNativeBuildExecutor()) {
+        : this(new PspNativeBuildExecutor(), new PspPlatformCookSourceProcessor()) {
     }
 
     /// <summary>
@@ -76,7 +82,34 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
     /// </summary>
     /// <param name="nativeBuildExecutor">Native build executor used by the PSP builder.</param>
     public PspPlatformAssetBuilder(IPspNativeBuildExecutor nativeBuildExecutor) {
+        if (nativeBuildExecutor == null) {
+            throw new ArgumentNullException(nameof(nativeBuildExecutor));
+        }
+
+        NativeBuildExecutor = nativeBuildExecutor;
+        AppLayoutWriter = new PspAppLayoutWriter();
+        GeneratedCoreCompatibilityNormalizer = new PspGeneratedCoreCompatibilityNormalizer();
+        RuntimeNativeManifestWriter = new PspRuntimeNativeManifestWriter();
+        PlatformCookSourceProcessor = new PspPlatformCookSourceProcessor();
+        Descriptor = new PlatformBuilderDescriptor(
+            "helengine.psp.builder",
+            "1.0.0",
+            "psp",
+            new EngineCompatibilityRange("1.0.0", "999.0.0"),
+            new ManifestCompatibilityRange(1, 3),
+            ["psp"],
+            ["debug"]);
+        Definition = PspPlatformDefinitionFactory.Create();
+    }
+
+    /// <summary>
+    /// Initializes the PSP builder with one explicit native-build executor and one explicit source cook processor.
+    /// </summary>
+    /// <param name="nativeBuildExecutor">Native build executor used by the PSP builder.</param>
+    /// <param name="platformCookSourceProcessor">Source asset cook processor used for builder-owned PSP work items.</param>
+    public PspPlatformAssetBuilder(IPspNativeBuildExecutor nativeBuildExecutor, IPspPlatformCookSourceProcessor platformCookSourceProcessor) {
         NativeBuildExecutor = nativeBuildExecutor ?? throw new ArgumentNullException(nameof(nativeBuildExecutor));
+        PlatformCookSourceProcessor = platformCookSourceProcessor ?? throw new ArgumentNullException(nameof(platformCookSourceProcessor));
         AppLayoutWriter = new PspAppLayoutWriter();
         GeneratedCoreCompatibilityNormalizer = new PspGeneratedCoreCompatibilityNormalizer();
         RuntimeNativeManifestWriter = new PspRuntimeNativeManifestWriter();
@@ -186,6 +219,7 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
         ResetDirectory(stagingRootPath);
         Directory.CreateDirectory(stagingRootPath);
         StageCookedArtifacts(request, stagingRootPath, diagnostics, diagnosticReporter, progressReporter, cancellationToken);
+        ExecutePlatformCookWorkItems(request, stagingRootPath, diagnostics, diagnosticReporter, progressReporter, cancellationToken);
 
         if (diagnostics.Count == 0) {
             GeneratedCoreCompatibilityNormalizer.Normalize(request.GeneratedCoreCppRootPath);
@@ -201,6 +235,84 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
             [.. diagnostics],
             [.. sceneOutcomes],
             [.. looseAssetOutcomes]));
+    }
+
+    /// <summary>
+    /// Executes builder-owned PSP cook work items directly into the staging root using the editor-resolved source path and serialized settings payload.
+    /// </summary>
+    /// <param name="request">Resolved build request.</param>
+    /// <param name="stagingRootPath">Working staging root that receives builder-owned cooked outputs.</param>
+    /// <param name="diagnostics">Diagnostic sink for cook failures.</param>
+    /// <param name="diagnosticReporter">Streaming diagnostic reporter.</param>
+    /// <param name="progressReporter">Streaming progress reporter.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    void ExecutePlatformCookWorkItems(
+        PlatformBuildRequest request,
+        string stagingRootPath,
+        List<PlatformBuildDiagnostic> diagnostics,
+        IPlatformBuildDiagnosticReporter diagnosticReporter,
+        IPlatformBuildProgressReporter progressReporter,
+        CancellationToken cancellationToken) {
+        PlatformCookWorkItem[] platformCookWorkItems = request.Manifest.PlatformCookWorkItems ?? [];
+        for (int workItemIndex = 0; workItemIndex < platformCookWorkItems.Length; workItemIndex++) {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            PlatformCookWorkItem workItem = platformCookWorkItems[workItemIndex];
+            try {
+                ExecutePlatformCookWorkItem(workItem, stagingRootPath);
+                progressReporter.Report(new PlatformBuildProgressUpdate(
+                    "Execute Platform Cook Work Items",
+                    workItem.OutputLogicalArtifactId,
+                    workItemIndex + 1,
+                    platformCookWorkItems.Length,
+                    $"Cooked platform-owned artifact '{workItem.OutputRelativePath}'."));
+            } catch (Exception ex) {
+                AddDiagnostic(
+                    diagnostics,
+                    diagnosticReporter,
+                    PlatformBuildDiagnosticSeverity.Error,
+                    "PSPBUILD002",
+                    $"Platform cook work item '{workItem.WorkItemId}' failed: {ex.Message}",
+                    string.Empty,
+                    workItem.OutputLogicalArtifactId,
+                    workItem.OutputRelativePath);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Executes one builder-owned PSP cook work item and writes the final runtime payload into the exact declared output path.
+    /// </summary>
+    /// <param name="workItem">Builder-owned PSP cook work item to execute.</param>
+    /// <param name="stagingRootPath">Working staging root that receives the cooked output.</param>
+    void ExecutePlatformCookWorkItem(PlatformCookWorkItem workItem, string stagingRootPath) {
+        if (workItem == null) {
+            throw new ArgumentNullException(nameof(workItem));
+        } else if (string.IsNullOrWhiteSpace(stagingRootPath)) {
+            throw new ArgumentException("Staging root path must be provided.", nameof(stagingRootPath));
+        } else if (!string.Equals(workItem.TargetPlatformId, Definition.PlatformId, StringComparison.OrdinalIgnoreCase)) {
+            throw new InvalidOperationException($"Unsupported PSP work item target platform '{workItem.TargetPlatformId}'.");
+        }
+
+        TextureAssetProcessorSettings settings = PspTextureCookSettingsSerializer.Deserialize(workItem.SerializedPlatformSettings);
+        string assetId = ResolveCookWorkItemAssetId(workItem);
+        string destinationPath = Path.Combine(stagingRootPath, NormalizeRelativePath(workItem.OutputRelativePath));
+        string destinationDirectoryPath = Path.GetDirectoryName(destinationPath) ?? throw new InvalidOperationException($"Destination directory could not be resolved for '{destinationPath}'.");
+        Directory.CreateDirectory(destinationDirectoryPath);
+
+        if (string.Equals(workItem.SourceAssetKind, "texture", StringComparison.OrdinalIgnoreCase)) {
+            TextureAsset cookedTextureAsset = PlatformCookSourceProcessor.CookTexture(workItem.SourceAssetPath, assetId, settings);
+            File.WriteAllBytes(destinationPath, global::helengine.files.AssetSerializer.SerializeToBytes(cookedTextureAsset));
+            return;
+        } else if (string.Equals(workItem.SourceAssetKind, "font-atlas-texture", StringComparison.OrdinalIgnoreCase)) {
+            FontAsset cookedFontAsset = PlatformCookSourceProcessor.CookFont(workItem.SourceAssetPath, assetId, settings);
+            using MemoryStream stream = new MemoryStream();
+            global::helengine.files.FontAssetBinarySerializer.Serialize(stream, cookedFontAsset);
+            File.WriteAllBytes(destinationPath, stream.ToArray());
+            return;
+        }
+
+        throw new InvalidOperationException($"Unsupported PSP platform cook work item source kind '{workItem.SourceAssetKind}'.");
     }
 
     /// <summary>
@@ -310,6 +422,31 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
         PlatformBuildDiagnostic diagnostic = new(severity, code, message, sceneId, assetId, sourceIdentity);
         diagnostics.Add(diagnostic);
         diagnosticReporter.Report(diagnostic);
+    }
+
+    /// <summary>
+    /// Resolves the stable runtime asset id the builder should assign to one builder-owned cooked output.
+    /// </summary>
+    /// <param name="workItem">Builder-owned PSP cook work item whose metadata should be interpreted.</param>
+    /// <returns>Stable runtime asset identifier for the cooked payload.</returns>
+    static string ResolveCookWorkItemAssetId(PlatformCookWorkItem workItem) {
+        if (workItem == null) {
+            throw new ArgumentNullException(nameof(workItem));
+        }
+
+        PlatformCookWorkItemMetadata[] metadata = workItem.Metadata ?? [];
+        for (int index = 0; index < metadata.Length; index++) {
+            PlatformCookWorkItemMetadata entry = metadata[index];
+            if (entry == null) {
+                continue;
+            }
+
+            if (string.Equals(entry.Key, "source-asset-id", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(entry.Value)) {
+                return entry.Value;
+            }
+        }
+
+        return workItem.OutputRelativePath;
     }
 
     /// <summary>

@@ -20,6 +20,7 @@
 #include "ModelAsset.hpp"
 #include "float2.hpp"
 #include "ObjectManager.hpp"
+#include "platform/psp/PspBootTrace.hpp"
 #include "platform/psp/rendering/PspRuntimeMaterial.hpp"
 #include "platform/psp/rendering/PspRuntimeModel.hpp"
 #include "platform/psp/rendering/PspRuntimeTexture.hpp"
@@ -87,6 +88,69 @@ namespace helengine::psp::rendering {
             std::uint32_t alpha = ClampColorChannel(color.W);
             return (alpha << 24) | (blue << 16) | (green << 8) | red;
         }
+
+#if defined(HELENGINE_PSP_ENABLE_BOOT_TRACE) && HELENGINE_PSP_ENABLE_BOOT_TRACE
+        /// Returns whether one world-space value is within a small tolerance of the expected authored showcase value.
+        bool IsApproximately(float value, float expectedValue, float tolerance) {
+            return std::fabs(value - expectedValue) <= tolerance;
+        }
+
+        /// Returns whether one drawable transform matches the authored central plaza tower used for lighting diagnostics.
+        bool IsDirectionalShadowCentralTower(Entity* entity) {
+            if (entity == nullptr) {
+                return false;
+            }
+
+            const float3 position = entity->get_Position();
+            const float3 scale = entity->get_Scale();
+            return IsApproximately(position.X, 0.0f, 0.01f)
+                && IsApproximately(position.Y, 9.0f, 0.01f)
+                && IsApproximately(position.Z, -12.0f, 0.01f)
+                && IsApproximately(scale.X, 7.0f, 0.01f)
+                && IsApproximately(scale.Y, 18.0f, 0.01f)
+                && IsApproximately(scale.Z, 7.0f, 0.01f);
+        }
+
+        /// Periodically writes the camera-facing and light-facing dot values for the authored plaza tower faces.
+        void WritePlazaTowerFaceDebugTrace(Entity* entity, const float3& cameraPosition, const float3& lightDirection) {
+            if (!IsDirectionalShadowCentralTower(entity)) {
+                return;
+            }
+
+            static int32_t PlazaTowerTraceCounter = 0;
+            PlazaTowerTraceCounter++;
+            if ((PlazaTowerTraceCounter % 120) != 0) {
+                return;
+            }
+
+            const float3 entityPosition = entity->get_Position();
+            const float4 entityOrientation = entity->get_Orientation();
+            const float3 cameraToTower = float3::Normalize(cameraPosition - entityPosition);
+            const float3 normalizedLightDirection = float3::Normalize(lightDirection);
+
+            const float3 positiveX = float4::RotateVector(float3(1.0f, 0.0f, 0.0f), entityOrientation);
+            const float3 negativeX = float4::RotateVector(float3(-1.0f, 0.0f, 0.0f), entityOrientation);
+            const float3 positiveZ = float4::RotateVector(float3(0.0f, 0.0f, 1.0f), entityOrientation);
+            const float3 negativeZ = float4::RotateVector(float3(0.0f, 0.0f, -1.0f), entityOrientation);
+
+            PspBootTrace::WriteLine(
+                std::string("PlazaTowerFaceDebug cameraToTower=")
+                + std::to_string(cameraToTower.X) + ","
+                + std::to_string(cameraToTower.Y) + ","
+                + std::to_string(cameraToTower.Z)
+                + " light=" + std::to_string(normalizedLightDirection.X) + ","
+                + std::to_string(normalizedLightDirection.Y) + ","
+                + std::to_string(normalizedLightDirection.Z)
+                + " pxView=" + std::to_string(float3::Dot(positiveX, cameraToTower))
+                + " pxLight=" + std::to_string(float3::Dot(positiveX, normalizedLightDirection))
+                + " nxView=" + std::to_string(float3::Dot(negativeX, cameraToTower))
+                + " nxLight=" + std::to_string(float3::Dot(negativeX, normalizedLightDirection))
+                + " pzView=" + std::to_string(float3::Dot(positiveZ, cameraToTower))
+                + " pzLight=" + std::to_string(float3::Dot(positiveZ, normalizedLightDirection))
+                + " nzView=" + std::to_string(float3::Dot(negativeZ, cameraToTower))
+                + " nzLight=" + std::to_string(float3::Dot(negativeZ, normalizedLightDirection)));
+        }
+#endif
 
         /// Returns the default local-space normal used when authored mesh data omits normals.
         float3 GetFallbackNormal() {
@@ -237,6 +301,34 @@ namespace helengine::psp::rendering {
             return world;
         }
 
+        /// Builds one world matrix that preserves only rotation and translation for GPU-lit scaled draws.
+        float4x4 BuildWorldMatrixWithoutScale(Entity* entity) {
+            if (entity == nullptr) {
+                return float4x4::get_Identity();
+            }
+
+            float4 orientation = entity->get_Orientation();
+            float3 position = entity->get_Position();
+
+            float4x4 rotation;
+            float4x4::CreateFromQuaternion(orientation, rotation);
+
+            float4x4 translation;
+            float4x4::CreateTranslation(position, translation);
+
+            float4x4 world;
+            float4x4::Multiply(rotation, translation, world);
+            return world;
+        }
+
+        /// Returns whether one world scale uses distinct axis magnitudes that would skew fixed-function normals.
+        bool HasNonUniformScale(const float3& scale) {
+            constexpr float UniformScaleTolerance = 0.0001f;
+            return std::fabs(scale.X - scale.Y) > UniformScaleTolerance
+                || std::fabs(scale.X - scale.Z) > UniformScaleTolerance
+                || std::fabs(scale.Y - scale.Z) > UniformScaleTolerance;
+        }
+
         /// Rotates one local-space normal into world space using the entity orientation.
         float3 RotateNormal(const float3& normal, Entity* entity) {
             if (entity == nullptr) {
@@ -269,6 +361,70 @@ namespace helengine::psp::rendering {
             return material != nullptr
                 && material->GetReceivesLighting()
                 && material->GetLightingResponse() == PspMaterialLightingResponse::LitDirectional;
+        }
+
+        /// Builds one transient fixed-function vertex stream with object-space positions pre-scaled for non-uniform GPU lighting.
+        PspRuntimeModel::FixedFunctionVertex* CreateScaledFixedFunctionVertices(
+            const PspRuntimeModel* runtimeModel,
+            const float3& scale) {
+            if (runtimeModel == nullptr || !runtimeModel->HasFixedFunctionVertices()) {
+                return nullptr;
+            }
+
+            int32_t vertexCount = runtimeModel->GetFixedFunctionVertexCount();
+            if (vertexCount < 1) {
+                return nullptr;
+            }
+
+            const PspRuntimeModel::FixedFunctionVertex* sourceVertices = runtimeModel->GetFixedFunctionVertices();
+            PspRuntimeModel::FixedFunctionVertex* vertices = static_cast<PspRuntimeModel::FixedFunctionVertex*>(
+                sceGuGetMemory(sizeof(PspRuntimeModel::FixedFunctionVertex) * static_cast<std::size_t>(vertexCount)));
+            for (int32_t index = 0; index < vertexCount; index++) {
+                const PspRuntimeModel::FixedFunctionVertex& sourceVertex = sourceVertices[index];
+                vertices[index] = PspRuntimeModel::FixedFunctionVertex {
+                    sourceVertex.NX,
+                    sourceVertex.NY,
+                    sourceVertex.NZ,
+                    sourceVertex.X * scale.X,
+                    sourceVertex.Y * scale.Y,
+                    sourceVertex.Z * scale.Z
+                };
+            }
+
+            return vertices;
+        }
+
+        /// Builds one transient textured fixed-function vertex stream with object-space positions pre-scaled for non-uniform GPU lighting.
+        PspRuntimeModel::FixedFunctionTexturedVertex* CreateScaledFixedFunctionTexturedVertices(
+            const PspRuntimeModel* runtimeModel,
+            const float3& scale) {
+            if (runtimeModel == nullptr || !runtimeModel->HasFixedFunctionTexturedVertices()) {
+                return nullptr;
+            }
+
+            int32_t vertexCount = runtimeModel->GetFixedFunctionTexturedVertexCount();
+            if (vertexCount < 1) {
+                return nullptr;
+            }
+
+            const PspRuntimeModel::FixedFunctionTexturedVertex* sourceVertices = runtimeModel->GetFixedFunctionTexturedVertices();
+            PspRuntimeModel::FixedFunctionTexturedVertex* vertices = static_cast<PspRuntimeModel::FixedFunctionTexturedVertex*>(
+                sceGuGetMemory(sizeof(PspRuntimeModel::FixedFunctionTexturedVertex) * static_cast<std::size_t>(vertexCount)));
+            for (int32_t index = 0; index < vertexCount; index++) {
+                const PspRuntimeModel::FixedFunctionTexturedVertex& sourceVertex = sourceVertices[index];
+                vertices[index] = PspRuntimeModel::FixedFunctionTexturedVertex {
+                    sourceVertex.U,
+                    sourceVertex.V,
+                    sourceVertex.NX,
+                    sourceVertex.NY,
+                    sourceVertex.NZ,
+                    sourceVertex.X * scale.X,
+                    sourceVertex.Y * scale.Y,
+                    sourceVertex.Z * scale.Z
+                };
+            }
+
+            return vertices;
         }
 
         /// Evaluates the current CPU Lambert response for one vertex.
@@ -514,7 +670,8 @@ namespace helengine::psp::rendering {
     void PspRenderManager3D::SubmitFixedFunctionDrawable(
         const PspRuntimeModel* runtimeModel,
         const float4& baseColor,
-        bool useLighting) {
+        bool useLighting,
+        const float3* positionScale) {
         if (runtimeModel == nullptr || !runtimeModel->HasFixedFunctionVertices()) {
             return;
         }
@@ -529,13 +686,16 @@ namespace helengine::psp::rendering {
         ConfigureFixedFunctionMaterial(baseColor, useLighting);
         PspRenderProfiler::Record3DFixedFunctionMaterialSetup(PspRenderProfiler::GetTimestampMicroseconds() - materialSetupStartMicroseconds);
 
+        const PspRuntimeModel::FixedFunctionVertex* vertices = positionScale != nullptr
+            ? CreateScaledFixedFunctionVertices(runtimeModel, *positionScale)
+            : runtimeModel->GetFixedFunctionVertices();
         const std::uint64_t drawStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         sceGumDrawArray(
             GU_TRIANGLES,
             GU_NORMAL_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
             vertexCount,
             nullptr,
-            runtimeModel->GetFixedFunctionVertices());
+            vertices);
         PspRenderProfiler::Record3DFixedFunctionDraw(PspRenderProfiler::GetTimestampMicroseconds() - drawStartMicroseconds);
     }
 
@@ -544,7 +704,8 @@ namespace helengine::psp::rendering {
         const PspRuntimeModel* runtimeModel,
         const float4& baseColor,
         bool useLighting,
-        PspRuntimeTexture* texture) {
+        PspRuntimeTexture* texture,
+        const float3* positionScale) {
         if (runtimeModel == nullptr || !runtimeModel->HasFixedFunctionTexturedVertices()) {
             return;
         }
@@ -561,13 +722,16 @@ namespace helengine::psp::rendering {
         ConfigureFixedFunctionMaterial(baseColor, useLighting);
         PspRenderProfiler::Record3DFixedFunctionMaterialSetup(PspRenderProfiler::GetTimestampMicroseconds() - materialSetupStartMicroseconds);
 
+        const PspRuntimeModel::FixedFunctionTexturedVertex* vertices = positionScale != nullptr
+            ? CreateScaledFixedFunctionTexturedVertices(runtimeModel, *positionScale)
+            : runtimeModel->GetFixedFunctionTexturedVertices();
         const std::uint64_t drawStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         sceGumDrawArray(
             GU_TRIANGLES,
             GU_TEXTURE_32BITF | GU_NORMAL_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
             vertexCount,
             nullptr,
-            runtimeModel->GetFixedFunctionTexturedVertices());
+            vertices);
         PspRenderProfiler::Record3DFixedFunctionDraw(PspRenderProfiler::GetTimestampMicroseconds() - drawStartMicroseconds);
     }
 
@@ -576,6 +740,13 @@ namespace helengine::psp::rendering {
         if (data != nullptr && !data->get_Id().empty()) {
             auto cachedModelIterator = CachedModels.find(data->get_Id());
             if (cachedModelIterator != CachedModels.end()) {
+                PspBootTrace::WriteLine(
+                    std::string("PspRuntimeModelReuse id=") +
+                    data->get_Id() +
+                    " ptr=" +
+                    std::to_string(reinterpret_cast<std::uintptr_t>(cachedModelIterator->second)) +
+                    " cacheSize=" +
+                    std::to_string(CachedModels.size()));
                 return cachedModelIterator->second;
             }
         }
@@ -590,6 +761,14 @@ namespace helengine::psp::rendering {
         if (data != nullptr && !data->get_Id().empty()) {
             CachedModels.emplace(data->get_Id(), runtimeModel);
         }
+
+        PspBootTrace::WriteLine(
+            std::string("PspRuntimeModelBuild id=") +
+            (data != nullptr ? data->get_Id() : std::string()) +
+            " ptr=" +
+            std::to_string(reinterpret_cast<std::uintptr_t>(runtimeModel)) +
+            " cacheSize=" +
+            std::to_string(CachedModels.size()));
         return runtimeModel;
     }
 
@@ -604,7 +783,49 @@ namespace helengine::psp::rendering {
             runtimeMaterial->set_Id(shaderAsset->get_Id());
         }
 
+        PspBootTrace::WriteLine(
+            std::string("PspRuntimeMaterialBuild id=") +
+            runtimeMaterial->get_Id() +
+            " ptr=" +
+            std::to_string(reinterpret_cast<std::uintptr_t>(runtimeMaterial)));
         return runtimeMaterial;
+    }
+
+    /// Releases one PSP runtime model after the final scene reference is removed.
+    void PspRenderManager3D::ReleaseModel(RuntimeModel* model) {
+        if (model == nullptr) {
+            throw std::invalid_argument("PSP runtime-model release requires one runtime model instance.");
+        }
+
+        if (!model->get_Id().empty()) {
+            auto cachedModelIterator = CachedModels.find(model->get_Id());
+            if (cachedModelIterator != CachedModels.end() && cachedModelIterator->second == model) {
+                CachedModels.erase(cachedModelIterator);
+            }
+        }
+
+        PspBootTrace::WriteLine(
+            std::string("PspRuntimeModelRelease id=") +
+            model->get_Id() +
+            " ptr=" +
+            std::to_string(reinterpret_cast<std::uintptr_t>(model)) +
+            " cacheSize=" +
+            std::to_string(CachedModels.size()));
+        delete static_cast<PspRuntimeModel*>(model);
+    }
+
+    /// Releases one PSP runtime material after the final scene reference is removed.
+    void PspRenderManager3D::ReleaseMaterial(RuntimeMaterial* material) {
+        if (material == nullptr) {
+            throw std::invalid_argument("PSP runtime-material release requires one runtime material instance.");
+        }
+
+        PspBootTrace::WriteLine(
+            std::string("PspRuntimeMaterialRelease id=") +
+            material->get_Id() +
+            " ptr=" +
+            std::to_string(reinterpret_cast<std::uintptr_t>(material)));
+        delete static_cast<PspRuntimeMaterial*>(material);
     }
 
     /// Wires the paired PSP 2D renderer used for per-camera UI submission.
@@ -668,9 +889,24 @@ namespace helengine::psp::rendering {
         }
         
         PspRuntimeMaterial* pspRuntimeMaterial = static_cast<PspRuntimeMaterial*>(rootMaterial);
+        const float4& baseColor = pspRuntimeMaterial->GetBaseColor();
+        const bool useLighting = UsesDirectionalLighting(pspRuntimeMaterial);
+        PspRuntimeTexture* texture = nullptr;
+        const bool hasTexture = pspRuntimeMaterial->TryResolveTexture(texture);
+        const float3 worldScale = drawableParent->get_Scale();
+        const bool useScaledGpuVertices = LightingSettings.Pipeline == PspLightingPipeline::FixedFunctionLambert
+            && useLighting
+            && HasNonUniformScale(worldScale);
+#if defined(HELENGINE_PSP_ENABLE_BOOT_TRACE) && HELENGINE_PSP_ENABLE_BOOT_TRACE
+        if (CurrentLighting.HasDirectionalLight && useLighting) {
+            WritePlazaTowerFaceDebugTrace(drawableParent, CurrentCameraPosition, CurrentLighting.DirectionalLightDirection);
+        }
+#endif
 
         const std::uint64_t worldMatrixBuildStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
-        float4x4 world = BuildWorldMatrix(drawableParent);
+        float4x4 world = useScaledGpuVertices
+            ? BuildWorldMatrixWithoutScale(drawableParent)
+            : BuildWorldMatrix(drawableParent);
         PspRenderProfiler::Record3DWorldMatrixBuild(PspRenderProfiler::GetTimestampMicroseconds() - worldMatrixBuildStartMicroseconds);
         PspMatrixBuffer worldMatrix = CreatePspMatrixBuffer(world);
 
@@ -678,19 +914,23 @@ namespace helengine::psp::rendering {
         sceGumMatrixMode(GU_MODEL);
         sceGumLoadMatrix(reinterpret_cast<ScePspFMatrix4*>(&worldMatrix));
         PspRenderProfiler::Record3DModelMatrixLoad(PspRenderProfiler::GetTimestampMicroseconds() - modelMatrixLoadStartMicroseconds);
-
-        const float4& baseColor = pspRuntimeMaterial->GetBaseColor();
-        const bool useLighting = UsesDirectionalLighting(pspRuntimeMaterial);
-        PspRuntimeTexture* texture = nullptr;
-        const bool hasTexture = pspRuntimeMaterial->TryResolveTexture(texture);
         if (LightingSettings.Pipeline == PspLightingPipeline::FixedFunctionLambert) {
             if (hasTexture) {
-                SubmitFixedFunctionTexturedDrawable(pspRuntimeModelData, baseColor, useLighting, texture);
+                SubmitFixedFunctionTexturedDrawable(
+                    pspRuntimeModelData,
+                    baseColor,
+                    useLighting,
+                    texture,
+                    useScaledGpuVertices ? &worldScale : nullptr);
                 PspRenderProfiler::Record3DVisit(PspRenderProfiler::GetTimestampMicroseconds() - visitStartMicroseconds);
                 return;
             }
 
-            SubmitFixedFunctionDrawable(pspRuntimeModelData, baseColor, useLighting);
+            SubmitFixedFunctionDrawable(
+                pspRuntimeModelData,
+                baseColor,
+                useLighting,
+                useScaledGpuVertices ? &worldScale : nullptr);
             PspRenderProfiler::Record3DVisit(PspRenderProfiler::GetTimestampMicroseconds() - visitStartMicroseconds);
             return;
         }

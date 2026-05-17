@@ -3,6 +3,7 @@
 #include <pspiofilemgr.h>
 
 namespace helengine::psp {
+#if defined(HELENGINE_PSP_ENABLE_BOOT_TRACE) && HELENGINE_PSP_ENABLE_BOOT_TRACE
     namespace {
         /// Relative boot-trace filename written beneath the resolved PSP app root.
         constexpr const char* TraceFileName = "helengine_psp_boot.log";
@@ -38,4 +39,5 @@ namespace helengine::psp {
         sceIoWrite(fileHandle, "\n", 1);
         sceIoClose(fileHandle);
     }
+#endif
 }

@@ -1,5 +1,6 @@
 using helengine.baseplatform.Definitions;
 using helengine.baseplatform.Profiles;
+using helengine.editor;
 
 namespace helengine.psp.builder;
 
@@ -7,6 +8,18 @@ namespace helengine.psp.builder;
 /// Creates the typed PSP builder metadata consumed by the editor.
 /// </summary>
 public static class PspPlatformDefinitionFactory {
+    /// <summary>
+    /// Creates the serialized default PSP texture settings contract used when assets do not provide an explicit PSP override.
+    /// </summary>
+    /// <returns>Serialized default PSP texture settings.</returns>
+    static string CreateDefaultSerializedTextureCookSettings() {
+        return PspTextureCookSettingsSerializer.Serialize(new TextureAssetProcessorSettings {
+            MaxResolution = 0,
+            ColorFormat = TextureAssetColorFormat.Rgba4444,
+            AlphaPrecision = TextureAssetAlphaPrecision.A4
+        });
+    }
+
     /// <summary>
     /// Creates the PSP platform definition for the first city cube-test milestone.
     /// </summary>
@@ -238,6 +251,20 @@ public static class PspPlatformDefinitionFactory {
                     PlatformMediaLayoutKind.InstallTree,
                     allowPhysicalDuplication: false,
                     preferLocalityOverDeduplication: true)
+            ],
+            assetCookCapabilities: [
+                new PlatformAssetCookCapabilityDefinition(
+                    "texture",
+                    "texture",
+                    PlatformAssetCookOwnershipKind.BuilderOwned,
+                    "psp-texture",
+                    CreateDefaultSerializedTextureCookSettings()),
+                new PlatformAssetCookCapabilityDefinition(
+                    "font-atlas-texture",
+                    "font",
+                    PlatformAssetCookOwnershipKind.BuilderOwned,
+                    "psp-font-atlas-texture",
+                    CreateDefaultSerializedTextureCookSettings())
             ]);
     }
 }

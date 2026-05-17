@@ -10,6 +10,7 @@
 #include "platform/psp/rendering/PspRuntimeTexture.hpp"
 
 namespace helengine::psp::rendering {
+#if defined(HELENGINE_PSP_ENABLE_RENDER_PROFILER) && HELENGINE_PSP_ENABLE_RENDER_PROFILER
     namespace {
         constexpr int32_t WarmupFrameCount = 90;
         constexpr int32_t DetailedCaptureFrameCount = 5;
@@ -442,4 +443,5 @@ namespace helengine::psp::rendering {
                 + " drawables=" + std::to_string(drawableCount));
         }
     }
+#endif
 }

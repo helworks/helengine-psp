@@ -152,7 +152,6 @@ namespace helengine::psp::rendering {
             return;
         }
         const int32_t drawableCount = renderQueue->get_Count();
-
         sceGuDisable(GU_LIGHT0);
         sceGuDisable(GU_LIGHTING);
         sceGuDisable(GU_DEPTH_TEST);
@@ -180,7 +179,11 @@ namespace helengine::psp::rendering {
             return;
         }
         const RoundedRectGeometryCacheEntry& cacheEntry = GetOrBuildRoundedRectGeometryCacheEntry(shape);
-        DrawCachedRoundedRectGeometry(cacheEntry);
+        DrawCachedRoundedRectGeometry(
+            cacheEntry,
+            shape->get_Parent()->get_Position(),
+            shape->get_FillColor(),
+            shape->get_BorderColor());
     }
 
     /// Draws a textured sprite quad with the authored tint and source rectangle.
@@ -221,12 +224,16 @@ namespace helengine::psp::rendering {
         if (cacheEntry.UsesStaticSurface && cacheEntry.StaticSurfaceTexture != nullptr) {
             DrawTexturedQuad(
                 cacheEntry.StaticSurfaceTexture,
-                cacheEntry.StaticSurfacePosition,
+                text->get_Parent()->get_Position(),
                 cacheEntry.StaticSurfaceSize,
-                float4(0.0f, 0.0f, 1.0f, 1.0f),
+                cacheEntry.StaticSurfaceSourceRect,
                 byte4(255, 255, 255, 255));
         } else if (!cacheEntry.Vertices.empty()) {
-            DrawTexturedTriangles(cacheEntry.Vertices.data(), cacheEntry.Vertices.size(), cacheEntry.Texture);
+            DrawTexturedTrianglesTranslated(
+                cacheEntry.Vertices.data(),
+                cacheEntry.Vertices.size(),
+                cacheEntry.Texture,
+                text->get_Parent()->get_Position());
         }
 
         PspRenderProfiler::Record2DText(
@@ -388,26 +395,47 @@ namespace helengine::psp::rendering {
     }
 
     /// Draws one cached rounded rectangle using geometry that only rebuilds when the authored inputs change.
-    void PspRenderManager2D::DrawCachedRoundedRectGeometry(const RoundedRectGeometryCacheEntry& entry) {
+    void PspRenderManager2D::DrawCachedRoundedRectGeometry(const RoundedRectGeometryCacheEntry& entry, const float3& positionOffset, const byte4& fillColor, const byte4& borderColor) {
         if (entry.HasBorder) {
             if (entry.BorderUsesSolidQuad) {
-                AppendSolidQuadToWhiteBatch(entry.BorderPosition, entry.BorderSize, entry.BorderColor);
+                AppendSolidQuadToWhiteBatch(
+                    float3(
+                        entry.BorderPosition.X + positionOffset.X,
+                        entry.BorderPosition.Y + positionOffset.Y,
+                        entry.BorderPosition.Z + positionOffset.Z),
+                    entry.BorderSize,
+                    borderColor);
             } else if (!entry.BorderVertices.empty()) {
-                AppendWhiteTrianglesToBatch(entry.BorderVertices);
+                std::vector<Psp2DVertex> translatedVertices = entry.BorderVertices;
+                ApplyColorToVertices(translatedVertices, borderColor);
+                AppendWhiteTrianglesToBatchTranslated(translatedVertices, positionOffset);
             }
         }
 
         if (entry.HasInnerFill) {
             if (entry.InnerFillUsesSolidQuad) {
-                AppendSolidQuadToWhiteBatch(entry.InnerFillPosition, entry.InnerFillSize, entry.FillColor);
+                AppendSolidQuadToWhiteBatch(
+                    float3(
+                        entry.InnerFillPosition.X + positionOffset.X,
+                        entry.InnerFillPosition.Y + positionOffset.Y,
+                        entry.InnerFillPosition.Z + positionOffset.Z),
+                    entry.InnerFillSize,
+                    fillColor);
             } else if (!entry.InnerFillVertices.empty()) {
-                AppendWhiteTrianglesToBatch(entry.InnerFillVertices);
+                std::vector<Psp2DVertex> translatedVertices = entry.InnerFillVertices;
+                ApplyColorToVertices(translatedVertices, fillColor);
+                AppendWhiteTrianglesToBatchTranslated(translatedVertices, positionOffset);
             }
         }
     }
 
     /// Appends one solid-colored quad to the pending white-texture batch.
     void PspRenderManager2D::AppendSolidQuadToWhiteBatch(const float3& position, const int2& size, const byte4& color) {
+        AppendSolidQuadVertices(PendingWhiteTriangles, position, size, color);
+    }
+
+    /// Appends one solid-colored quad directly to one cached white-triangle vertex list.
+    void PspRenderManager2D::AppendSolidQuadVertices(std::vector<Psp2DVertex>& vertices, const float3& position, const int2& size, const byte4& color) {
         const std::uint32_t packedColor = ConvertColorToAbgr(color);
         const float left = position.X;
         const float top = position.Y;
@@ -415,12 +443,12 @@ namespace helengine::psp::rendering {
         const float bottom = position.Y + size.Y;
         const float z = position.Z;
 
-        PendingWhiteTriangles.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, left, top, z });
-        PendingWhiteTriangles.push_back(Psp2DVertex { 1.0f, 0.0f, packedColor, right, top, z });
-        PendingWhiteTriangles.push_back(Psp2DVertex { 0.0f, 1.0f, packedColor, left, bottom, z });
-        PendingWhiteTriangles.push_back(Psp2DVertex { 0.0f, 1.0f, packedColor, left, bottom, z });
-        PendingWhiteTriangles.push_back(Psp2DVertex { 1.0f, 0.0f, packedColor, right, top, z });
-        PendingWhiteTriangles.push_back(Psp2DVertex { 1.0f, 1.0f, packedColor, right, bottom, z });
+        vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, left, top, z });
+        vertices.push_back(Psp2DVertex { 1.0f, 0.0f, packedColor, right, top, z });
+        vertices.push_back(Psp2DVertex { 0.0f, 1.0f, packedColor, left, bottom, z });
+        vertices.push_back(Psp2DVertex { 0.0f, 1.0f, packedColor, left, bottom, z });
+        vertices.push_back(Psp2DVertex { 1.0f, 0.0f, packedColor, right, top, z });
+        vertices.push_back(Psp2DVertex { 1.0f, 1.0f, packedColor, right, bottom, z });
     }
 
     /// Appends one list of white-texture triangles to the pending batch.
@@ -430,6 +458,21 @@ namespace helengine::psp::rendering {
         }
 
         PendingWhiteTriangles.insert(PendingWhiteTriangles.end(), vertices.begin(), vertices.end());
+    }
+
+    /// Appends one list of white-texture triangles to the pending batch after applying one world-space offset.
+    void PspRenderManager2D::AppendWhiteTrianglesToBatchTranslated(const std::vector<Psp2DVertex>& vertices, const float3& positionOffset) {
+        if (vertices.empty()) {
+            return;
+        }
+
+        const std::size_t startIndex = PendingWhiteTriangles.size();
+        PendingWhiteTriangles.insert(PendingWhiteTriangles.end(), vertices.begin(), vertices.end());
+        for (std::size_t index = startIndex; index < PendingWhiteTriangles.size(); index++) {
+            PendingWhiteTriangles[index].X += positionOffset.X;
+            PendingWhiteTriangles[index].Y += positionOffset.Y;
+            PendingWhiteTriangles[index].Z += positionOffset.Z;
+        }
     }
 
     /// Flushes any pending white-texture batch before state changes or frame completion.
@@ -451,7 +494,6 @@ namespace helengine::psp::rendering {
 
             FontAsset* font = text->get_Font();
             RuntimeTexture* texture = font != nullptr ? font->get_Texture() : nullptr;
-            const float3 position = text->get_Parent()->get_Position();
             const int2 size = text->get_Size();
             const byte4 color = text->get_Color();
             const bool wrapText = text->get_WrapText();
@@ -459,9 +501,6 @@ namespace helengine::psp::rendering {
             const std::string textValue = text->get_Text();
             const bool usesStaticSurface = ShouldUseStaticTextSurface(text);
             if (entry.Texture == texture
-                && entry.Position.X == position.X
-                && entry.Position.Y == position.Y
-                && entry.Position.Z == position.Z
                 && entry.Size.X == size.X
                 && entry.Size.Y == size.Y
                 && entry.Color.X == color.X
@@ -492,27 +531,13 @@ namespace helengine::psp::rendering {
                 continue;
             }
 
-            const float3 position = shape->get_Parent()->get_Position();
             const int2 size = shape->get_Size();
             const float radius = shape->get_Radius();
             const float borderThickness = shape->get_BorderThickness();
-            const byte4 fillColor = shape->get_FillColor();
-            const byte4 borderColor = shape->get_BorderColor();
-            if (entry.Position.X == position.X
-                && entry.Position.Y == position.Y
-                && entry.Position.Z == position.Z
-                && entry.Size.X == size.X
+            if (entry.Size.X == size.X
                 && entry.Size.Y == size.Y
                 && entry.Radius == radius
-                && entry.BorderThickness == borderThickness
-                && entry.FillColor.X == fillColor.X
-                && entry.FillColor.Y == fillColor.Y
-                && entry.FillColor.Z == fillColor.Z
-                && entry.FillColor.W == fillColor.W
-                && entry.BorderColor.X == borderColor.X
-                && entry.BorderColor.Y == borderColor.Y
-                && entry.BorderColor.Z == borderColor.Z
-                && entry.BorderColor.W == borderColor.W) {
+                && entry.BorderThickness == borderThickness) {
                 return entry;
             }
 
@@ -530,7 +555,6 @@ namespace helengine::psp::rendering {
     void PspRenderManager2D::RebuildTextGeometryCacheEntry(TextGeometryCacheEntry& cacheEntry, ITextDrawable2D* text) {
         FontAsset* font = text->get_Font();
         RuntimeTexture* atlasTexture = font->get_Texture();
-        const float3 position = text->get_Parent()->get_Position();
         const byte4 color = text->get_Color();
         const float fontScaleValue = text->get_FontScale();
         const double fontScale = std::max(static_cast<double>(fontScaleValue), 0.0001d);
@@ -547,7 +571,6 @@ namespace helengine::psp::rendering {
         cacheEntry.Texture = atlasTexture;
         cacheEntry.Content = content;
         cacheEntry.RawText = text->get_Text();
-        cacheEntry.Position = position;
         cacheEntry.Size = text->get_Size();
         cacheEntry.Color = color;
         cacheEntry.WrapText = text->get_WrapText();
@@ -563,8 +586,8 @@ namespace helengine::psp::rendering {
         double offsetX = 0.0;
         double offsetY = 0.0;
         const double lineHeight = std::max(static_cast<double>(font->get_LineHeight()) * fontScale, 1.0d);
-        const double baseX = std::round(position.X);
-        const double baseY = std::round(position.Y);
+        const double baseX = 0.0;
+        const double baseY = 0.0;
         const std::uint32_t packedColor = ConvertColorToAbgr(color);
 
         for (char character : content) {
@@ -597,7 +620,7 @@ namespace helengine::psp::rendering {
             const float top = static_cast<float>(drawY);
             const float right = static_cast<float>(std::max(drawX + 1.0, drawRight));
             const float bottom = static_cast<float>(std::max(drawY + 1.0, drawBottom));
-            const float z = position.Z;
+            const float z = 0.0f;
             const float sourceLeft = textureSourceRect.X;
             const float sourceTop = textureSourceRect.Y;
             const float sourceRight = textureSourceRect.X + textureSourceRect.Z;
@@ -624,25 +647,23 @@ namespace helengine::psp::rendering {
 
     /// Rebuilds one cached rounded-rectangle entry from the drawable's current authored state.
     void PspRenderManager2D::RebuildRoundedRectGeometryCacheEntry(RoundedRectGeometryCacheEntry& cacheEntry, IRoundedRectDrawable2D* shape) {
-        const float3 position = shape->get_Parent()->get_Position();
         const int2 size = shape->get_Size();
         const int32_t borderThickness = std::max<int32_t>(0, static_cast<int32_t>(std::lround(shape->get_BorderThickness())));
         const float radius = std::max(0.0f, shape->get_Radius());
+        const byte4 fillColor = shape->get_FillColor();
+        const byte4 borderColor = shape->get_BorderColor();
         const int32_t innerWidth = size.X - (borderThickness * 2);
         const int32_t innerHeight = size.Y - (borderThickness * 2);
 
-        cacheEntry.Position = position;
         cacheEntry.Size = size;
         cacheEntry.Radius = shape->get_Radius();
         cacheEntry.BorderThickness = shape->get_BorderThickness();
-        cacheEntry.FillColor = shape->get_FillColor();
-        cacheEntry.BorderColor = shape->get_BorderColor();
         cacheEntry.HasBorder = borderThickness > 0;
         cacheEntry.HasInnerFill = innerWidth > 0 && innerHeight > 0;
-        cacheEntry.BorderPosition = position;
+        cacheEntry.BorderPosition = float3(0.0f, 0.0f, 0.0f);
         cacheEntry.BorderSize = size;
         cacheEntry.BorderRadius = radius;
-        cacheEntry.InnerFillPosition = float3(position.X + borderThickness, position.Y + borderThickness, position.Z);
+        cacheEntry.InnerFillPosition = float3(static_cast<float>(borderThickness), static_cast<float>(borderThickness), 0.0f);
         cacheEntry.InnerFillSize = int2(innerWidth, innerHeight);
         cacheEntry.InnerFillRadius = std::max(0.0f, radius - borderThickness);
         cacheEntry.BorderVertices.clear();
@@ -658,7 +679,22 @@ namespace helengine::psp::rendering {
                 cacheEntry.BorderUsesSolidQuad = true;
             } else {
                 const int32_t roundedRadius = std::max<int32_t>(1, static_cast<int32_t>(std::lround(clampedBorderRadius)));
-                AppendRoundedCornerVertices(cacheEntry.BorderVertices, cacheEntry.BorderPosition, cacheEntry.BorderSize, roundedRadius, cacheEntry.BorderColor);
+                AppendSolidQuadVertices(
+                    cacheEntry.BorderVertices,
+                    float3(cacheEntry.BorderPosition.X + roundedRadius, cacheEntry.BorderPosition.Y, cacheEntry.BorderPosition.Z),
+                    int2(std::max<int32_t>(1, cacheEntry.BorderSize.X - (roundedRadius * 2)), cacheEntry.BorderSize.Y),
+                    borderColor);
+                AppendSolidQuadVertices(
+                    cacheEntry.BorderVertices,
+                    float3(cacheEntry.BorderPosition.X, cacheEntry.BorderPosition.Y + roundedRadius, cacheEntry.BorderPosition.Z),
+                    int2(roundedRadius, std::max<int32_t>(1, cacheEntry.BorderSize.Y - (roundedRadius * 2))),
+                    borderColor);
+                AppendSolidQuadVertices(
+                    cacheEntry.BorderVertices,
+                    float3(cacheEntry.BorderPosition.X + cacheEntry.BorderSize.X - roundedRadius, cacheEntry.BorderPosition.Y + roundedRadius, cacheEntry.BorderPosition.Z),
+                    int2(roundedRadius, std::max<int32_t>(1, cacheEntry.BorderSize.Y - (roundedRadius * 2))),
+                    borderColor);
+                AppendRoundedCornerVertices(cacheEntry.BorderVertices, cacheEntry.BorderPosition, cacheEntry.BorderSize, roundedRadius, borderColor);
             }
         }
 
@@ -670,7 +706,22 @@ namespace helengine::psp::rendering {
                 cacheEntry.InnerFillUsesSolidQuad = true;
             } else {
                 const int32_t roundedRadius = std::max<int32_t>(1, static_cast<int32_t>(std::lround(clampedInnerRadius)));
-                AppendRoundedCornerVertices(cacheEntry.InnerFillVertices, cacheEntry.InnerFillPosition, cacheEntry.InnerFillSize, roundedRadius, cacheEntry.FillColor);
+                AppendSolidQuadVertices(
+                    cacheEntry.InnerFillVertices,
+                    float3(cacheEntry.InnerFillPosition.X + roundedRadius, cacheEntry.InnerFillPosition.Y, cacheEntry.InnerFillPosition.Z),
+                    int2(std::max<int32_t>(1, cacheEntry.InnerFillSize.X - (roundedRadius * 2)), cacheEntry.InnerFillSize.Y),
+                    fillColor);
+                AppendSolidQuadVertices(
+                    cacheEntry.InnerFillVertices,
+                    float3(cacheEntry.InnerFillPosition.X, cacheEntry.InnerFillPosition.Y + roundedRadius, cacheEntry.InnerFillPosition.Z),
+                    int2(roundedRadius, std::max<int32_t>(1, cacheEntry.InnerFillSize.Y - (roundedRadius * 2))),
+                    fillColor);
+                AppendSolidQuadVertices(
+                    cacheEntry.InnerFillVertices,
+                    float3(cacheEntry.InnerFillPosition.X + cacheEntry.InnerFillSize.X - roundedRadius, cacheEntry.InnerFillPosition.Y + roundedRadius, cacheEntry.InnerFillPosition.Z),
+                    int2(roundedRadius, std::max<int32_t>(1, cacheEntry.InnerFillSize.Y - (roundedRadius * 2))),
+                    fillColor);
+                AppendRoundedCornerVertices(cacheEntry.InnerFillVertices, cacheEntry.InnerFillPosition, cacheEntry.InnerFillSize, roundedRadius, fillColor);
             }
         }
     }
@@ -717,18 +768,32 @@ namespace helengine::psp::rendering {
         }
     }
 
+    /// Overwrites the packed color on one cached triangle list without changing its geometry.
+    void PspRenderManager2D::ApplyColorToVertices(std::vector<Psp2DVertex>& vertices, const byte4& color) {
+        const std::uint32_t packedColor = ConvertColorToAbgr(color);
+        for (Psp2DVertex& vertex : vertices) {
+            vertex.Color = packedColor;
+        }
+    }
+
     /// Returns whether one text drawable should render through a pre-rendered static surface.
     bool PspRenderManager2D::ShouldUseStaticTextSurface(ITextDrawable2D* text) const {
-        if (text == nullptr) {
-            return false;
+        (void)text;
+        return false;
+    }
+
+    /// Returns the next power-of-two texture dimension required by the PSP GU.
+    int32_t PspRenderManager2D::GetNextPowerOfTwoDimension(int32_t value) {
+        if (value <= 1) {
+            return 1;
         }
 
-        Entity* parent = text->get_Parent();
-        if (parent == nullptr) {
-            return false;
+        int32_t dimension = 1;
+        while (dimension < value) {
+            dimension <<= 1;
         }
 
-        return parent->get_Static();
+        return dimension;
     }
 
     /// Rebuilds the pre-rendered static text surface for one cached entry.
@@ -760,17 +825,19 @@ namespace helengine::psp::rendering {
             return;
         }
 
-        const int32_t surfaceWidth = std::max<int32_t>(1, static_cast<int32_t>(std::ceil(maximumX - minimumX)));
-        const int32_t surfaceHeight = std::max<int32_t>(1, static_cast<int32_t>(std::ceil(maximumY - minimumY)));
-        std::vector<std::uint32_t> surfacePixels(static_cast<std::size_t>(surfaceWidth) * static_cast<std::size_t>(surfaceHeight), 0u);
+        const int32_t visibleSurfaceWidth = std::max<int32_t>(1, static_cast<int32_t>(std::ceil(maximumX - minimumX)));
+        const int32_t visibleSurfaceHeight = std::max<int32_t>(1, static_cast<int32_t>(std::ceil(maximumY - minimumY)));
+        const int32_t textureWidth = GetNextPowerOfTwoDimension(visibleSurfaceWidth);
+        const int32_t textureHeight = GetNextPowerOfTwoDimension(visibleSurfaceHeight);
+        std::vector<std::uint32_t> surfacePixels(static_cast<std::size_t>(textureWidth) * static_cast<std::size_t>(textureHeight), 0u);
 
         const std::uint32_t* atlasPixels = atlasTexture->GetPixelsAbgr8888();
         const int32_t atlasWidth = atlasTexture->get_Width();
         const int32_t atlasHeight = atlasTexture->get_Height();
         const double fontScale = std::max(static_cast<double>(cacheEntry.FontScale), 0.0001d);
         const double lineHeight = std::max(static_cast<double>(font->get_LineHeight()) * fontScale, 1.0d);
-        const double baseX = std::round(cacheEntry.Position.X);
-        const double baseY = std::round(cacheEntry.Position.Y);
+        const double baseX = 0.0;
+        const double baseY = 0.0;
 
         double offsetX = 0.0;
         double offsetY = 0.0;
@@ -800,8 +867,8 @@ namespace helengine::psp::rendering {
             const double drawBottom = std::round(baseY + snappedLineOffsetY + (glyph.OffsetY * fontScale) + glyphHeight);
             const int32_t destinationLeft = std::max<int32_t>(0, static_cast<int32_t>(std::lround(drawX - minimumX)));
             const int32_t destinationTop = std::max<int32_t>(0, static_cast<int32_t>(std::lround(drawY - minimumY)));
-            const int32_t destinationRight = std::min<int32_t>(surfaceWidth, static_cast<int32_t>(std::lround(std::max(drawX + 1.0, drawRight) - minimumX)));
-            const int32_t destinationBottom = std::min<int32_t>(surfaceHeight, static_cast<int32_t>(std::lround(std::max(drawY + 1.0, drawBottom) - minimumY)));
+            const int32_t destinationRight = std::min<int32_t>(visibleSurfaceWidth, static_cast<int32_t>(std::lround(std::max(drawX + 1.0, drawRight) - minimumX)));
+            const int32_t destinationBottom = std::min<int32_t>(visibleSurfaceHeight, static_cast<int32_t>(std::lround(std::max(drawY + 1.0, drawBottom) - minimumY)));
             const int32_t destinationWidth = destinationRight - destinationLeft;
             const int32_t destinationHeight = destinationBottom - destinationTop;
             if (destinationWidth > 0 && destinationHeight > 0) {
@@ -830,7 +897,7 @@ namespace helengine::psp::rendering {
                             cacheEntry.Color);
                         BlendAbgrPixel(
                             tintedPixel,
-                            surfacePixels[(targetY * surfaceWidth) + targetX]);
+                            surfacePixels[(targetY * textureWidth) + targetX]);
                     }
                 }
             }
@@ -844,11 +911,16 @@ namespace helengine::psp::rendering {
         ReleaseStaticTextSurface(cacheEntry);
         cacheEntry.StaticSurfaceTexture = new PspRuntimeTexture();
         cacheEntry.StaticSurfaceTexture->set_Id("engine:psp:static-text-surface");
-        cacheEntry.StaticSurfaceTexture->set_Width(surfaceWidth);
-        cacheEntry.StaticSurfaceTexture->set_Height(surfaceHeight);
+        cacheEntry.StaticSurfaceTexture->set_Width(textureWidth);
+        cacheEntry.StaticSurfaceTexture->set_Height(textureHeight);
         cacheEntry.StaticSurfaceTexture->SetPixelsAbgr8888(std::move(surfacePixels));
-        cacheEntry.StaticSurfacePosition = float3(minimumX, minimumY, cacheEntry.Position.Z);
-        cacheEntry.StaticSurfaceSize = int2(surfaceWidth, surfaceHeight);
+        cacheEntry.StaticSurfacePosition = float3(minimumX, minimumY, 0.0f);
+        cacheEntry.StaticSurfaceSize = int2(visibleSurfaceWidth, visibleSurfaceHeight);
+        cacheEntry.StaticSurfaceSourceRect = float4(
+            0.0f,
+            0.0f,
+            static_cast<float>(visibleSurfaceWidth) / static_cast<float>(textureWidth),
+            static_cast<float>(visibleSurfaceHeight) / static_cast<float>(textureHeight));
     }
 
     /// Releases one cached static text surface texture when the cache entry changes ownership.
@@ -860,6 +932,7 @@ namespace helengine::psp::rendering {
 
         cacheEntry.StaticSurfacePosition = float3();
         cacheEntry.StaticSurfaceSize = int2();
+        cacheEntry.StaticSurfaceSourceRect = float4();
     }
 
     /// Clears all cached 2D geometry so subsequent draws rebuild from current authored state.
@@ -960,6 +1033,47 @@ namespace helengine::psp::rendering {
             drawArrayMicroseconds);
     }
 
+    /// Draws one textured 2D triangle list after applying one world-space offset to cached local vertices.
+    void PspRenderManager2D::DrawTexturedTrianglesTranslated(const Psp2DVertex* vertices, std::size_t vertexCount, RuntimeTexture* texture, const float3& positionOffset) {
+        const std::uint64_t drawStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+        if (vertices == nullptr || vertexCount < 3 || texture == nullptr) {
+            return;
+        }
+
+        PspRuntimeTexture* pspTexture = dynamic_cast<PspRuntimeTexture*>(texture);
+        if (pspTexture == nullptr) {
+            throw std::runtime_error("PSP 2D triangle draws must use PSP runtime textures.");
+        }
+
+        if (pspTexture != GetWhiteTexture()) {
+            FlushPendingWhiteTriangles();
+        }
+
+        BindTexture(pspTexture);
+        sceGuDisable(GU_DEPTH_TEST);
+        Psp2DVertex* drawVertices = static_cast<Psp2DVertex*>(sceGuGetMemory(sizeof(Psp2DVertex) * vertexCount));
+        for (std::size_t index = 0; index < vertexCount; index++) {
+            drawVertices[index] = vertices[index];
+            drawVertices[index].X += positionOffset.X;
+            drawVertices[index].Y += positionOffset.Y;
+            drawVertices[index].Z += positionOffset.Z;
+        }
+
+        const std::uint64_t drawArrayStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+        sceGuDrawArray(
+            GU_TRIANGLES,
+            GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D,
+            static_cast<int>(vertexCount),
+            nullptr,
+            drawVertices);
+        const std::uint64_t drawArrayMicroseconds = PspRenderProfiler::GetTimestampMicroseconds() - drawArrayStartMicroseconds;
+        PspRenderProfiler::Record2DTexturedTriangles(
+            pspTexture,
+            vertexCount,
+            PspRenderProfiler::GetTimestampMicroseconds() - drawStartMicroseconds,
+            drawArrayMicroseconds);
+    }
+
     /// Resolves one drawable's nested clip regions into one effective rectangle in screen coordinates.
     bool PspRenderManager2D::TryResolveClipRect(IDrawable2D* drawable, float4& clipRect) {
         ClipRegionStackBuilder.BuildClipChain(drawable, &ClipChain);
@@ -990,9 +1104,11 @@ namespace helengine::psp::rendering {
         const int top = std::clamp(static_cast<int>(std::floor(clipRect.Y)), 0, PspScreenHeight);
         const int right = std::clamp(static_cast<int>(std::ceil(clipRect.X + clipRect.Z)), left, PspScreenWidth);
         const int bottom = std::clamp(static_cast<int>(std::ceil(clipRect.Y + clipRect.W)), top, PspScreenHeight);
+        const int width = std::max(0, right - left);
+        const int height = std::max(0, bottom - top);
 
         sceGuEnable(GU_SCISSOR_TEST);
-        sceGuScissor(left, top, right, bottom);
+        sceGuScissor(left, top, width, height);
 
         HasActiveClipRect = true;
         ActiveClipRect = clipRect;

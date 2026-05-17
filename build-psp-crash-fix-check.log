@@ -1,0 +1,3 @@
+Using launch settings from C:\dev\helworks\helengine\helengine.ui\helengine.editor.app\Properties\launchSettings.json...
+Build completed for platform 'psp': C:\dev\helprojs\output\psp-crash-fix-check
+Enabled runtime features: HostFileSystem (AutoDetected), Render2D (AutoDetected), Sprites (AutoDetected), Text2D (AutoDetected), TextProcessing (AutoDetected). Disabled runtime features: DebugOverlay (NotIncluded), ReflectionLikeRuntime (NotIncluded), RuntimeJson (NotIncluded), Shaders (NotIncluded).

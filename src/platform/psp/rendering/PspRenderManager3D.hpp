@@ -28,6 +28,12 @@ namespace helengine::psp::rendering {
         /// Builds a runtime material placeholder and captures the authored base color.
         RuntimeMaterial* BuildMaterialFromRaw(MaterialAsset* materialAsset, ShaderAsset* shaderAsset) override;
 
+        /// Releases one PSP runtime model after the final scene reference is removed.
+        void ReleaseModel(RuntimeModel* model) override;
+
+        /// Releases one PSP runtime material after the final scene reference is removed.
+        void ReleaseMaterial(RuntimeMaterial* material) override;
+
         /// Wires the paired PSP 2D renderer used for per-camera UI submission.
         void SetRenderManager2D(PspRenderManager2D* renderManager2D);
 
@@ -63,14 +69,16 @@ namespace helengine::psp::rendering {
         void SubmitFixedFunctionDrawable(
             const class PspRuntimeModel* runtimeModel,
             const float4& baseColor,
-            bool useLighting);
+            bool useLighting,
+            const float3* positionScale);
 
         /// Submits one drawable through the current fixed-function textured lighting path.
         void SubmitFixedFunctionTexturedDrawable(
             const class PspRuntimeModel* runtimeModel,
             const float4& baseColor,
             bool useLighting,
-            class PspRuntimeTexture* texture);
+            class PspRuntimeTexture* texture,
+            const float3* positionScale);
 
         /// Resolves the active scene lighting for the current render pass.
         void ResolveSceneLighting();

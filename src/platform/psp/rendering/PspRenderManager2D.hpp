@@ -77,9 +77,6 @@ namespace helengine::psp::rendering {
             /// Stores the authored text content before wrapping so cache invalidation can track source changes correctly.
             std::string RawText;
 
-            /// Stores the parent position baked into the cached vertices.
-            float3 Position = float3();
-
             /// Stores the text layout size used for wrapping.
             int2 Size = int2();
 
@@ -107,6 +104,9 @@ namespace helengine::psp::rendering {
             /// Stores the tight size of the static text surface.
             int2 StaticSurfaceSize = int2();
 
+            /// Stores the normalized source rectangle that maps the visible text content inside the padded PSP texture.
+            float4 StaticSurfaceSourceRect = float4();
+
             /// Stores the cached textured triangle vertices for this text block.
             std::vector<Psp2DVertex> Vertices;
         };
@@ -116,9 +116,6 @@ namespace helengine::psp::rendering {
             /// Stores the drawable instance that owns this cached rounded-rectangle geometry.
             IRoundedRectDrawable2D* Drawable = nullptr;
 
-            /// Stores the parent position baked into the cached border geometry.
-            float3 Position = float3();
-
             /// Stores the destination size used when the cache was built.
             int2 Size = int2();
 
@@ -127,12 +124,6 @@ namespace helengine::psp::rendering {
 
             /// Stores the border thickness used when the cache was built.
             float BorderThickness = 0.0f;
-
-            /// Stores the fill color used when the cache was built.
-            byte4 FillColor = byte4();
-
-            /// Stores the border color used when the cache was built.
-            byte4 BorderColor = byte4();
 
             /// Stores whether the border geometry should be emitted.
             bool HasBorder = false;
@@ -216,14 +207,20 @@ namespace helengine::psp::rendering {
         /// Draws one filled rounded rectangle using textured white geometry and triangle fans for the corners.
         void DrawFilledRoundedRect(const float3& position, const int2& size, float radius, const byte4& color);
 
-        /// Draws one cached rounded rectangle using the supplied cached geometry entry.
-        void DrawCachedRoundedRectGeometry(const RoundedRectGeometryCacheEntry& entry);
+        /// Draws one cached rounded rectangle using the supplied cached geometry entry, current world-space offset, and authored colors.
+        void DrawCachedRoundedRectGeometry(const RoundedRectGeometryCacheEntry& entry, const float3& positionOffset, const byte4& fillColor, const byte4& borderColor);
 
         /// Appends one solid-colored quad to the pending white-texture batch.
         void AppendSolidQuadToWhiteBatch(const float3& position, const int2& size, const byte4& color);
 
+        /// Appends one solid-colored quad directly to one cached white-triangle vertex list.
+        void AppendSolidQuadVertices(std::vector<Psp2DVertex>& vertices, const float3& position, const int2& size, const byte4& color);
+
         /// Appends one list of white-texture triangles to the pending batch.
         void AppendWhiteTrianglesToBatch(const std::vector<Psp2DVertex>& vertices);
+
+        /// Appends one list of white-texture triangles to the pending batch after applying one world-space offset.
+        void AppendWhiteTrianglesToBatchTranslated(const std::vector<Psp2DVertex>& vertices, const float3& positionOffset);
 
         /// Flushes any pending white-texture batch before state changes or frame completion.
         void FlushPendingWhiteTriangles();
@@ -243,6 +240,12 @@ namespace helengine::psp::rendering {
         /// Appends rounded-corner triangle fan geometry to the supplied vertex list.
         void AppendRoundedCornerVertices(std::vector<Psp2DVertex>& vertices, const float3& position, const int2& size, int32_t roundedRadius, const byte4& color);
 
+        /// Overwrites the packed color on one cached triangle list without changing its geometry.
+        void ApplyColorToVertices(std::vector<Psp2DVertex>& vertices, const byte4& color);
+
+        /// Returns the next power-of-two texture dimension required by the PSP GU.
+        static int32_t GetNextPowerOfTwoDimension(int32_t value);
+
         /// Returns whether one text drawable should render through a pre-rendered static surface.
         bool ShouldUseStaticTextSurface(ITextDrawable2D* text) const;
 
@@ -257,6 +260,9 @@ namespace helengine::psp::rendering {
 
         /// Draws one textured 2D triangle list using the PSP GU textured vertex path.
         void DrawTexturedTriangles(const Psp2DVertex* vertices, std::size_t vertexCount, RuntimeTexture* texture);
+
+        /// Draws one textured 2D triangle list using the PSP GU textured vertex path after applying one world-space offset.
+        void DrawTexturedTrianglesTranslated(const Psp2DVertex* vertices, std::size_t vertexCount, RuntimeTexture* texture, const float3& positionOffset);
 
         /// Resolves the authored clip-region stack for one drawable into one effective screen-space clip rectangle.
         bool TryResolveClipRect(IDrawable2D* drawable, float4& clipRect);

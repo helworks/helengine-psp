@@ -410,6 +410,7 @@ namespace helengine::psp {
                     LastTracedLoadedSceneCount = loadedSceneCount;
                     LastTracedPrimarySceneId = primarySceneId;
                 }
+
             }
 
             if (ReturnTransitionTraceFramesRemaining > 0) {

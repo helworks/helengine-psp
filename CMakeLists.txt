@@ -8,6 +8,8 @@ set(CMAKE_CXX_EXTENSIONS ON)
 
 option(HELENGINE_PSP_ISOLATED_BOOT "Build the PSP player in isolated blank-frame boot mode." ON)
 option(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP "Build the PSP player with checkpointed runtime startup enabled." OFF)
+option(HELENGINE_PSP_ENABLE_BOOT_TRACE "Enable PSP boot-trace file logging." OFF)
+option(HELENGINE_PSP_ENABLE_RENDER_PROFILER "Enable PSP renderer timing capture and trace emission." OFF)
 
 if(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP)
     set(HELENGINE_PSP_REQUIRES_RUNTIME_MANIFESTS ON)
@@ -75,6 +77,14 @@ endif()
 
 if(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP)
     target_compile_definitions(${PROJECT_NAME} PRIVATE HELENGINE_PSP_ENABLE_RUNTIME_STARTUP=1)
+endif()
+
+if(HELENGINE_PSP_ENABLE_BOOT_TRACE)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE HELENGINE_PSP_ENABLE_BOOT_TRACE=1)
+endif()
+
+if(HELENGINE_PSP_ENABLE_RENDER_PROFILER)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE HELENGINE_PSP_ENABLE_RENDER_PROFILER=1)
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE

@@ -6,6 +6,7 @@ using helengine.baseplatform.Requests;
 using helengine.baseplatform.Targets;
 using helengine.baseplatform.Results;
 using helengine;
+using helengine.editor;
 
 namespace helengine.psp.builder.tests;
 
@@ -41,6 +42,14 @@ public sealed class PspPlatformAssetBuilderTests {
             supportRule.ComponentTypeId == "helengine.directionalshadowtowerspincomponent");
         Assert.Contains(builder.Definition.ComponentSupportRules, supportRule =>
             supportRule.ComponentTypeId == "city.menu.demodiscreturntomenucomponent, gameplay");
+        Assert.Contains(builder.Definition.AssetCookCapabilities, capability =>
+            capability.SourceAssetKind == "texture"
+            && capability.TargetArtifactKind == "texture"
+            && capability.OwnershipKind == PlatformAssetCookOwnershipKind.BuilderOwned);
+        Assert.Contains(builder.Definition.AssetCookCapabilities, capability =>
+            capability.SourceAssetKind == "font-atlas-texture"
+            && capability.TargetArtifactKind == "font"
+            && capability.OwnershipKind == PlatformAssetCookOwnershipKind.BuilderOwned);
     }
 
     /// <summary>
@@ -605,5 +614,513 @@ public sealed class PspPlatformAssetBuilderTests {
             } catch {
             }
         }
+    }
+
+    /// <summary>
+    /// Verifies the PSP builder executes one builder-owned texture cook work item into the exact declared runtime output path.
+    /// </summary>
+    [Fact]
+    public async Task BuildAsync_whenGivenTexturePlatformCookWorkItem_writesCookedRuntimeTextureToDeclaredOutputPath() {
+        string workingRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string outputRoot = Path.Combine(workingRoot, "out");
+        string sourceRoot = Path.Combine(workingRoot, "staging");
+        string generatedCoreRoot = Path.Combine(workingRoot, "generated-core");
+        string generatedCoreRuntimeRoot = Path.Combine(generatedCoreRoot, "runtime");
+        string repositoryRoot = Path.Combine(workingRoot, "repository");
+        string sceneSourcePath = Path.Combine(sourceRoot, "cooked", "scenes", "rendering", "cube_test.hasset");
+        string sourceTexturePath = Path.Combine(workingRoot, "assets", "Textures", "Checker.png");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(sceneSourcePath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(sourceTexturePath)!);
+        Directory.CreateDirectory(generatedCoreRuntimeRoot);
+        Directory.CreateDirectory(Path.Combine(repositoryRoot, "src", "platform", "psp"));
+        File.WriteAllText(sceneSourcePath, "scene payload");
+        File.WriteAllBytes(sourceTexturePath, [1, 2, 3, 4]);
+        File.WriteAllText(Path.Combine(generatedCoreRoot, "helengine_core_amalgamated.cpp"), "// generated");
+        File.WriteAllText(Path.Combine(generatedCoreRoot, "helcpp_config.hpp"), "#pragma once");
+        File.WriteAllText(Path.Combine(generatedCoreRuntimeRoot, "runtime_startup_manifest.cpp"), "// startup");
+        File.WriteAllText(Path.Combine(generatedCoreRuntimeRoot, "runtime_scene_catalog_manifest.cpp"), "// scene catalog");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Makefile"), "# fake");
+        File.WriteAllText(Path.Combine(repositoryRoot, "src", "platform", "psp", "PspBootHost.cpp"), "// fake");
+
+        string previousDirectory = Directory.GetCurrentDirectory();
+        string previousRepositoryRoot = Environment.GetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT");
+        try {
+            Directory.SetCurrentDirectory(sourceRoot);
+            Environment.SetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT", repositoryRoot);
+
+            PlatformBuildManifest manifest = new(
+                3,
+                "city",
+                "1.0.0",
+                "1.0.0",
+                "psp",
+                "1.0.0",
+                "scenes/rendering/cube_test.helen",
+                [
+                    new PlatformBuildScene(
+                        "scenes/rendering/cube_test.helen",
+                        "Cube Test",
+                        "cooked/scenes/rendering/cube_test.hasset",
+                        [],
+                        [new KeyValuePair<string, string>("cooked-relative-path", "cooked/scenes/rendering/cube_test.hasset")])
+                ],
+                Array.Empty<PlatformBuildAsset>(),
+                [
+                    new PlatformBuildArtifact("cooked/scenes/rendering/cube_test.hasset", "scene:cube-test", "sha256:scene", "scene", "shared")
+                ],
+                Array.Empty<PlatformBuildCodeModule>(),
+                Array.Empty<PlatformArtifactPlacement>(),
+                new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()),
+                [
+                    new PlatformCookWorkItem(
+                        "psp:texture:cooked/imported/textures/checker",
+                        sourceTexturePath,
+                        "texture",
+                        "psp",
+                        "texture",
+                        "cooked/imported/textures/checker",
+                        "texture:cooked/imported/textures/checker",
+                        "sha256:source",
+                        "sha256:settings",
+                        PspTextureCookSettingsSerializer.Serialize(new TextureAssetProcessorSettings {
+                            MaxResolution = 0,
+                            ColorFormat = TextureAssetColorFormat.Rgba4444,
+                            AlphaPrecision = TextureAssetAlphaPrecision.A4
+                        }),
+                        [
+                            new PlatformCookWorkItemMetadata("source-asset-id", "Textures/Checker")
+                        ])
+                ]);
+
+            PlatformBuildRequest request = CreateBuildRequest(workingRoot, outputRoot, generatedCoreRoot, manifest);
+            TextureAsset expectedTextureAsset = new TextureAsset {
+                Width = 1,
+                Height = 1,
+                ColorFormat = TextureAssetColorFormat.Rgba4444,
+                AlphaPrecision = TextureAssetAlphaPrecision.A4,
+                Colors = [0xFF, 0x0F]
+            };
+            FontAsset expectedFontAsset = CreateTestFontAsset();
+            FakePspPlatformCookSourceProcessor sourceProcessor = new FakePspPlatformCookSourceProcessor(expectedTextureAsset, expectedFontAsset);
+            PspPlatformAssetBuilder builder = new(
+                new FakePspNativeBuildExecutor(),
+                sourceProcessor);
+
+            PlatformBuildReport report = await builder.BuildAsync(
+                request,
+                new RecordingProgressReporter(),
+                new RecordingDiagnosticReporter(),
+                CancellationToken.None);
+
+            Assert.True(report.Succeeded);
+
+            string outputTexturePath = Path.Combine(outputRoot, "PSP", "GAME", "HELENGINE", "cooked", "imported", "textures", "checker");
+            Assert.True(File.Exists(outputTexturePath));
+
+            TextureAsset outputTextureAsset = Assert.IsType<TextureAsset>(AssetSerializer.DeserializeFromBytes(File.ReadAllBytes(outputTexturePath)));
+            Assert.Equal("Textures/Checker", outputTextureAsset.Id);
+            Assert.Equal(RuntimeAssetIdGenerator.Generate("Textures/Checker"), outputTextureAsset.RuntimeAssetId);
+            Assert.Equal(TextureAssetColorFormat.Rgba4444, outputTextureAsset.ColorFormat);
+            Assert.Equal(TextureAssetAlphaPrecision.A4, outputTextureAsset.AlphaPrecision);
+            Assert.Equal(expectedTextureAsset.Colors, outputTextureAsset.Colors);
+        } finally {
+            try {
+                Directory.SetCurrentDirectory(previousDirectory);
+            } catch {
+            }
+
+            try {
+                Environment.SetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT", previousRepositoryRoot);
+            } catch {
+            }
+
+            try {
+                if (Directory.Exists(workingRoot)) {
+                    Directory.Delete(workingRoot, true);
+                }
+            } catch {
+            }
+        }
+    }
+
+    /// <summary>
+    /// Verifies the PSP builder executes one builder-owned font-atlas cook work item into the exact declared runtime output path.
+    /// </summary>
+    [Fact]
+    public async Task BuildAsync_whenGivenFontAtlasPlatformCookWorkItem_writesCookedRuntimeFontToDeclaredOutputPath() {
+        string workingRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string outputRoot = Path.Combine(workingRoot, "out");
+        string sourceRoot = Path.Combine(workingRoot, "staging");
+        string generatedCoreRoot = Path.Combine(workingRoot, "generated-core");
+        string generatedCoreRuntimeRoot = Path.Combine(generatedCoreRoot, "runtime");
+        string repositoryRoot = Path.Combine(workingRoot, "repository");
+        string sceneSourcePath = Path.Combine(sourceRoot, "cooked", "scenes", "rendering", "cube_test.hasset");
+        string sourceFontPath = Path.Combine(workingRoot, "assets", "Fonts", "Demo.ttf");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(sceneSourcePath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(sourceFontPath)!);
+        Directory.CreateDirectory(generatedCoreRuntimeRoot);
+        Directory.CreateDirectory(Path.Combine(repositoryRoot, "src", "platform", "psp"));
+        File.WriteAllText(sceneSourcePath, "scene payload");
+        File.WriteAllBytes(sourceFontPath, [1, 2, 3, 4]);
+        File.WriteAllText(Path.Combine(generatedCoreRoot, "helengine_core_amalgamated.cpp"), "// generated");
+        File.WriteAllText(Path.Combine(generatedCoreRoot, "helcpp_config.hpp"), "#pragma once");
+        File.WriteAllText(Path.Combine(generatedCoreRuntimeRoot, "runtime_startup_manifest.cpp"), "// startup");
+        File.WriteAllText(Path.Combine(generatedCoreRuntimeRoot, "runtime_scene_catalog_manifest.cpp"), "// scene catalog");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Makefile"), "# fake");
+        File.WriteAllText(Path.Combine(repositoryRoot, "src", "platform", "psp", "PspBootHost.cpp"), "// fake");
+
+        string previousDirectory = Directory.GetCurrentDirectory();
+        string previousRepositoryRoot = Environment.GetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT");
+        try {
+            Directory.SetCurrentDirectory(sourceRoot);
+            Environment.SetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT", repositoryRoot);
+
+            PlatformBuildManifest manifest = new(
+                3,
+                "city",
+                "1.0.0",
+                "1.0.0",
+                "psp",
+                "1.0.0",
+                "scenes/rendering/cube_test.helen",
+                [
+                    new PlatformBuildScene(
+                        "scenes/rendering/cube_test.helen",
+                        "Cube Test",
+                        "cooked/scenes/rendering/cube_test.hasset",
+                        [],
+                        [new KeyValuePair<string, string>("cooked-relative-path", "cooked/scenes/rendering/cube_test.hasset")])
+                ],
+                Array.Empty<PlatformBuildAsset>(),
+                [
+                    new PlatformBuildArtifact("cooked/scenes/rendering/cube_test.hasset", "scene:cube-test", "sha256:scene", "scene", "shared")
+                ],
+                Array.Empty<PlatformBuildCodeModule>(),
+                Array.Empty<PlatformArtifactPlacement>(),
+                new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()),
+                [
+                    new PlatformCookWorkItem(
+                        "psp:font-atlas-texture:cooked/fonts/default.hefont",
+                        sourceFontPath,
+                        "font-atlas-texture",
+                        "psp",
+                        "font",
+                        "cooked/fonts/default.hefont",
+                        "font:cooked/fonts/default.hefont",
+                        "sha256:source",
+                        "sha256:settings",
+                        PspTextureCookSettingsSerializer.Serialize(new TextureAssetProcessorSettings {
+                            MaxResolution = 128,
+                            ColorFormat = TextureAssetColorFormat.Rgba4444,
+                            AlphaPrecision = TextureAssetAlphaPrecision.A4
+                        }),
+                        [
+                            new PlatformCookWorkItemMetadata("source-asset-id", "fonts/default.hefont")
+                        ])
+                ]);
+
+            PlatformBuildRequest request = CreateBuildRequest(workingRoot, outputRoot, generatedCoreRoot, manifest);
+            TextureAsset expectedTextureAsset = new TextureAsset {
+                Width = 1,
+                Height = 1,
+                ColorFormat = TextureAssetColorFormat.Rgba4444,
+                AlphaPrecision = TextureAssetAlphaPrecision.A4,
+                Colors = [0xFF, 0x0F]
+            };
+            FontAsset expectedFontAsset = CreateTestFontAsset();
+            FakePspPlatformCookSourceProcessor sourceProcessor = new FakePspPlatformCookSourceProcessor(expectedTextureAsset, expectedFontAsset);
+            PspPlatformAssetBuilder builder = new(
+                new FakePspNativeBuildExecutor(),
+                sourceProcessor);
+
+            PlatformBuildReport report = await builder.BuildAsync(
+                request,
+                new RecordingProgressReporter(),
+                new RecordingDiagnosticReporter(),
+                CancellationToken.None);
+
+            Assert.True(report.Succeeded);
+
+            string outputFontPath = Path.Combine(outputRoot, "PSP", "GAME", "HELENGINE", "cooked", "fonts", "default.hefont");
+            Assert.True(File.Exists(outputFontPath));
+            FontAsset expectedCookedFontAsset = sourceProcessor.CookFont(
+                sourceFontPath,
+                "fonts/default.hefont",
+                new TextureAssetProcessorSettings {
+                    MaxResolution = 128,
+                    ColorFormat = TextureAssetColorFormat.Rgba4444,
+                    AlphaPrecision = TextureAssetAlphaPrecision.A4
+                });
+            byte[] expectedFontBytes;
+            using (MemoryStream expectedStream = new MemoryStream()) {
+                global::helengine.files.FontAssetBinarySerializer.Serialize(expectedStream, expectedCookedFontAsset);
+                expectedFontBytes = expectedStream.ToArray();
+            }
+
+            Assert.Equal(expectedFontBytes, File.ReadAllBytes(outputFontPath));
+        } finally {
+            try {
+                Directory.SetCurrentDirectory(previousDirectory);
+            } catch {
+            }
+
+            try {
+                Environment.SetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT", previousRepositoryRoot);
+            } catch {
+            }
+
+            try {
+                if (Directory.Exists(workingRoot)) {
+                    Directory.Delete(workingRoot, true);
+                }
+            } catch {
+            }
+        }
+    }
+
+    /// <summary>
+    /// Verifies the editor-owned scene packager emits one PSP builder-owned texture work item and omits the duplicate generic cooked artifact.
+    /// </summary>
+    [Fact]
+    public void EditorPackager_whenPspOwnsTextureCooking_emitsPlatformCookWorkItem_and_skipsGenericCookedTexture() {
+        string workspaceRootPath = Path.Combine(Path.GetTempPath(), "helengine-psp-work-item-tests", Guid.NewGuid().ToString("N"));
+        string projectRootPath = workspaceRootPath;
+        string buildRootPath = Path.Combine(workspaceRootPath, "Build");
+        string sceneId = "Scenes/TexturedScene.helen";
+        string materialRelativePath = "Materials/TestMaterial.hasset";
+        string textureRelativePath = "Textures/Checker.png";
+
+        Directory.CreateDirectory(Path.Combine(projectRootPath, "assets"));
+        Directory.CreateDirectory(Path.Combine(projectRootPath, "cache", "shader-cache"));
+        Directory.CreateDirectory(buildRootPath);
+
+        try {
+            string textureAssetId = WriteSourceTextureAssetAndReturnAssetId(projectRootPath, textureRelativePath, "psp");
+            WritePspMaterialAsset(projectRootPath, materialRelativePath, textureAssetId);
+            WriteSceneAssetWithMaterial(projectRootPath, sceneId, materialRelativePath);
+            PspPlatformAssetBuilder builder = new(new FakePspNativeBuildExecutor(), new FakePspPlatformCookSourceProcessor(
+                new TextureAsset {
+                    Width = 1,
+                    Height = 1,
+                    Colors = [255, 255, 255, 255]
+                },
+                CreateTestFontAsset()));
+
+            EditorPlatformBuildScenePackager packager = new(
+                projectRootPath,
+                [
+                    new TextureImporterRegistration("test-texture", new PspBuilderTestTextureImporter(), [".png"])
+                ],
+                builder.Definition,
+                CreateTestFontAsset(),
+                builder,
+                "debug",
+                "psp-forward");
+
+            EditorPlatformBuildScenePackagerResult result = packager.Package([sceneId], buildRootPath);
+
+            PlatformCookWorkItem workItem = Assert.Single(result.PlatformCookWorkItems);
+            Assert.Equal("texture", workItem.SourceAssetKind);
+            Assert.Equal($"cooked/imported/{textureAssetId}", workItem.OutputRelativePath);
+            Assert.Equal("psp", workItem.TargetPlatformId);
+            Assert.False(File.Exists(Path.Combine(buildRootPath, "cooked", "imported", textureAssetId)));
+        } finally {
+            try {
+                if (Directory.Exists(workspaceRootPath)) {
+                    Directory.Delete(workspaceRootPath, true);
+                }
+            } catch {
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates one fully resolved PSP build request used by builder execution tests.
+    /// </summary>
+    /// <param name="workingRoot">Temporary working root used by the build request.</param>
+    /// <param name="outputRoot">Final output root used by the build request.</param>
+    /// <param name="generatedCoreRoot">Generated core source root used by the build request.</param>
+    /// <param name="manifest">Resolved build manifest consumed by the PSP builder.</param>
+    /// <returns>Fully resolved PSP build request.</returns>
+    static PlatformBuildRequest CreateBuildRequest(string workingRoot, string outputRoot, string generatedCoreRoot, PlatformBuildManifest manifest) {
+        return new PlatformBuildRequest(
+            manifest,
+            [new PlatformBuildTargetVariant("psp-debug", "psp", "psp", "default")],
+            [new PlatformCookProfile(
+                "default",
+                "Default",
+                new PlatformCookProfileCapabilities(
+                    "psp",
+                    "raw",
+                    "rgba",
+                    "psp-scene-v1",
+                    PlatformSerializationEndianness.LittleEndian))],
+            outputRoot,
+            Path.Combine(workingRoot, "tmp"),
+            selectedBuildProfileId: "debug",
+            selectedGraphicsProfileId: "psp-forward",
+            selectedCodegenProfileId: "default",
+            selectedBuildOptionValues: new Dictionary<string, string>(),
+            selectedGraphicsOptionValues: new Dictionary<string, string>(),
+            selectedCodegenOptionValues: new Dictionary<string, string>(),
+            generatedCoreCppRootPath: generatedCoreRoot,
+            selectedMediaProfileId: "psp-game-folder",
+            selectedStorageProfileId: "homebrew-app");
+    }
+
+    /// <summary>
+    /// Creates one deterministic packaged font asset for PSP builder tests.
+    /// </summary>
+    /// <returns>Deterministic packaged font asset.</returns>
+    static FontAsset CreateTestFontAsset() {
+        FontAsset fontAsset = new FontAsset(
+            new FontInfo("TestFont", 16, 4f),
+            new FakeRuntimeTexture {
+                Width = 1,
+                Height = 1
+            },
+            new Dictionary<char, FontChar> {
+                ['A'] = new FontChar {
+                    SourceRect = new float4(0f, 0f, 1f, 1f),
+                    OffsetY = 0f,
+                    AdvanceWidth = 8f,
+                    BearingX = 0f,
+                    BearingY = 0f
+                }
+            },
+            16f,
+            1,
+            1);
+        fontAsset.SourceTextureAsset = new TextureAsset {
+            Id = "fonts/default.hefont#atlas",
+            RuntimeAssetId = RuntimeAssetIdGenerator.Generate("fonts/default.hefont#atlas"),
+            Width = 1,
+            Height = 1,
+            ColorFormat = TextureAssetColorFormat.Rgba4444,
+            AlphaPrecision = TextureAssetAlphaPrecision.A4,
+            Colors = [0xFF, 0x0F]
+        };
+        return fontAsset;
+    }
+
+    /// <summary>
+    /// Writes one source texture file and resolves its imported asset id for PSP editor-owned cook verification.
+    /// </summary>
+    /// <param name="projectRootPath">Temporary editor project root path.</param>
+    /// <param name="textureRelativePath">Project-relative source texture path to create.</param>
+    /// <param name="platformId">Platform identifier used to resolve import settings.</param>
+    /// <returns>Resolved imported texture asset id.</returns>
+    static string WriteSourceTextureAssetAndReturnAssetId(string projectRootPath, string textureRelativePath, string platformId) {
+        string textureSourcePath = Path.Combine(projectRootPath, "assets", textureRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(textureSourcePath)!);
+        File.WriteAllBytes(textureSourcePath, [1, 2, 3, 4]);
+
+        ContentManager contentManager = new ContentManager(projectRootPath);
+        AssetImportManager assetImportManager = new AssetImportManager(projectRootPath, contentManager);
+        assetImportManager.CurrentPlatformId = platformId;
+        assetImportManager.RegisterTextureImporter(new TextureImporterRegistration("test-texture", new PspBuilderTestTextureImporter(), [".png"]));
+
+        TextureAssetImportSettings settings;
+        Assert.True(assetImportManager.TryLoadOrCreateTextureImportSettings(textureSourcePath, out settings));
+        Assert.NotNull(settings);
+        Assert.NotNull(settings.Importer);
+        Assert.False(string.IsNullOrWhiteSpace(settings.Importer.AssetId));
+        return settings.Importer.AssetId;
+    }
+
+    /// <summary>
+    /// Writes one authored PSP material settings document that references the supplied imported diffuse texture id.
+    /// </summary>
+    /// <param name="projectRootPath">Temporary editor project root path.</param>
+    /// <param name="materialRelativePath">Project-relative material path to write.</param>
+    /// <param name="diffuseTextureAssetId">Imported diffuse texture asset id referenced by the material.</param>
+    static void WritePspMaterialAsset(string projectRootPath, string materialRelativePath, string diffuseTextureAssetId) {
+        string materialPath = Path.Combine(projectRootPath, "assets", materialRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(materialPath)!);
+
+        MaterialAssetImportSettings settings = new MaterialAssetImportSettings {
+            Importer = new AssetImporterSettings {
+                ImporterId = "helengine.material",
+                SourceChecksum = string.Empty,
+                AssetId = materialRelativePath
+            },
+            Processor = new MaterialAssetProcessorPlatformSettings()
+        };
+        settings.Processor.Platforms["psp"] = new MaterialAssetProcessorSettings {
+            SchemaId = "standard-shader",
+            FieldValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
+                ["use-custom-shader"] = "false",
+                ["shader-asset-id"] = "engine:material:standard",
+                ["vertex-program"] = "ForwardStandard.vs",
+                ["pixel-program"] = "ForwardStandard.ps",
+                ["variant"] = "Mesh",
+                ["texture-id"] = diffuseTextureAssetId,
+                ["casts-shadow"] = "true",
+                ["receives-shadow"] = "true",
+                ["base-color"] = "#FFFFFFFF"
+            }
+        };
+
+        MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService();
+        settingsService.Save(materialPath, settings);
+    }
+
+    /// <summary>
+    /// Writes one serialized scene asset whose mesh component references the supplied file-backed material.
+    /// </summary>
+    /// <param name="projectRootPath">Temporary editor project root path.</param>
+    /// <param name="sceneId">Stable scene id to write.</param>
+    /// <param name="materialRelativePath">Project-relative material path referenced by the mesh component.</param>
+    static void WriteSceneAssetWithMaterial(string projectRootPath, string sceneId, string materialRelativePath) {
+        string scenePath = Path.Combine(projectRootPath, "assets", sceneId.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(scenePath)!);
+
+        SceneAsset sceneAsset = new SceneAsset {
+            Id = sceneId,
+            RootEntities = [
+                new SceneEntityAsset {
+                    Id = 1u,
+                    Name = "MeshRoot",
+                    LocalPosition = float3.Zero,
+                    LocalScale = float3.One,
+                    LocalOrientation = float4.Identity,
+                    Components = [
+                        new SceneComponentAssetRecord {
+                            ComponentTypeId = "helengine.MeshComponent",
+                            ComponentIndex = 0,
+                            Payload = WriteMeshComponentPayload(materialRelativePath)
+                        }
+                    ],
+                    Children = Array.Empty<SceneEntityAsset>()
+                }
+            ]
+        };
+
+        using FileStream stream = new FileStream(scenePath, FileMode.Create, FileAccess.Write, FileShare.None);
+        global::helengine.editor.AssetSerializer.Serialize(stream, sceneAsset);
+    }
+
+    /// <summary>
+    /// Writes one mesh-component payload that points at the supplied file-backed material path.
+    /// </summary>
+    /// <param name="materialRelativePath">Project-relative material path to encode.</param>
+    /// <returns>Serialized mesh-component payload.</returns>
+    static byte[] WriteMeshComponentPayload(string materialRelativePath) {
+        MeshComponentPersistenceDescriptor descriptor = new MeshComponentPersistenceDescriptor();
+        MeshComponent meshComponent = new MeshComponent {
+            Material = new TestRuntimeMaterial()
+        };
+        EntityComponentSaveState saveState = new EntityComponentSaveState();
+        saveState.SetAssetReference("Material", new SceneAssetReference {
+            SourceKind = SceneAssetReferenceSourceKind.FileSystem,
+            RelativePath = materialRelativePath,
+            ProviderId = string.Empty,
+            AssetId = string.Empty
+        });
+
+        SceneComponentAssetRecord record = descriptor.SerializeComponent(meshComponent, 0, saveState);
+        return record.Payload;
     }
 }
