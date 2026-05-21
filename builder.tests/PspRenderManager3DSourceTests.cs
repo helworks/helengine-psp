@@ -49,10 +49,10 @@ namespace helengine.psp.builder.tests {
         }
 
         /// <summary>
-        /// Ensures PSP fixed-function lambert keeps the fast untextured path while textured lambert draws use explicit CPU-lit textured vertices.
+        /// Ensures PSP fixed-function lambert keeps the fast untextured path and uses the fixed-function textured path for textured meshes.
         /// </summary>
         [Fact]
-        public void Source_FixedFunctionLambertKeepsUntexturedFixedFunctionAndCpuLitTexturedDrawables() {
+        public void Source_FixedFunctionLambertKeepsFixedFunctionDrawablesForTexturedAndUntexturedMeshes() {
             string sourcePath = Path.Combine(
                 AppContext.BaseDirectory,
                 "..",
@@ -67,8 +67,8 @@ namespace helengine.psp.builder.tests {
             string sourceContents = File.ReadAllText(Path.GetFullPath(sourcePath));
 
             Assert.Contains("SubmitFixedFunctionDrawable(\n                pspRuntimeModelData,", sourceContents, StringComparison.Ordinal);
-            Assert.Contains("SubmitCpuLitTexturedDrawable(\n                    drawable,\n                    pspRuntimeModelData,", sourceContents, StringComparison.Ordinal);
-            Assert.DoesNotContain("SubmitFixedFunctionTexturedDrawable(\n                    pspRuntimeModelData,", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("SubmitFixedFunctionTexturedDrawable(\n                    pspRuntimeModelData,", sourceContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("SubmitCpuLitTexturedDrawable(\n                    drawable,\n                    pspRuntimeModelData,", sourceContents, StringComparison.Ordinal);
         }
 
         /// <summary>
