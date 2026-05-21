@@ -42,6 +42,11 @@ namespace helengine::psp::rendering {
         PixelsAbgr8888 = std::move(pixels);
     }
 
+    /// Transfers the owned ABGR8888 pixel buffer out of the runtime texture for deferred safe release.
+    std::vector<std::uint32_t> PspRuntimeTexture::TakePixelsAbgr8888() {
+        return std::move(PixelsAbgr8888);
+    }
+
     /// Gets the deterministic runtime asset id associated with this texture.
     std::uint64_t PspRuntimeTexture::GetRuntimeAssetId() const {
         return RuntimeAssetId;

@@ -26,13 +26,22 @@ namespace helengine::psp::rendering {
         /// Creates one uncached PSP runtime texture from the cooked texture payload.
         PspRuntimeTexture* CreateTexture(TextureAsset* data);
 
-        /// Converts raw RGBA bytes into PSP-ready ABGR8888 texels.
-        static std::vector<std::uint32_t> ConvertRgbaBytesToAbgr8888(TextureAsset* data);
+        /// Computes the expected cooked color-payload byte length for one texture asset.
+        static std::size_t GetExpectedColorByteCount(TextureAsset* data);
+
+        /// Converts one cooked texture payload into PSP-ready ABGR8888 texels.
+        static std::vector<std::uint32_t> ConvertTextureToAbgr8888(TextureAsset* data);
+
+        /// Converts one quantized channel back to 8-bit precision using the supplied bit count.
+        static std::uint8_t ExpandChannelTo8Bit(std::uint8_t value, int bitCount);
+
+        /// Reads one palette-backed texel and packs it into PSP-ready ABGR8888 layout.
+        static std::uint32_t ReadIndexedPalettePixel(TextureAsset* data, std::size_t paletteIndex);
 
         /// Stores cached PSP runtime textures by deterministic runtime asset id.
         std::unordered_map<std::uint64_t, PspRuntimeTexture*> CachedTextures;
 
-        /// Stores PSP runtime textures that have been removed from cache but must not be deleted until the renderer reaches a safe frame boundary.
-        std::vector<PspRuntimeTexture*> ReleasedTextures;
+        /// Stores detached PSP pixel buffers that must stay alive until the renderer reaches a safe frame boundary.
+        std::vector<std::vector<std::uint32_t>> ReleasedTexturePixelBuffers;
     };
 }

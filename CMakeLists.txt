@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.11)
 
 project(helengine_psp LANGUAGES C CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
@@ -25,8 +25,12 @@ if(NOT EXISTS "${HELENGINE_CORE_CPP_ROOT}/helcpp_config.hpp")
     message(FATAL_ERROR "HELENGINE_CORE_CPP_ROOT does not contain helcpp_config.hpp. Regenerate helengine.core C++ output first.")
 endif()
 
-if(NOT EXISTS "${HELENGINE_CORE_CPP_ROOT}/helengine_core_amalgamated.cpp")
-    message(FATAL_ERROR "HELENGINE_CORE_CPP_ROOT does not contain helengine_core_amalgamated.cpp. Regenerate helengine.core C++ output first.")
+if(EXISTS "${HELENGINE_CORE_CPP_ROOT}/helengine_core_unity.cpp")
+    set(HELENGINE_CORE_TRANSLATION_UNIT "${HELENGINE_CORE_CPP_ROOT}/helengine_core_unity.cpp")
+elseif(EXISTS "${HELENGINE_CORE_CPP_ROOT}/helengine_core_amalgamated.cpp")
+    set(HELENGINE_CORE_TRANSLATION_UNIT "${HELENGINE_CORE_CPP_ROOT}/helengine_core_amalgamated.cpp")
+else()
+    message(FATAL_ERROR "HELENGINE_CORE_CPP_ROOT does not contain helengine_core_unity.cpp or helengine_core_amalgamated.cpp. Regenerate helengine.core C++ output first.")
 endif()
 
 if(HELENGINE_PSP_REQUIRES_RUNTIME_MANIFESTS)
@@ -55,7 +59,7 @@ set(HELENGINE_PSP_SOURCES
     src/platform/psp/rendering/PspRuntimeMaterial.cpp
     src/platform/psp/rendering/PspRuntimeModel.cpp
     src/platform/psp/rendering/PspRenderManager3D.cpp
-    "${HELENGINE_CORE_CPP_ROOT}/helengine_core_amalgamated.cpp"
+    "${HELENGINE_CORE_TRANSLATION_UNIT}"
 )
 
 if(HELENGINE_PSP_REQUIRES_RUNTIME_MANIFESTS)
@@ -70,6 +74,8 @@ if(EXISTS "${HELENGINE_CORE_CPP_ROOT}/runtime/runtime_code_module_manifest.cpp")
 endif()
 
 add_executable(${PROJECT_NAME} ${HELENGINE_PSP_SOURCES})
+
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
 
 if(HELENGINE_PSP_ISOLATED_BOOT)
     target_compile_definitions(${PROJECT_NAME} PRIVATE HELENGINE_PSP_ISOLATED_BOOT=1)

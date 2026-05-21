@@ -71,15 +71,14 @@ namespace helengine::psp::rendering {
 
         ClearGeometryCaches();
 
-        TextureAsset* sourceTextureAsset = font->get_SourceTextureAsset();
-        if (sourceTextureAsset != nullptr) {
-            delete sourceTextureAsset->Colors;
-            sourceTextureAsset->Colors = nullptr;
-            delete sourceTextureAsset;
+        RuntimeTexture* texture = font->get_Texture();
+        if (texture != nullptr && !texture->get_IsDisposed()) {
+            ReleaseTexture(texture);
+            texture->Dispose();
+            delete texture;
         }
 
-        delete font->get_FontInfo();
-        delete font->get_Characters();
+        font->Dispose();
         delete font;
     }
 

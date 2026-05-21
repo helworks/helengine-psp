@@ -28,6 +28,9 @@ namespace helengine::psp::rendering {
         /// Replaces the owned ABGR8888 pixel buffer.
         void SetPixelsAbgr8888(std::vector<std::uint32_t>&& pixels);
 
+        /// Transfers ownership of the ABGR8888 pixel buffer out of the runtime texture for deferred safe release.
+        std::vector<std::uint32_t> TakePixelsAbgr8888();
+
         /// Gets the deterministic runtime asset id associated with this texture.
         std::uint64_t GetRuntimeAssetId() const;
 

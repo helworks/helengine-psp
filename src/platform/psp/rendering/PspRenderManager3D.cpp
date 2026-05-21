@@ -494,6 +494,54 @@ namespace helengine::psp::rendering {
                 vertices);
         }
 
+        /// Submits one textured drawable using CPU-lit vertex colors so authored textures modulate with the expected lighting and material color.
+        void SubmitCpuLitTexturedDrawable(
+            IDrawable3D* drawable,
+            const PspRuntimeModel* runtimeModel,
+            const float4& baseColor,
+            bool useLighting,
+            const PspLightingSettings& lightingSettings,
+            const PspSceneLightingSnapshot& lightingSnapshot,
+            PspRuntimeTexture* texture) {
+            if (runtimeModel == nullptr || !runtimeModel->HasFixedFunctionTexturedVertices()) {
+                return;
+            }
+            if (texture == nullptr || !texture->HasPixels()) {
+                throw std::runtime_error("PSP CPU-lit textured draws require a valid runtime texture.");
+            }
+
+            int32_t vertexCount = runtimeModel->GetFixedFunctionTexturedVertexCount();
+            if (vertexCount < 3) {
+                return;
+            }
+
+            PspTexturedLitVertex* vertices = static_cast<PspTexturedLitVertex*>(sceGuGetMemory(sizeof(PspTexturedLitVertex) * static_cast<std::size_t>(vertexCount)));
+            const PspRuntimeModel::FixedFunctionTexturedVertex* sourceVertices = runtimeModel->GetFixedFunctionTexturedVertices();
+            for (int32_t index = 0; index < vertexCount; index++) {
+                const PspRuntimeModel::FixedFunctionTexturedVertex& sourceVertex = sourceVertices[index];
+                const float3 position(sourceVertex.X, sourceVertex.Y, sourceVertex.Z);
+                const float3 sourceNormal(sourceVertex.NX, sourceVertex.NY, sourceVertex.NZ);
+                const float3 worldNormal = float3::Normalize(RotateNormal(sourceNormal, drawable->get_Parent()));
+                const float4 litColor = EvaluateCpuLitColor(baseColor, worldNormal, useLighting, lightingSettings, lightingSnapshot);
+
+                vertices[index] = PspTexturedLitVertex {
+                    sourceVertex.U,
+                    sourceVertex.V,
+                    ConvertColorToAbgr(litColor),
+                    position.X,
+                    position.Y,
+                    position.Z
+                };
+            }
+
+            sceGumDrawArray(
+                GU_TRIANGLES,
+                GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
+                vertexCount,
+                nullptr,
+                vertices);
+        }
+
     }
 
     /// Creates the PSP 3D render manager.
@@ -811,7 +859,6 @@ namespace helengine::psp::rendering {
             std::to_string(reinterpret_cast<std::uintptr_t>(model)) +
             " cacheSize=" +
             std::to_string(CachedModels.size()));
-        delete static_cast<PspRuntimeModel*>(model);
     }
 
     /// Releases one PSP runtime material after the final scene reference is removed.
@@ -825,7 +872,6 @@ namespace helengine::psp::rendering {
             material->get_Id() +
             " ptr=" +
             std::to_string(reinterpret_cast<std::uintptr_t>(material)));
-        delete static_cast<PspRuntimeMaterial*>(material);
     }
 
     /// Wires the paired PSP 2D renderer used for per-camera UI submission.
@@ -888,9 +934,10 @@ namespace helengine::psp::rendering {
             return;
         }
         
-        PspRuntimeMaterial* pspRuntimeMaterial = static_cast<PspRuntimeMaterial*>(rootMaterial);
-        const float4& baseColor = pspRuntimeMaterial->GetBaseColor();
-        const bool useLighting = UsesDirectionalLighting(pspRuntimeMaterial);
+        PspRuntimeMaterial* pspRuntimeMaterial = static_cast<PspRuntimeMaterial*>(runtimeMaterial);
+        PspRuntimeMaterial* rootPspRuntimeMaterial = static_cast<PspRuntimeMaterial*>(rootMaterial);
+        const float4& baseColor = rootPspRuntimeMaterial->GetBaseColor();
+        const bool useLighting = UsesDirectionalLighting(rootPspRuntimeMaterial);
         PspRuntimeTexture* texture = nullptr;
         const bool hasTexture = pspRuntimeMaterial->TryResolveTexture(texture);
         const float3 worldScale = drawableParent->get_Scale();
@@ -916,12 +963,15 @@ namespace helengine::psp::rendering {
         PspRenderProfiler::Record3DModelMatrixLoad(PspRenderProfiler::GetTimestampMicroseconds() - modelMatrixLoadStartMicroseconds);
         if (LightingSettings.Pipeline == PspLightingPipeline::FixedFunctionLambert) {
             if (hasTexture) {
-                SubmitFixedFunctionTexturedDrawable(
+                BindTexture(texture);
+                SubmitCpuLitTexturedDrawable(
+                    drawable,
                     pspRuntimeModelData,
                     baseColor,
                     useLighting,
-                    texture,
-                    useScaledGpuVertices ? &worldScale : nullptr);
+                    LightingSettings,
+                    CurrentLighting,
+                    texture);
                 PspRenderProfiler::Record3DVisit(PspRenderProfiler::GetTimestampMicroseconds() - visitStartMicroseconds);
                 return;
             }

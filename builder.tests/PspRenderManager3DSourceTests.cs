@@ -25,5 +25,73 @@ namespace helengine.psp.builder.tests {
 
             Assert.DoesNotContain("GU_NORMALIZED_NORMAL", sourceContents, StringComparison.Ordinal);
         }
+
+        /// <summary>
+        /// Ensures the PSP 3D renderer does not delete top-level runtime assets inside the renderer release seam.
+        /// </summary>
+        [Fact]
+        public void Source_DoesNotDeleteRuntimeModelOrMaterialInsideReleaseMethods() {
+            string sourcePath = Path.Combine(
+                AppContext.BaseDirectory,
+                "..",
+                "..",
+                "..",
+                "..",
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRenderManager3D.cpp");
+            string sourceContents = File.ReadAllText(Path.GetFullPath(sourcePath));
+
+            Assert.DoesNotContain("delete static_cast<PspRuntimeModel*>(model);", sourceContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("delete static_cast<PspRuntimeMaterial*>(material);", sourceContents, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Ensures PSP fixed-function lambert keeps the fast untextured path while textured lambert draws use explicit CPU-lit textured vertices.
+        /// </summary>
+        [Fact]
+        public void Source_FixedFunctionLambertKeepsUntexturedFixedFunctionAndCpuLitTexturedDrawables() {
+            string sourcePath = Path.Combine(
+                AppContext.BaseDirectory,
+                "..",
+                "..",
+                "..",
+                "..",
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRenderManager3D.cpp");
+            string sourceContents = File.ReadAllText(Path.GetFullPath(sourcePath));
+
+            Assert.Contains("SubmitFixedFunctionDrawable(\n                pspRuntimeModelData,", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("SubmitCpuLitTexturedDrawable(\n                    drawable,\n                    pspRuntimeModelData,", sourceContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("SubmitFixedFunctionTexturedDrawable(\n                    pspRuntimeModelData,", sourceContents, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Ensures PSP textured draws resolve diffuse textures from the concrete drawable material instance instead of only from the root material.
+        /// </summary>
+        [Fact]
+        public void Source_TexturedDrawsResolveTextureFromDrawableMaterialInstance() {
+            string sourcePath = Path.Combine(
+                AppContext.BaseDirectory,
+                "..",
+                "..",
+                "..",
+                "..",
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRenderManager3D.cpp");
+            string sourceContents = File.ReadAllText(Path.GetFullPath(sourcePath));
+
+            Assert.Contains("PspRuntimeMaterial* pspRuntimeMaterial = static_cast<PspRuntimeMaterial*>(runtimeMaterial);", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("PspRuntimeMaterial* rootPspRuntimeMaterial = static_cast<PspRuntimeMaterial*>(rootMaterial);", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("const bool hasTexture = pspRuntimeMaterial->TryResolveTexture(texture);", sourceContents, StringComparison.Ordinal);
+        }
     }
 }

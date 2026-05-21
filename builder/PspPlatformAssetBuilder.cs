@@ -306,9 +306,9 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
             return;
         } else if (string.Equals(workItem.SourceAssetKind, "font-atlas-texture", StringComparison.OrdinalIgnoreCase)) {
             FontAsset cookedFontAsset = PlatformCookSourceProcessor.CookFont(workItem.SourceAssetPath, assetId, settings);
-            using MemoryStream stream = new MemoryStream();
-            global::helengine.files.FontAssetBinarySerializer.Serialize(stream, cookedFontAsset);
-            File.WriteAllBytes(destinationPath, stream.ToArray());
+            TextureAsset cookedAtlasTextureAsset = cookedFontAsset.SourceTextureAsset
+                ?? throw new InvalidOperationException($"Cooked PSP font atlas work item '{workItem.WorkItemId}' did not produce a source atlas texture asset.");
+            File.WriteAllBytes(destinationPath, global::helengine.files.AssetSerializer.SerializeToBytes(cookedAtlasTextureAsset));
             return;
         }
 
@@ -582,13 +582,29 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
     static void ValidateGeneratedCoreContract(string generatedCoreRootPath) {
         if (!File.Exists(Path.Combine(generatedCoreRootPath, "helcpp_config.hpp"))) {
             throw new FileNotFoundException("Generated core root does not contain helcpp_config.hpp.", Path.Combine(generatedCoreRootPath, "helcpp_config.hpp"));
-        } else if (!File.Exists(Path.Combine(generatedCoreRootPath, "helengine_core_amalgamated.cpp"))) {
-            throw new FileNotFoundException("Generated core root does not contain helengine_core_amalgamated.cpp.", Path.Combine(generatedCoreRootPath, "helengine_core_amalgamated.cpp"));
+        } else if (!ContainsGeneratedCoreTranslationUnit(generatedCoreRootPath)) {
+            throw new FileNotFoundException(
+                "Generated core root does not contain helengine_core_unity.cpp or helengine_core_amalgamated.cpp.",
+                Path.Combine(generatedCoreRootPath, "helengine_core_unity.cpp"));
         } else if (!File.Exists(Path.Combine(generatedCoreRootPath, "runtime", "runtime_startup_manifest.cpp"))) {
             throw new FileNotFoundException("Generated core root does not contain runtime/runtime_startup_manifest.cpp.", Path.Combine(generatedCoreRootPath, "runtime", "runtime_startup_manifest.cpp"));
         } else if (!File.Exists(Path.Combine(generatedCoreRootPath, "runtime", "runtime_scene_catalog_manifest.cpp"))) {
             throw new FileNotFoundException("Generated core root does not contain runtime/runtime_scene_catalog_manifest.cpp.", Path.Combine(generatedCoreRootPath, "runtime", "runtime_scene_catalog_manifest.cpp"));
         }
+    }
+
+    /// <summary>
+    /// Returns whether the generated-core root contains one supported native translation unit entrypoint.
+    /// </summary>
+    /// <param name="generatedCoreRootPath">Generated-core root path supplied by the editor build graph.</param>
+    /// <returns>True when the root contains either the unity or legacy amalgamated translation unit.</returns>
+    static bool ContainsGeneratedCoreTranslationUnit(string generatedCoreRootPath) {
+        if (string.IsNullOrWhiteSpace(generatedCoreRootPath)) {
+            throw new ArgumentException("Generated core root path must be provided.", nameof(generatedCoreRootPath));
+        }
+
+        return File.Exists(Path.Combine(generatedCoreRootPath, "helengine_core_unity.cpp"))
+            || File.Exists(Path.Combine(generatedCoreRootPath, "helengine_core_amalgamated.cpp"));
     }
 
     /// <summary>

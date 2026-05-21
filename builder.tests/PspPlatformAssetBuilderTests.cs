@@ -458,6 +458,132 @@ public sealed class PspPlatformAssetBuilderTests {
     }
 
     /// <summary>
+    /// Verifies the PSP builder accepts the editor-generated unity translation unit when the legacy amalgamated file is absent.
+    /// </summary>
+    [Fact]
+    public async Task BuildAsync_whenGivenUnityGeneratedCoreAndCookedArtifacts_produces_psp_game_folder() {
+        string workingRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string outputRoot = Path.Combine(workingRoot, "out");
+        string sourceRoot = Path.Combine(workingRoot, "staging");
+        string generatedCoreRoot = Path.Combine(workingRoot, "generated-core");
+        string generatedCoreRuntimeRoot = Path.Combine(generatedCoreRoot, "runtime");
+        string repositoryRoot = Path.Combine(workingRoot, "repository");
+        string sceneSourcePath = Path.Combine(sourceRoot, "cooked", "scenes", "rendering", "cube_test.hasset");
+        string modelSourcePath = Path.Combine(sourceRoot, "cooked", "models", "cube.hasset");
+        string materialSourcePath = Path.Combine(sourceRoot, "cooked", "materials", "standard.hasset");
+        string importedTextureSourcePath = Path.Combine(sourceRoot, "cooked", "imported", "textures", "checker");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(sceneSourcePath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(modelSourcePath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(materialSourcePath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(importedTextureSourcePath)!);
+        Directory.CreateDirectory(generatedCoreRoot);
+        Directory.CreateDirectory(generatedCoreRuntimeRoot);
+        Directory.CreateDirectory(Path.Combine(repositoryRoot, "src", "platform", "psp"));
+        File.WriteAllText(sceneSourcePath, "scene payload");
+        File.WriteAllText(modelSourcePath, "model payload");
+        File.WriteAllText(materialSourcePath, "material payload");
+        File.WriteAllText(importedTextureSourcePath, "texture payload");
+        File.WriteAllText(Path.Combine(generatedCoreRoot, "helengine_core_unity.cpp"), "// generated");
+        File.WriteAllText(Path.Combine(generatedCoreRoot, "helcpp_config.hpp"), "#pragma once");
+        File.WriteAllText(Path.Combine(generatedCoreRuntimeRoot, "runtime_startup_manifest.cpp"), "// startup");
+        File.WriteAllText(Path.Combine(generatedCoreRuntimeRoot, "runtime_scene_catalog_manifest.cpp"), "// scene catalog");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Makefile"), "# fake");
+        File.WriteAllText(Path.Combine(repositoryRoot, "src", "platform", "psp", "PspBootHost.cpp"), "// fake");
+
+        string previousDirectory = Directory.GetCurrentDirectory();
+        string previousRepositoryRoot = Environment.GetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT");
+        try {
+            Directory.SetCurrentDirectory(sourceRoot);
+            Environment.SetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT", repositoryRoot);
+
+            PlatformBuildManifest manifest = new(
+                3,
+                "city",
+                "1.0.0",
+                "1.0.0",
+                "psp",
+                "1.0.0",
+                "scenes/rendering/cube_test.helen",
+                [
+                    new PlatformBuildScene(
+                        "scenes/rendering/cube_test.helen",
+                        "Cube Test",
+                        "cooked/scenes/rendering/cube_test.hasset",
+                        [],
+                        [new KeyValuePair<string, string>("cooked-relative-path", "cooked/scenes/rendering/cube_test.hasset")])
+                ],
+                Array.Empty<PlatformBuildAsset>(),
+                [
+                    new PlatformBuildArtifact("cooked/scenes/rendering/cube_test.hasset", "scene:cube-test", "sha256:scene", "scene", "shared"),
+                    new PlatformBuildArtifact("cooked/models/cube.hasset", "model:cube", "sha256:model", "model", "shared"),
+                    new PlatformBuildArtifact("cooked/materials/standard.hasset", "material:standard", "sha256:material", "material", "shared"),
+                    new PlatformBuildArtifact("cooked/imported/textures/checker", "texture:checker", "sha256:texture", "texture", "shared")
+                ],
+                Array.Empty<PlatformBuildCodeModule>(),
+                Array.Empty<PlatformArtifactPlacement>(),
+                new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()));
+
+            PlatformBuildRequest request = new(
+                manifest,
+                [new PlatformBuildTargetVariant("psp-debug", "psp", "psp", "default")],
+                [new PlatformCookProfile(
+                    "default",
+                    "Default",
+                    new PlatformCookProfileCapabilities(
+                        "psp",
+                        "psp-forward",
+                        "raw",
+                        "psp-scene-v1",
+                        PlatformSerializationEndianness.LittleEndian))],
+                outputRoot,
+                Path.Combine(workingRoot, "builder-work"),
+                "psp-debug",
+                "psp-forward",
+                "default",
+                new Dictionary<string, string>(),
+                new Dictionary<string, string>(),
+                new Dictionary<string, string>(),
+                generatedCoreRoot,
+                "psp-game-folder",
+                "homebrew-app");
+
+            FakePspNativeBuildExecutor nativeBuildExecutor = new();
+            PspPlatformAssetBuilder builder = new(nativeBuildExecutor);
+            RecordingProgressReporter progressReporter = new();
+            RecordingDiagnosticReporter diagnosticReporter = new();
+
+            PlatformBuildReport report = await builder.BuildAsync(
+                request,
+                progressReporter,
+                diagnosticReporter,
+                CancellationToken.None);
+
+            Assert.True(report.Succeeded);
+            Assert.Empty(diagnosticReporter.Diagnostics);
+            Assert.True(File.Exists(Path.Combine(outputRoot, "PSP", "GAME", "HELENGINE", "EBOOT.PBP")));
+            Assert.Equal(generatedCoreRoot, nativeBuildExecutor.LastWorkspace.GeneratedCoreRootPath);
+        } finally {
+            try {
+                Directory.SetCurrentDirectory(previousDirectory);
+            } catch {
+            }
+
+            try {
+                Environment.SetEnvironmentVariable("HELENGINE_PSP_REPOSITORY_ROOT", previousRepositoryRoot);
+            } catch {
+            }
+
+            try {
+                if (Directory.Exists(workingRoot)) {
+                    Directory.Delete(workingRoot, recursive: true);
+                }
+            } catch {
+            }
+        }
+    }
+
+    /// <summary>
     /// Verifies the PSP builder rewrites runtime manifest sources so startup-scene and platform metadata match the current build manifest.
     /// </summary>
     [Fact]
@@ -798,10 +924,10 @@ public sealed class PspPlatformAssetBuilderTests {
     }
 
     /// <summary>
-    /// Verifies the PSP builder executes one builder-owned font-atlas cook work item into the exact declared runtime output path.
+    /// Verifies the PSP builder executes one builder-owned font-atlas cook work item into one cooked runtime texture payload at the exact declared output path.
     /// </summary>
     [Fact]
-    public async Task BuildAsync_whenGivenFontAtlasPlatformCookWorkItem_writesCookedRuntimeFontToDeclaredOutputPath() {
+    public async Task BuildAsync_whenGivenFontAtlasPlatformCookWorkItem_writesCookedRuntimeTextureToDeclaredOutputPath() {
         string workingRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         string outputRoot = Path.Combine(workingRoot, "out");
         string sourceRoot = Path.Combine(workingRoot, "staging");
@@ -855,13 +981,13 @@ public sealed class PspPlatformAssetBuilderTests {
                 new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()),
                 [
                     new PlatformCookWorkItem(
-                        "psp:font-atlas-texture:cooked/fonts/default.hefont",
+                        "psp:font-atlas-texture:cooked/fonts/default.ps2tex",
                         sourceFontPath,
                         "font-atlas-texture",
                         "psp",
-                        "font",
-                        "cooked/fonts/default.hefont",
-                        "font:cooked/fonts/default.hefont",
+                        "runtime-texture",
+                        "cooked/fonts/default.ps2tex",
+                        "texture:cooked/fonts/default.ps2tex",
                         "sha256:source",
                         "sha256:settings",
                         PspTextureCookSettingsSerializer.Serialize(new TextureAssetProcessorSettings {
@@ -896,8 +1022,8 @@ public sealed class PspPlatformAssetBuilderTests {
 
             Assert.True(report.Succeeded);
 
-            string outputFontPath = Path.Combine(outputRoot, "PSP", "GAME", "HELENGINE", "cooked", "fonts", "default.hefont");
-            Assert.True(File.Exists(outputFontPath));
+            string outputTexturePath = Path.Combine(outputRoot, "PSP", "GAME", "HELENGINE", "cooked", "fonts", "default.ps2tex");
+            Assert.True(File.Exists(outputTexturePath));
             FontAsset expectedCookedFontAsset = sourceProcessor.CookFont(
                 sourceFontPath,
                 "fonts/default.hefont",
@@ -906,13 +1032,9 @@ public sealed class PspPlatformAssetBuilderTests {
                     ColorFormat = TextureAssetColorFormat.Rgba4444,
                     AlphaPrecision = TextureAssetAlphaPrecision.A4
                 });
-            byte[] expectedFontBytes;
-            using (MemoryStream expectedStream = new MemoryStream()) {
-                global::helengine.files.FontAssetBinarySerializer.Serialize(expectedStream, expectedCookedFontAsset);
-                expectedFontBytes = expectedStream.ToArray();
-            }
-
-            Assert.Equal(expectedFontBytes, File.ReadAllBytes(outputFontPath));
+            TextureAsset expectedCookedTextureAsset = expectedCookedFontAsset.SourceTextureAsset ?? throw new InvalidOperationException("Expected cooked font atlas texture asset was not produced.");
+            byte[] expectedTextureBytes = global::helengine.files.AssetSerializer.SerializeToBytes(expectedCookedTextureAsset);
+            Assert.Equal(expectedTextureBytes, File.ReadAllBytes(outputTexturePath));
         } finally {
             try {
                 Directory.SetCurrentDirectory(previousDirectory);
