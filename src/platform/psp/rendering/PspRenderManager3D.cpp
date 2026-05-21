@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -52,6 +53,12 @@ namespace helengine::psp::rendering {
 
         std::unordered_map<std::string, RuntimeModel*> CachedModels;
 
+        /// Returns whether one model id is safe to use as a shared PSP runtime-model cache key.
+        bool IsCacheableModelId(const std::string& modelId) {
+            return !modelId.empty()
+                && modelId != "00000000-0000-0000-0000-000000000000";
+        }
+
         /// Converts one generated matrix into the column-major layout expected by PSP GU.
         PspMatrixBuffer CreatePspMatrixBuffer(const float4x4& matrix) {
             PspMatrixBuffer buffer {};
@@ -88,69 +95,6 @@ namespace helengine::psp::rendering {
             std::uint32_t alpha = ClampColorChannel(color.W);
             return (alpha << 24) | (blue << 16) | (green << 8) | red;
         }
-
-#if defined(HELENGINE_PSP_ENABLE_BOOT_TRACE) && HELENGINE_PSP_ENABLE_BOOT_TRACE
-        /// Returns whether one world-space value is within a small tolerance of the expected authored showcase value.
-        bool IsApproximately(float value, float expectedValue, float tolerance) {
-            return std::fabs(value - expectedValue) <= tolerance;
-        }
-
-        /// Returns whether one drawable transform matches the authored central plaza tower used for lighting diagnostics.
-        bool IsDirectionalShadowCentralTower(Entity* entity) {
-            if (entity == nullptr) {
-                return false;
-            }
-
-            const float3 position = entity->get_Position();
-            const float3 scale = entity->get_Scale();
-            return IsApproximately(position.X, 0.0f, 0.01f)
-                && IsApproximately(position.Y, 9.0f, 0.01f)
-                && IsApproximately(position.Z, -12.0f, 0.01f)
-                && IsApproximately(scale.X, 7.0f, 0.01f)
-                && IsApproximately(scale.Y, 18.0f, 0.01f)
-                && IsApproximately(scale.Z, 7.0f, 0.01f);
-        }
-
-        /// Periodically writes the camera-facing and light-facing dot values for the authored plaza tower faces.
-        void WritePlazaTowerFaceDebugTrace(Entity* entity, const float3& cameraPosition, const float3& lightDirection) {
-            if (!IsDirectionalShadowCentralTower(entity)) {
-                return;
-            }
-
-            static int32_t PlazaTowerTraceCounter = 0;
-            PlazaTowerTraceCounter++;
-            if ((PlazaTowerTraceCounter % 120) != 0) {
-                return;
-            }
-
-            const float3 entityPosition = entity->get_Position();
-            const float4 entityOrientation = entity->get_Orientation();
-            const float3 cameraToTower = float3::Normalize(cameraPosition - entityPosition);
-            const float3 normalizedLightDirection = float3::Normalize(lightDirection);
-
-            const float3 positiveX = float4::RotateVector(float3(1.0f, 0.0f, 0.0f), entityOrientation);
-            const float3 negativeX = float4::RotateVector(float3(-1.0f, 0.0f, 0.0f), entityOrientation);
-            const float3 positiveZ = float4::RotateVector(float3(0.0f, 0.0f, 1.0f), entityOrientation);
-            const float3 negativeZ = float4::RotateVector(float3(0.0f, 0.0f, -1.0f), entityOrientation);
-
-            PspBootTrace::WriteLine(
-                std::string("PlazaTowerFaceDebug cameraToTower=")
-                + std::to_string(cameraToTower.X) + ","
-                + std::to_string(cameraToTower.Y) + ","
-                + std::to_string(cameraToTower.Z)
-                + " light=" + std::to_string(normalizedLightDirection.X) + ","
-                + std::to_string(normalizedLightDirection.Y) + ","
-                + std::to_string(normalizedLightDirection.Z)
-                + " pxView=" + std::to_string(float3::Dot(positiveX, cameraToTower))
-                + " pxLight=" + std::to_string(float3::Dot(positiveX, normalizedLightDirection))
-                + " nxView=" + std::to_string(float3::Dot(negativeX, cameraToTower))
-                + " nxLight=" + std::to_string(float3::Dot(negativeX, normalizedLightDirection))
-                + " pzView=" + std::to_string(float3::Dot(positiveZ, cameraToTower))
-                + " pzLight=" + std::to_string(float3::Dot(positiveZ, normalizedLightDirection))
-                + " nzView=" + std::to_string(float3::Dot(negativeZ, cameraToTower))
-                + " nzLight=" + std::to_string(float3::Dot(negativeZ, normalizedLightDirection)));
-        }
-#endif
 
         /// Returns the default local-space normal used when authored mesh data omits normals.
         float3 GetFallbackNormal() {
@@ -637,7 +581,7 @@ namespace helengine::psp::rendering {
         const ScePspFVector3 lightVector = CreatePspVector3(normalizedDirection);
 
         SetLight0Enabled(true);
-        sceGuLight(0, GU_DIRECTIONAL, GU_DIFFUSE, &lightVector);
+        sceGuLight(0, GU_DIRECTIONAL, GU_AMBIENT_AND_DIFFUSE, &lightVector);
         sceGuLightAtt(0, 1.0f, 0.0f, 0.0f);
         sceGuLightColor(0, GU_AMBIENT, 0);
         sceGuLightColor(0, GU_DIFFUSE, ConvertColorToAbgr(float4(
@@ -737,7 +681,7 @@ namespace helengine::psp::rendering {
 
     /// Builds a CPU-side runtime model payload from the raw mesh asset.
     RuntimeModel* PspRenderManager3D::BuildModelFromRaw(ModelAsset* data) {
-        if (data != nullptr && !data->get_Id().empty()) {
+        if (data != nullptr && IsCacheableModelId(data->get_Id())) {
             auto cachedModelIterator = CachedModels.find(data->get_Id());
             if (cachedModelIterator != CachedModels.end()) {
                 PspBootTrace::WriteLine(
@@ -758,7 +702,7 @@ namespace helengine::psp::rendering {
             runtimeModel->SetFixedFunctionTexturedVertices(BuildFixedFunctionTexturedVertices(data));
         }
 
-        if (data != nullptr && !data->get_Id().empty()) {
+        if (data != nullptr && IsCacheableModelId(data->get_Id())) {
             CachedModels.emplace(data->get_Id(), runtimeModel);
         }
 
@@ -797,7 +741,7 @@ namespace helengine::psp::rendering {
             throw std::invalid_argument("PSP runtime-model release requires one runtime model instance.");
         }
 
-        if (!model->get_Id().empty()) {
+        if (IsCacheableModelId(model->get_Id())) {
             auto cachedModelIterator = CachedModels.find(model->get_Id());
             if (cachedModelIterator != CachedModels.end() && cachedModelIterator->second == model) {
                 CachedModels.erase(cachedModelIterator);
@@ -896,11 +840,6 @@ namespace helengine::psp::rendering {
         const bool useScaledGpuVertices = LightingSettings.Pipeline == PspLightingPipeline::FixedFunctionLambert
             && useLighting
             && HasNonUniformScale(worldScale);
-#if defined(HELENGINE_PSP_ENABLE_BOOT_TRACE) && HELENGINE_PSP_ENABLE_BOOT_TRACE
-        if (CurrentLighting.HasDirectionalLight && useLighting) {
-            WritePlazaTowerFaceDebugTrace(drawableParent, CurrentCameraPosition, CurrentLighting.DirectionalLightDirection);
-        }
-#endif
 
         const std::uint64_t worldMatrixBuildStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         float4x4 world = useScaledGpuVertices
@@ -913,6 +852,7 @@ namespace helengine::psp::rendering {
         sceGumMatrixMode(GU_MODEL);
         sceGumLoadMatrix(reinterpret_cast<ScePspFMatrix4*>(&worldMatrix));
         PspRenderProfiler::Record3DModelMatrixLoad(PspRenderProfiler::GetTimestampMicroseconds() - modelMatrixLoadStartMicroseconds);
+
         if (LightingSettings.Pipeline == PspLightingPipeline::FixedFunctionLambert) {
             if (hasTexture) {
                 SubmitFixedFunctionTexturedDrawable(
@@ -1024,9 +964,9 @@ namespace helengine::psp::rendering {
         }
 
         constexpr float CameraFieldOfViewRadians = 0.78539816339f;
-        constexpr float NearPlaneDistance = 0.1f;
-        constexpr float FarPlaneDistance = 100.0f;
-        float4x4::CreatePerspectiveFieldOfView(CameraFieldOfViewRadians, aspectRatio, NearPlaneDistance, FarPlaneDistance, CurrentProjection);
+        const float nearPlaneDistance = camera->get_NearPlaneDistance();
+        const float farPlaneDistance = camera->get_FarPlaneDistance();
+        float4x4::CreatePerspectiveFieldOfView(CameraFieldOfViewRadians, aspectRatio, nearPlaneDistance, farPlaneDistance, CurrentProjection);
 
         PspMatrixBuffer viewMatrix = CreatePspMatrixBuffer(CurrentView);
         PspMatrixBuffer projectionMatrix = CreatePspMatrixBuffer(CurrentProjection);
@@ -1034,6 +974,9 @@ namespace helengine::psp::rendering {
         ResetCachedGuState();
         SetTextureEnabled(false);
         sceGuEnable(GU_DEPTH_TEST);
+        sceGuEnable(GU_SCISSOR_TEST);
+        sceGuScissor(0, 0, mainWindowSize.X, mainWindowSize.Y);
+        sceGuEnable(GU_CLIP_PLANES);
         sceGuDisable(GU_CULL_FACE);
 
         sceGumMatrixMode(GU_PROJECTION);

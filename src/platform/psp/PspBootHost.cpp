@@ -131,6 +131,7 @@ namespace helengine::psp {
         sceGuDepthRange(65535, 0);
         sceGuDepthFunc(GU_GEQUAL);
         sceGuEnable(GU_DEPTH_TEST);
+        sceGuEnable(GU_CLIP_PLANES);
         sceGuEnable(GU_SCISSOR_TEST);
         sceGuScissor(0, 0, ScreenWidth, ScreenHeight);
         sceGuDisable(GU_CULL_FACE);
@@ -139,6 +140,7 @@ namespace helengine::psp {
         sceGuFinish();
         sceGuSync(0, 0);
         sceGuDisplay(GU_TRUE);
+        PspBootTrace::WriteLine("PSP_DIRECTIONAL_DIAG build=2026-05-21T1624 trace=clip-planes-full-scissor");
         PspBootTrace::WriteLine("InitializeGraphics end");
         return true;
     }

@@ -61,4 +61,21 @@ public sealed class PspNativeBuildExecutorTests {
 
         Assert.Contains("HELENGINE_PSP_ENABLE_RUNTIME_STARTUP=ON", arguments);
     }
+
+    /// <summary>
+    /// Ensures diagnostic PSP builds write boot traces so stale emulator installs can be identified quickly.
+    /// </summary>
+    [Fact]
+    public void CreateBuildArguments_whenWorkspaceIsProvided_enables_boot_trace() {
+        PspBuildWorkspace workspace = new(
+            "/repo",
+            "/repo/tmp/psp-staging",
+            "/generated-core",
+            "/out",
+            "/repo/build/EBOOT.PBP");
+
+        IReadOnlyList<string> arguments = PspNativeBuildExecutor.CreateBuildArguments(workspace);
+
+        Assert.Contains("HELENGINE_PSP_ENABLE_BOOT_TRACE=ON", arguments);
+    }
 }
