@@ -1,5 +1,7 @@
 #include "platform/psp/PspBootHost.hpp"
 
+#include <cctype>
+#include <cstddef>
 #include <cstdio>
 #include <exception>
 #include <new>
@@ -45,6 +47,7 @@ namespace helengine::psp {
         constexpr int BufferHeight = 272;
         constexpr int ScreenWidth = 480;
         constexpr int ScreenHeight = BufferHeight;
+        constexpr std::size_t DisplayListByteCount = 0x80000;
         constexpr unsigned int DefaultClearColor = 0xFF101010;
         constexpr const char* GraphicsInitializationStageName = "GraphicsInitialization";
         constexpr const char* IsolatedFrameLoopStageName = "IsolatedFrameLoop";
@@ -54,7 +57,7 @@ namespace helengine::psp {
         constexpr const char* RuntimeStartupSceneMaterializationStageName = "RuntimeStartupSceneMaterialization";
         constexpr const char* RuntimeMainLoopStageName = "RuntimeMainLoop";
 
-        alignas(64) unsigned int DisplayListStorage[0x20000 / sizeof(unsigned int)];
+        alignas(64) unsigned int DisplayListStorage[DisplayListByteCount / sizeof(unsigned int)];
     }
 
     /// Creates the PSP boot host with no initialized graphics or engine state.
@@ -226,8 +229,8 @@ namespace helengine::psp {
     void PspBootHost::LoadStartupScene() {
 #if defined(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP) && HELENGINE_PSP_ENABLE_RUNTIME_STARTUP
         EnterBootStage(RuntimeStartupSceneAssetLoadStageName);
-        const char* startupSceneRelativePath = he_get_runtime_startup_scene_relative_path();
-        if (startupSceneRelativePath == nullptr || startupSceneRelativePath[0] == '\0') {
+        const char* configuredStartupSceneRelativePath = he_get_runtime_startup_scene_relative_path();
+        if (configuredStartupSceneRelativePath == nullptr || configuredStartupSceneRelativePath[0] == '\0') {
             throw std::runtime_error("PSP runtime startup manifest did not define a startup scene.");
         }
 
@@ -240,7 +243,7 @@ namespace helengine::psp {
         std::string startupSceneId;
         for (std::size_t index = 0; index < runtimeSceneCount; index++) {
             const HERuntimeSceneCatalogEntry& runtimeSceneEntry = runtimeSceneEntries[index];
-            if (runtimeSceneEntry.CookedRelativePath != nullptr && std::string(runtimeSceneEntry.CookedRelativePath) == startupSceneRelativePath) {
+            if (runtimeSceneEntry.CookedRelativePath != nullptr && std::string(runtimeSceneEntry.CookedRelativePath) == configuredStartupSceneRelativePath) {
                 startupSceneId = runtimeSceneEntry.SceneId;
                 break;
             }
@@ -248,6 +251,22 @@ namespace helengine::psp {
 
         if (startupSceneId.empty()) {
             throw std::runtime_error("PSP runtime startup scene path was not found in the runtime scene catalog manifest.");
+        }
+
+        std::string overrideStartupSceneId = TryReadStartupSceneOverrideSceneId();
+        if (!overrideStartupSceneId.empty()) {
+            startupSceneId = overrideStartupSceneId;
+        }
+
+        std::string startupSceneRelativePath = configuredStartupSceneRelativePath;
+        for (std::size_t index = 0; index < runtimeSceneCount; index++) {
+            const HERuntimeSceneCatalogEntry& runtimeSceneEntry = runtimeSceneEntries[index];
+            if (runtimeSceneEntry.SceneId != nullptr && startupSceneId == runtimeSceneEntry.SceneId) {
+                startupSceneRelativePath = runtimeSceneEntry.CookedRelativePath != nullptr
+                    ? std::string(runtimeSceneEntry.CookedRelativePath)
+                    : std::string();
+                break;
+            }
         }
 
         PspBootTrace::WriteLine(std::string("LoadStartupScene id=") + startupSceneId + " path=" + startupSceneRelativePath);
@@ -263,6 +282,44 @@ namespace helengine::psp {
 #else
         throw std::runtime_error("Startup scene loading is only available when PSP runtime startup is enabled.");
 #endif
+    }
+
+    /// Reads one optional startup-scene override id from the packaged app root for runtime diagnostics.
+    std::string PspBootHost::TryReadStartupSceneOverrideSceneId() const {
+        if (AppRootPath.empty()) {
+            return std::string();
+        }
+
+        std::string overrideFilePath = AppRootPath + "/startup_scene_override.txt";
+        std::FILE* file = std::fopen(overrideFilePath.c_str(), "rb");
+        if (file == nullptr) {
+            return std::string();
+        }
+
+        char buffer[256] = {};
+        std::size_t byteCount = std::fread(buffer, 1, sizeof(buffer) - 1, file);
+        std::fclose(file);
+        if (byteCount == 0) {
+            return std::string();
+        }
+
+        std::string sceneId(buffer, byteCount);
+        std::size_t startIndex = 0;
+        while (startIndex < sceneId.size() && std::isspace(static_cast<unsigned char>(sceneId[startIndex])) != 0) {
+            startIndex++;
+        }
+
+        std::size_t endIndex = sceneId.size();
+        while (endIndex > startIndex && std::isspace(static_cast<unsigned char>(sceneId[endIndex - 1])) != 0) {
+            endIndex--;
+        }
+
+        std::string trimmedSceneId = sceneId.substr(startIndex, endIndex - startIndex);
+        if (!trimmedSceneId.empty()) {
+            PspBootTrace::WriteLine(std::string("StartupSceneOverride sceneId=") + trimmedSceneId);
+        }
+
+        return trimmedSceneId;
     }
 
     /// Returns the current primary loaded-scene id, or an empty string when no scene is active.
@@ -420,7 +477,23 @@ namespace helengine::psp {
             }
 
             BeginFrame();
+            if (ReturnTransitionTraceFramesRemaining > 0) {
+                TraceRuntimeTransitionState(
+                    "BeforeDraw",
+                    GetPrimarySceneId(),
+                    GetLoadedSceneCount(),
+                    sceKernelTotalFreeMemSize(),
+                    IsReturnButtonDown());
+            }
             EngineCore->Draw();
+            if (ReturnTransitionTraceFramesRemaining > 0) {
+                TraceRuntimeTransitionState(
+                    "AfterDraw",
+                    GetPrimarySceneId(),
+                    GetLoadedSceneCount(),
+                    sceKernelTotalFreeMemSize(),
+                    IsReturnButtonDown());
+            }
             PresentFrame();
         }
     }

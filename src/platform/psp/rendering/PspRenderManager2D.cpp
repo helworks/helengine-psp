@@ -1090,7 +1090,6 @@ namespace helengine::psp::rendering {
 
     /// Applies one drawable clip rectangle through the PSP GU scissor test.
     void PspRenderManager2D::ApplyClipRect(const float4& clipRect) {
-        FlushPendingWhiteTriangles();
         if (HasActiveClipRect
             && ActiveClipRect.X == clipRect.X
             && ActiveClipRect.Y == clipRect.Y
@@ -1098,6 +1097,8 @@ namespace helengine::psp::rendering {
             && ActiveClipRect.W == clipRect.W) {
             return;
         }
+
+        FlushPendingWhiteTriangles();
 
         const int left = std::clamp(static_cast<int>(std::floor(clipRect.X)), 0, PspScreenWidth);
         const int top = std::clamp(static_cast<int>(std::floor(clipRect.Y)), 0, PspScreenHeight);

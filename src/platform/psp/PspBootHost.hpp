@@ -41,6 +41,9 @@ namespace helengine::psp {
         /// Loads the configured startup scene through the runtime scene manager so scene lifetime stays tracked from frame one.
         void LoadStartupScene();
 
+        /// Reads one optional startup-scene override id from the packaged app root for runtime diagnostics.
+        std::string TryReadStartupSceneOverrideSceneId() const;
+
         /// Returns the current primary loaded-scene id, or an empty string when no scene is active.
         std::string GetPrimarySceneId() const;
 

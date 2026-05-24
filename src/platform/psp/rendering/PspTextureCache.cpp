@@ -150,7 +150,7 @@ namespace helengine::psp::rendering {
         const std::size_t pixelCount = static_cast<std::size_t>(data->Width) * static_cast<std::size_t>(data->Height);
         if (data->ColorFormat == TextureAssetColorFormat::Rgba32) {
             return pixelCount * 4u;
-        } else if (data->ColorFormat == TextureAssetColorFormat::Rgba4444 || data->ColorFormat == TextureAssetColorFormat::GxRgb5A3) {
+        } else if (data->ColorFormat == TextureAssetColorFormat::Rgba4444) {
             return pixelCount * 2u;
         } else if (data->ColorFormat == TextureAssetColorFormat::Indexed4) {
             return (pixelCount + 1u) / 2u;
@@ -211,28 +211,6 @@ namespace helengine::psp::rendering {
             for (std::size_t pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++) {
                 const std::size_t paletteIndex = static_cast<std::size_t>(static_cast<std::uint8_t>(data->Colors->Data[pixelIndex]));
                 pixels.push_back(ReadIndexedPalettePixel(data, paletteIndex));
-            }
-
-            return pixels;
-        } else if (data->ColorFormat == TextureAssetColorFormat::GxRgb5A3) {
-            for (std::size_t pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++) {
-                const std::size_t byteOffset = pixelIndex * 2u;
-                const std::uint16_t packedPixel = static_cast<std::uint16_t>(
-                    static_cast<std::uint8_t>(data->Colors->Data[byteOffset])
-                    | (static_cast<std::uint16_t>(static_cast<std::uint8_t>(data->Colors->Data[byteOffset + 1u])) << 8u));
-                if ((packedPixel & 0x8000u) != 0u) {
-                    pixels.push_back(PackRgbaToAbgr(
-                        ExpandChannelTo8Bit(static_cast<std::uint8_t>((packedPixel >> 10u) & 0x1Fu), 5),
-                        ExpandChannelTo8Bit(static_cast<std::uint8_t>((packedPixel >> 5u) & 0x1Fu), 5),
-                        ExpandChannelTo8Bit(static_cast<std::uint8_t>(packedPixel & 0x1Fu), 5),
-                        0xFFu));
-                } else {
-                    pixels.push_back(PackRgbaToAbgr(
-                        ExpandChannelTo8Bit(static_cast<std::uint8_t>((packedPixel >> 8u) & 0x0Fu), 4),
-                        ExpandChannelTo8Bit(static_cast<std::uint8_t>((packedPixel >> 4u) & 0x0Fu), 4),
-                        ExpandChannelTo8Bit(static_cast<std::uint8_t>(packedPixel & 0x0Fu), 4),
-                        ExpandChannelTo8Bit(static_cast<std::uint8_t>((packedPixel >> 12u) & 0x07u), 3)));
-                }
             }
 
             return pixels;

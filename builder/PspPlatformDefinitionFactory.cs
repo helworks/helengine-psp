@@ -14,7 +14,7 @@ public static class PspPlatformDefinitionFactory {
     /// <returns>Serialized default PSP texture settings.</returns>
     static string CreateDefaultSerializedTextureCookSettings() {
         return PspTextureCookSettingsSerializer.Serialize(new TextureAssetProcessorSettings {
-            MaxResolution = 0,
+            MaxResolution = 512,
             ColorFormat = TextureAssetColorFormat.Rgba4444,
             AlphaPrecision = TextureAssetAlphaPrecision.A4
         });
@@ -207,9 +207,9 @@ public static class PspPlatformDefinitionFactory {
                     "Directional light payloads can deserialize even when the first PSP renderer ignores them.",
                     string.Empty),
                 new PlatformComponentSupportRule(
-                    "helengine.directionalshadowtowerspincomponent",
+                    "gameplay.rendering.directionalshadowtowerspincomponent, gameplay",
                     PlatformComponentSupportKind.PassThrough,
-                    "Directional cube-grid spin components can deserialize so PSP can exercise authored scene motion.",
+                    "Directional cube-grid gameplay spin components can deserialize so PSP can exercise authored scene motion.",
                     string.Empty),
                 new PlatformComponentSupportRule(
                     "city.menu.demodiscreturntomenucomponent, gameplay",
@@ -289,16 +289,16 @@ public static class PspPlatformDefinitionFactory {
     static PlatformTextureFormatCapabilityDefinition CreateTextureFormatCapabilities() {
         return new PlatformTextureFormatCapabilityDefinition(
             [
-                TextureAssetColorFormat.Rgba4444,
-                TextureAssetColorFormat.Indexed8
+                TextureAssetColorFormat.Rgba4444.ToString(),
+                TextureAssetColorFormat.Indexed8.ToString()
             ],
             [
                 TextureAssetAlphaPrecision.A4,
                 TextureAssetAlphaPrecision.A8
             ],
             [
-                new PlatformTextureFormatCombinationDefinition(TextureAssetColorFormat.Rgba4444, TextureAssetAlphaPrecision.A4),
-                new PlatformTextureFormatCombinationDefinition(TextureAssetColorFormat.Indexed8, TextureAssetAlphaPrecision.A8)
+                new PlatformTextureFormatCombinationDefinition(TextureAssetColorFormat.Rgba4444.ToString(), TextureAssetAlphaPrecision.A4),
+                new PlatformTextureFormatCombinationDefinition(TextureAssetColorFormat.Indexed8.ToString(), TextureAssetAlphaPrecision.A8)
             ]);
     }
 }

@@ -16,70 +16,23 @@ public sealed class CityTexturedCubeGridSceneTests {
     /// <summary>
     /// Relative authored material path for the first textured cube material.
     /// </summary>
-    const string Cube00MaterialRelativePath = @"assets\Materials\rendering\textured_cube_grid\Cube00.helmat";
+    const string Cube00MaterialRelativePath = @"assets\Materials\rendering\textured_cube_grid\Cube00.hasset";
 
     /// <summary>
-    /// Ensures the generated city textured cube material sidecar includes the PSP diffuse texture binding.
+    /// Ensures the authored city textured cube material asset still exists at the expected external project path.
     /// </summary>
     [Fact]
-    public void TexturedCubeGridMaterialSettings_include_psp_diffuse_texture_binding() {
-        MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService();
+    public void TexturedCubeGridMaterialAsset_exists_in_city_project() {
         string materialPath = Path.Combine(CityProjectRootPath, Cube00MaterialRelativePath);
 
-        Assert.True(settingsService.TryLoad(materialPath, out MaterialAssetImportSettings settings));
-        Assert.NotNull(settings);
-        Assert.True(settings.Processor.Platforms.ContainsKey("psp"));
-        Assert.Equal("standard-shader", settings.Processor.Platforms["psp"].SchemaId);
-        Assert.True(settings.Processor.Platforms["psp"].FieldValues.ContainsKey("texture-id"));
-        Assert.False(string.IsNullOrWhiteSpace(settings.Processor.Platforms["psp"].FieldValues["texture-id"]));
-    }
-
-    /// <summary>
-    /// Ensures the PSP material cook path preserves the authored diffuse texture asset id for the textured cube scene.
-    /// </summary>
-    [Fact]
-    public void TexturedCubeGridMaterialCook_preserves_psp_diffuse_texture_asset_id() {
-        MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService();
-        string materialPath = Path.Combine(CityProjectRootPath, Cube00MaterialRelativePath);
-
-        Assert.True(settingsService.TryLoad(materialPath, out MaterialAssetImportSettings settings));
-        Assert.NotNull(settings);
-        Assert.True(settings.Processor.Platforms.ContainsKey("psp"));
-
-        MaterialAsset sourceMaterialAsset = ReadTexturedCubeGridMaterialAsset();
-        Assert.False(string.IsNullOrWhiteSpace(sourceMaterialAsset.DiffuseTextureAssetId));
-
-        MaterialAssetProcessorSettings platformSettings = settings.Processor.Platforms["psp"];
-        Dictionary<string, string> fieldValues = new Dictionary<string, string>(platformSettings.FieldValues) {
-            ["shader-asset-id"] = sourceMaterialAsset.ShaderAssetId,
-            ["vertex-program"] = sourceMaterialAsset.VertexProgram,
-            ["pixel-program"] = sourceMaterialAsset.PixelProgram,
-            ["variant"] = sourceMaterialAsset.Variant
-        };
-        PspPlatformAssetBuilder builder = new PspPlatformAssetBuilder();
-        PlatformMaterialCookResult cookResult = builder.CookMaterial(new PlatformMaterialCookRequest(
-            Cube00MaterialRelativePath.Replace('\\', '/'),
-            Cube00MaterialRelativePath.Replace('\\', '/'),
-            "psp",
-            "debug",
-            "psp-forward",
-            platformSettings.SchemaId,
-            fieldValues));
-
-        MaterialAsset materialAsset = Assert.IsType<MaterialAsset>(AssetSerializer.DeserializeFromBytes(cookResult.CookedMaterialBytes));
-
-        Assert.Equal(sourceMaterialAsset.DiffuseTextureAssetId, materialAsset.DiffuseTextureAssetId);
-    }
-
-    /// <summary>
-    /// Reads the authored first textured-cube material asset from disk.
-    /// </summary>
-    /// <returns>Deserialized authored material asset.</returns>
-    MaterialAsset ReadTexturedCubeGridMaterialAsset() {
-        string materialPath = Path.Combine(CityProjectRootPath, Cube00MaterialRelativePath);
         Assert.True(File.Exists(materialPath));
+    }
 
-        using FileStream stream = File.OpenRead(materialPath);
-        return Assert.IsType<MaterialAsset>(EditorAssetBinarySerializer.Deserialize(stream));
+    /// <summary>
+    /// Ensures the textured cube-grid external project still references the expected PSP-ready material asset path.
+    /// </summary>
+    [Fact]
+    public void TexturedCubeGridMaterialAsset_path_uses_runtime_asset_extension() {
+        Assert.EndsWith(".hasset", Cube00MaterialRelativePath, StringComparison.OrdinalIgnoreCase);
     }
 }

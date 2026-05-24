@@ -2,15 +2,15 @@
 
 #include <cstdint>
 
-#include "MaterialAsset.hpp"
-#include "RuntimeMaterial.hpp"
+#include "ShaderMaterialAsset.hpp"
+#include "ShaderRuntimeMaterial.hpp"
 #include "float4.hpp"
 #include "platform/psp/rendering/PspMaterialLightingResponse.hpp"
 #include "platform/psp/rendering/PspRuntimeTexture.hpp"
 
 namespace helengine::psp::rendering {
     /// Stores PSP-specific runtime material state derived from the cooked material payload.
-    class PspRuntimeMaterial final : public RuntimeMaterial {
+    class PspRuntimeMaterial final : public ShaderRuntimeMaterial {
     public:
         /// Creates one PSP runtime material with lit-directional defaults.
         PspRuntimeMaterial();
@@ -28,7 +28,7 @@ namespace helengine::psp::rendering {
         bool TryResolveTexture(PspRuntimeTexture*& texture);
 
         /// Loads PSP material state from one cooked material asset.
-        void LoadFromCooked(MaterialAsset* materialAsset);
+        void LoadFromCooked(ShaderMaterialAsset* materialAsset);
 
     private:
         /// Stores the authored base color.

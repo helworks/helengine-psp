@@ -19,6 +19,7 @@ public sealed class PspGeneratedCoreCompatibilityNormalizer {
         NormalizeEngineBinaryReader(generatedCoreRootPath);
         NormalizeContentManager(generatedCoreRootPath);
         NormalizePathRootDetection(generatedCoreRootPath);
+        NormalizeStreamPropertyAccessors(generatedCoreRootPath);
     }
 
     /// <summary>
@@ -147,6 +148,41 @@ public sealed class PspGeneratedCoreCompatibilityNormalizer {
 
             if (!string.Equals(sourceContents, updatedSourceContents, StringComparison.Ordinal)) {
                 File.WriteAllText(sourcePath, updatedSourceContents);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Rewrites generated stream runtime headers so transpiled property access against native stream types resolves to the runtime method contract.
+    /// </summary>
+    /// <param name="generatedCoreRootPath">Absolute generated-core source root produced by the editor build graph.</param>
+    static void NormalizeStreamPropertyAccessors(string generatedCoreRootPath) {
+        string[] headerPaths = Directory.GetFiles(generatedCoreRootPath, "stream.hpp", SearchOption.AllDirectories);
+        for (int index = 0; index < headerPaths.Length; index++) {
+            string headerPath = headerPaths[index];
+            string relativePath = Path.GetRelativePath(generatedCoreRootPath, headerPath).Replace('\\', '/');
+            if (!relativePath.EndsWith("system/io/stream.hpp", StringComparison.OrdinalIgnoreCase)) {
+                continue;
+            }
+
+            string headerContents = File.ReadAllText(headerPath);
+            if (headerContents.Contains("size_t get_Position() const", StringComparison.Ordinal)) {
+                continue;
+            }
+
+            string newline = headerContents.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+            string originalBlock =
+                "    virtual size_t Length() const = 0;" + newline
+                + "    virtual size_t Position() const = 0;" + newline
+                + "    virtual void SetPosition(size_t value) = 0;";
+            string replacementBlock =
+                originalBlock + newline + newline
+                + "    size_t get_Length() const { return Length(); }" + newline
+                + "    size_t get_Position() const { return Position(); }" + newline
+                + "    void set_Position(size_t value) { SetPosition(value); }";
+            string updatedHeaderContents = headerContents.Replace(originalBlock, replacementBlock, StringComparison.Ordinal);
+            if (!string.Equals(headerContents, updatedHeaderContents, StringComparison.Ordinal)) {
+                File.WriteAllText(headerPath, updatedHeaderContents);
             }
         }
     }

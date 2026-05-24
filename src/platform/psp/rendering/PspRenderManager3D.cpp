@@ -19,6 +19,7 @@
 #include "IRenderQueue3D.hpp"
 #include "MaterialLayoutBuilder.hpp"
 #include "ModelAsset.hpp"
+#include "ShaderRuntimeMaterialLoader.hpp"
 #include "float2.hpp"
 #include "ObjectManager.hpp"
 #include "platform/psp/PspBootTrace.hpp"
@@ -716,8 +717,13 @@ namespace helengine::psp::rendering {
         return runtimeModel;
     }
 
+    /// Builds one shader-backed runtime material from the packaged material asset path used by scene loading.
+    RuntimeMaterial* PspRenderManager3D::BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string contentRootPath, std::string materialAssetPath) {
+        return ShaderRuntimeMaterialLoader::BuildMaterialFromRawAsset(this, assetContentManager, contentRootPath, materialAssetPath);
+    }
+
     /// Builds a runtime material placeholder and captures the authored base color.
-    RuntimeMaterial* PspRenderManager3D::BuildMaterialFromRaw(MaterialAsset* materialAsset, ShaderAsset* shaderAsset) {
+    RuntimeMaterial* PspRenderManager3D::BuildMaterialFromRaw(ShaderMaterialAsset* materialAsset, ShaderAsset* shaderAsset) {
         PspRuntimeMaterial* runtimeMaterial = new PspRuntimeMaterial();
         if (materialAsset != nullptr) {
             runtimeMaterial->LoadFromCooked(materialAsset);
@@ -733,6 +739,17 @@ namespace helengine::psp::rendering {
             " ptr=" +
             std::to_string(reinterpret_cast<std::uintptr_t>(runtimeMaterial)));
         return runtimeMaterial;
+    }
+
+    /// Reports the shader target used to resolve packaged shader assets for PSP materials.
+    ShaderCompileTarget PspRenderManager3D::get_ShaderCompileTarget() {
+        return ShaderCompileTarget::DirectX11;
+    }
+
+    /// Invalidates shader-backed runtime resources when authored shader assets change.
+    void PspRenderManager3D::InvalidateShaderResources(std::string shaderAssetId, ShaderAsset* shaderAsset) {
+        (void)shaderAssetId;
+        (void)shaderAsset;
     }
 
     /// Releases one PSP runtime model after the final scene reference is removed.

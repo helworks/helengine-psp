@@ -144,4 +144,33 @@ public sealed class PspGeneratedCoreCompatibilityNormalizerTests {
         Assert.Contains("delete stream;", updatedSourceContents, StringComparison.Ordinal);
         Assert.Contains("return content;}", updatedSourceContents, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Ensures generated stream headers expose property-style accessors expected by transpiled gameplay code.
+    /// </summary>
+    [Fact]
+    public void Normalize_whenGeneratedStreamHeaderUsesRuntimeMethodNames_adds_property_style_wrappers() {
+        string generatedCoreRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string systemIoRoot = Path.Combine(generatedCoreRoot, "system", "io");
+        Directory.CreateDirectory(systemIoRoot);
+
+        string headerPath = Path.Combine(systemIoRoot, "stream.hpp");
+        File.WriteAllText(
+            headerPath,
+            "class Stream {\n"
+            + "public:\n"
+            + "    virtual size_t Length() const = 0;\n"
+            + "    virtual size_t Position() const = 0;\n"
+            + "    virtual void SetPosition(size_t value) = 0;\n"
+            + "\n"
+            + "    virtual bool CanTimeout() const { return false; }\n"
+            + "};\n");
+
+        new PspGeneratedCoreCompatibilityNormalizer().Normalize(generatedCoreRoot);
+
+        string updatedHeaderContents = File.ReadAllText(headerPath);
+        Assert.Contains("size_t get_Length() const { return Length(); }", updatedHeaderContents, StringComparison.Ordinal);
+        Assert.Contains("size_t get_Position() const { return Position(); }", updatedHeaderContents, StringComparison.Ordinal);
+        Assert.Contains("void set_Position(size_t value) { SetPosition(value); }", updatedHeaderContents, StringComparison.Ordinal);
+    }
 }

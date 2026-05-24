@@ -53,7 +53,7 @@ namespace helengine::psp::rendering {
     }
 
     /// Loads PSP material state from one cooked material asset.
-    void PspRuntimeMaterial::LoadFromCooked(MaterialAsset* materialAsset) {
+    void PspRuntimeMaterial::LoadFromCooked(ShaderMaterialAsset* materialAsset) {
         if (materialAsset == nullptr) {
             throw std::invalid_argument("PSP cooked material data is required.");
         }

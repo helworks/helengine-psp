@@ -39,7 +39,7 @@ public sealed class PspPlatformAssetBuilderTests {
         Assert.Contains(builder.Definition.ComponentSupportRules, supportRule =>
             supportRule.ComponentTypeId == "helengine.cameracomponent");
         Assert.Contains(builder.Definition.ComponentSupportRules, supportRule =>
-            supportRule.ComponentTypeId == "helengine.directionalshadowtowerspincomponent");
+            supportRule.ComponentTypeId == "gameplay.rendering.directionalshadowtowerspincomponent, gameplay");
         Assert.Contains(builder.Definition.ComponentSupportRules, supportRule =>
             supportRule.ComponentTypeId == "city.menu.demodiscreturntomenucomponent, gameplay");
         Assert.Contains(builder.Definition.AssetCookCapabilities, capability =>
@@ -66,7 +66,7 @@ public sealed class PspPlatformAssetBuilderTests {
                 Assert.Equal("runtime-texture", capability.TargetArtifactKind);
                 Assert.Equal(PlatformAssetCookOwnershipKind.BuilderOwned, capability.OwnershipKind);
                 Assert.Equal("psp-texture", capability.SettingsContractId);
-                Assert.Equal("{\"maxResolution\":0,\"colorFormat\":\"Rgba4444\",\"alphaPrecision\":\"A4\"}", capability.DefaultSerializedPlatformSettings);
+                Assert.Equal("{\"maxResolution\":512,\"colorFormat\":\"Rgba4444\",\"alphaPrecision\":\"A4\"}", capability.DefaultSerializedPlatformSettings);
                 AssertTextureFormatCapabilities(capability.TextureFormatCapabilities);
             },
             capability => {
@@ -157,20 +157,21 @@ public sealed class PspPlatformAssetBuilderTests {
     /// <param name="textureFormatCapabilities">Texture capability metadata to validate.</param>
     static void AssertTextureFormatCapabilities(PlatformTextureFormatCapabilityDefinition textureFormatCapabilities) {
         Assert.NotNull(textureFormatCapabilities);
-        Assert.Equal(
-            [TextureAssetColorFormat.Rgba4444, TextureAssetColorFormat.Indexed8],
-            textureFormatCapabilities.SupportedColorFormats);
+        Assert.Collection(
+            textureFormatCapabilities.SupportedColorFormatIds,
+            colorFormatId => Assert.Equal(TextureAssetColorFormat.Rgba4444.ToString(), colorFormatId),
+            colorFormatId => Assert.Equal(TextureAssetColorFormat.Indexed8.ToString(), colorFormatId));
         Assert.Equal(
             [TextureAssetAlphaPrecision.A4, TextureAssetAlphaPrecision.A8],
             textureFormatCapabilities.SupportedAlphaPrecisions);
         Assert.Collection(
             textureFormatCapabilities.SupportedCombinations,
             combination => {
-                Assert.Equal(TextureAssetColorFormat.Rgba4444, combination.ColorFormat);
+                Assert.Equal(TextureAssetColorFormat.Rgba4444.ToString(), combination.ColorFormatId);
                 Assert.Equal(TextureAssetAlphaPrecision.A4, combination.AlphaPrecision);
             },
             combination => {
-                Assert.Equal(TextureAssetColorFormat.Indexed8, combination.ColorFormat);
+                Assert.Equal(TextureAssetColorFormat.Indexed8.ToString(), combination.ColorFormatId);
                 Assert.Equal(TextureAssetAlphaPrecision.A8, combination.AlphaPrecision);
             });
     }
@@ -222,7 +223,7 @@ public sealed class PspPlatformAssetBuilderTests {
                 ["receives-shadow"] = "true"
             }));
 
-        MaterialAsset materialAsset = Assert.IsType<MaterialAsset>(AssetSerializer.DeserializeFromBytes(result.CookedMaterialBytes));
+        ShaderMaterialAsset materialAsset = EditorAssetTestReader.ReadAsset<ShaderMaterialAsset>(result.CookedMaterialBytes);
         Assert.Equal("engine:material:standard", materialAsset.ShaderAssetId);
         Assert.Equal("Textures/Checker", materialAsset.DiffuseTextureAssetId);
         Assert.False(materialAsset.CastsShadows);
@@ -260,7 +261,7 @@ public sealed class PspPlatformAssetBuilderTests {
                 ["receives-shadow"] = "true"
             }));
 
-        MaterialAsset materialAsset = Assert.IsType<MaterialAsset>(AssetSerializer.DeserializeFromBytes(result.CookedMaterialBytes));
+        ShaderMaterialAsset materialAsset = EditorAssetTestReader.ReadAsset<ShaderMaterialAsset>(result.CookedMaterialBytes);
         MaterialConstantBufferAsset lightingBuffer = Assert.Single(materialAsset.ConstantBuffers, buffer => buffer.Name == "LightingConfigBuffer");
 
         Assert.Equal(16, lightingBuffer.Data.Length);
@@ -296,7 +297,7 @@ public sealed class PspPlatformAssetBuilderTests {
                 ["receives-shadow"] = "true"
             }));
 
-        MaterialAsset materialAsset = Assert.IsType<MaterialAsset>(AssetSerializer.DeserializeFromBytes(result.CookedMaterialBytes));
+        ShaderMaterialAsset materialAsset = EditorAssetTestReader.ReadAsset<ShaderMaterialAsset>(result.CookedMaterialBytes);
         MaterialConstantBufferAsset baseColorBuffer = Assert.Single(materialAsset.ConstantBuffers, buffer => buffer.Name == "BaseColorBuffer");
 
         Assert.Equal(1.0f, BitConverter.ToSingle(baseColorBuffer.Data, 0));

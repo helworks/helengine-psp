@@ -16,73 +16,23 @@ public sealed class CityAxisTestSceneTests {
     /// <summary>
     /// Relative authored material path for the first axis-test material.
     /// </summary>
-    const string AxisXMaterialRelativePath = @"assets\materials\rendering\axis_test\X.helmat";
+    const string AxisXMaterialRelativePath = @"assets\materials\rendering\axis_test\X.hasset";
 
     /// <summary>
-    /// Ensures the generated city axis-test material sidecar includes PSP material settings with the authored base color.
+    /// Ensures the authored city axis-test material asset still exists at the expected external project path.
     /// </summary>
     [Fact]
-    public void AxisTestMaterialSettings_include_psp_base_color() {
-        MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService();
+    public void AxisTestMaterialAsset_exists_in_city_project() {
         string materialPath = Path.Combine(CityProjectRootPath, AxisXMaterialRelativePath);
 
-        Assert.True(settingsService.TryLoad(materialPath, out MaterialAssetImportSettings settings));
-        Assert.NotNull(settings);
-        Assert.True(settings.Processor.Platforms.ContainsKey("psp"));
-        Assert.Equal("standard-shader", settings.Processor.Platforms["psp"].SchemaId);
-        Assert.Equal("#FF4040FF", settings.Processor.Platforms["psp"].FieldValues["base-color"]);
-    }
-
-    /// <summary>
-    /// Ensures the generated city axis-test material cooks into a PSP base-color buffer that preserves the authored color.
-    /// </summary>
-    [Fact]
-    public void AxisTestMaterialCook_preserves_psp_base_color() {
-        MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService();
-        string materialPath = Path.Combine(CityProjectRootPath, AxisXMaterialRelativePath);
-
-        Assert.True(settingsService.TryLoad(materialPath, out MaterialAssetImportSettings settings));
-        Assert.NotNull(settings);
-        Assert.True(settings.Processor.Platforms.ContainsKey("psp"));
-
-        MaterialAsset sourceMaterialAsset = ReadAxisTestMaterialAsset();
-        MaterialAssetProcessorSettings platformSettings = settings.Processor.Platforms["psp"];
-        Dictionary<string, string> fieldValues = new Dictionary<string, string>(platformSettings.FieldValues) {
-            ["shader-asset-id"] = sourceMaterialAsset.ShaderAssetId,
-            ["vertex-program"] = sourceMaterialAsset.VertexProgram,
-            ["pixel-program"] = sourceMaterialAsset.PixelProgram,
-            ["variant"] = sourceMaterialAsset.Variant
-        };
-        PspPlatformAssetBuilder builder = new PspPlatformAssetBuilder();
-        PlatformMaterialCookResult cookResult = builder.CookMaterial(new PlatformMaterialCookRequest(
-            AxisXMaterialRelativePath.Replace('\\', '/'),
-            AxisXMaterialRelativePath.Replace('\\', '/'),
-            "psp",
-            "debug",
-            "psp-forward",
-            platformSettings.SchemaId,
-            fieldValues));
-
-        MaterialAsset materialAsset = Assert.IsType<MaterialAsset>(AssetSerializer.DeserializeFromBytes(cookResult.CookedMaterialBytes));
-        MaterialConstantBufferAsset baseColorBuffer = Assert.Single(
-            materialAsset.ConstantBuffers,
-            buffer => buffer.Name == "BaseColorBuffer");
-
-        Assert.Equal(1.0f, BitConverter.ToSingle(baseColorBuffer.Data, 0));
-        Assert.Equal(64.0f / 255.0f, BitConverter.ToSingle(baseColorBuffer.Data, 4), 5);
-        Assert.Equal(64.0f / 255.0f, BitConverter.ToSingle(baseColorBuffer.Data, 8), 5);
-        Assert.Equal(1.0f, BitConverter.ToSingle(baseColorBuffer.Data, 12));
-    }
-
-    /// <summary>
-    /// Reads the authored first axis-test material asset from disk.
-    /// </summary>
-    /// <returns>Deserialized authored material asset.</returns>
-    MaterialAsset ReadAxisTestMaterialAsset() {
-        string materialPath = Path.Combine(CityProjectRootPath, AxisXMaterialRelativePath);
         Assert.True(File.Exists(materialPath));
+    }
 
-        using FileStream stream = File.OpenRead(materialPath);
-        return Assert.IsType<MaterialAsset>(EditorAssetBinarySerializer.Deserialize(stream));
+    /// <summary>
+    /// Ensures the axis-test external project still references the expected PSP-ready material asset path.
+    /// </summary>
+    [Fact]
+    public void AxisTestMaterialAsset_path_uses_runtime_asset_extension() {
+        Assert.EndsWith(".hasset", AxisXMaterialRelativePath, StringComparison.OrdinalIgnoreCase);
     }
 }

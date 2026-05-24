@@ -160,7 +160,7 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
         bool receivesShadows = ReadOptionalBooleanField(request.FieldValues, "receives-shadow", true);
         float lightingResponseCode = ParseLightingResponseCode(lightingResponse);
 
-        MaterialAsset materialAsset = new MaterialAsset {
+        ShaderMaterialAsset materialAsset = new ShaderMaterialAsset {
             Id = request.MaterialAssetId,
             ShaderAssetId = shaderAssetId,
             VertexProgram = vertexProgram,

@@ -1,13 +1,16 @@
 #pragma once
 
+class ContentManager;
+
 #include "ICamera.hpp"
 #include "IDrawable3D.hpp"
 #include "IRenderVisitor3D.hpp"
-#include "MaterialAsset.hpp"
+#include "IShaderRenderManager3D.hpp"
 #include "RenderManager3D.hpp"
 #include "RuntimeMaterial.hpp"
 #include "RuntimeModel.hpp"
 #include "ShaderAsset.hpp"
+#include "ShaderMaterialAsset.hpp"
 #include "float3.hpp"
 #include "float4x4.hpp"
 #include "platform/psp/rendering/PspLightingSettings.hpp"
@@ -17,7 +20,7 @@
 
 namespace helengine::psp::rendering {
     /// Accepts generated-core 3D drawables and renders PSP 3D meshes through the active lighting pipeline.
-    class PspRenderManager3D final : public RenderManager3D, public IRenderVisitor3D {
+    class PspRenderManager3D final : public RenderManager3D, public IRenderVisitor3D, public IShaderRenderManager3D {
     public:
         /// Creates the PSP 3D render manager.
         PspRenderManager3D();
@@ -25,8 +28,17 @@ namespace helengine::psp::rendering {
         /// Builds a CPU-side runtime model payload from the raw mesh asset.
         RuntimeModel* BuildModelFromRaw(ModelAsset* data) override;
 
+        /// Builds one shader-backed runtime material from the packaged material asset path used by scene loading.
+        RuntimeMaterial* BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string contentRootPath, std::string materialAssetPath) override;
+
         /// Builds a runtime material placeholder and captures the authored base color.
-        RuntimeMaterial* BuildMaterialFromRaw(MaterialAsset* materialAsset, ShaderAsset* shaderAsset) override;
+        RuntimeMaterial* BuildMaterialFromRaw(ShaderMaterialAsset* materialAsset, ShaderAsset* shaderAsset) override;
+
+        /// Reports the shader target used to resolve packaged shader assets for PSP materials.
+        ShaderCompileTarget get_ShaderCompileTarget() override;
+
+        /// Invalidates shader-backed runtime resources when authored shader assets change.
+        void InvalidateShaderResources(std::string shaderAssetId, ShaderAsset* shaderAsset) override;
 
         /// Releases one PSP runtime model after the final scene reference is removed.
         void ReleaseModel(RuntimeModel* model) override;

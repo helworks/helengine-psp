@@ -11,17 +11,13 @@ namespace helengine.psp.builder.tests {
         [Fact]
         public void Source_DoesNotUseGuNormalizedNormalAsVertexFormatFlag() {
             string sourcePath = Path.Combine(
-                AppContext.BaseDirectory,
-                "..",
-                "..",
-                "..",
-                "..",
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
                 "src",
                 "platform",
                 "psp",
                 "rendering",
                 "PspRenderManager3D.cpp");
-            string sourceContents = File.ReadAllText(Path.GetFullPath(sourcePath));
+            string sourceContents = File.ReadAllText(sourcePath);
 
             Assert.DoesNotContain("GU_NORMALIZED_NORMAL", sourceContents, StringComparison.Ordinal);
         }
@@ -32,17 +28,13 @@ namespace helengine.psp.builder.tests {
         [Fact]
         public void Source_DoesNotDeleteRuntimeModelOrMaterialInsideReleaseMethods() {
             string sourcePath = Path.Combine(
-                AppContext.BaseDirectory,
-                "..",
-                "..",
-                "..",
-                "..",
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
                 "src",
                 "platform",
                 "psp",
                 "rendering",
                 "PspRenderManager3D.cpp");
-            string sourceContents = File.ReadAllText(Path.GetFullPath(sourcePath));
+            string sourceContents = File.ReadAllText(sourcePath);
 
             Assert.DoesNotContain("delete static_cast<PspRuntimeModel*>(model);", sourceContents, StringComparison.Ordinal);
             Assert.DoesNotContain("delete static_cast<PspRuntimeMaterial*>(material);", sourceContents, StringComparison.Ordinal);
@@ -54,17 +46,13 @@ namespace helengine.psp.builder.tests {
         [Fact]
         public void Source_FixedFunctionLambertKeepsFixedFunctionDrawablesForTexturedAndUntexturedMeshes() {
             string sourcePath = Path.Combine(
-                AppContext.BaseDirectory,
-                "..",
-                "..",
-                "..",
-                "..",
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
                 "src",
                 "platform",
                 "psp",
                 "rendering",
                 "PspRenderManager3D.cpp");
-            string sourceContents = File.ReadAllText(Path.GetFullPath(sourcePath));
+            string sourceContents = File.ReadAllText(sourcePath);
 
             Assert.Contains("SubmitFixedFunctionDrawable(\n                pspRuntimeModelData,", sourceContents, StringComparison.Ordinal);
             Assert.Contains("SubmitFixedFunctionTexturedDrawable(\n                    pspRuntimeModelData,", sourceContents, StringComparison.Ordinal);
@@ -77,17 +65,13 @@ namespace helengine.psp.builder.tests {
         [Fact]
         public void Source_TexturedDrawsResolveTextureFromDrawableMaterialInstance() {
             string sourcePath = Path.Combine(
-                AppContext.BaseDirectory,
-                "..",
-                "..",
-                "..",
-                "..",
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
                 "src",
                 "platform",
                 "psp",
                 "rendering",
                 "PspRenderManager3D.cpp");
-            string sourceContents = File.ReadAllText(Path.GetFullPath(sourcePath));
+            string sourceContents = File.ReadAllText(sourcePath);
 
             Assert.Contains("PspRuntimeMaterial* pspRuntimeMaterial = static_cast<PspRuntimeMaterial*>(runtimeMaterial);", sourceContents, StringComparison.Ordinal);
             Assert.Contains("PspRuntimeMaterial* rootPspRuntimeMaterial = static_cast<PspRuntimeMaterial*>(rootMaterial);", sourceContents, StringComparison.Ordinal);
@@ -100,17 +84,13 @@ namespace helengine.psp.builder.tests {
         [Fact]
         public void Source_RenderCameraUsesAuthoredClipPlanes() {
             string sourcePath = Path.Combine(
-                AppContext.BaseDirectory,
-                "..",
-                "..",
-                "..",
-                "..",
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
                 "src",
                 "platform",
                 "psp",
                 "rendering",
                 "PspRenderManager3D.cpp");
-            string sourceContents = File.ReadAllText(Path.GetFullPath(sourcePath));
+            string sourceContents = File.ReadAllText(sourcePath);
 
             Assert.Contains("const float nearPlaneDistance = camera->get_NearPlaneDistance();", sourceContents, StringComparison.Ordinal);
             Assert.Contains("const float farPlaneDistance = camera->get_FarPlaneDistance();", sourceContents, StringComparison.Ordinal);
@@ -123,17 +103,13 @@ namespace helengine.psp.builder.tests {
         [Fact]
         public void Source_FixedFunctionDirectionalLightUsesAmbientAndDiffuseLightComponentMode() {
             string sourcePath = Path.Combine(
-                AppContext.BaseDirectory,
-                "..",
-                "..",
-                "..",
-                "..",
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
                 "src",
                 "platform",
                 "psp",
                 "rendering",
                 "PspRenderManager3D.cpp");
-            string sourceContents = File.ReadAllText(Path.GetFullPath(sourcePath));
+            string sourceContents = File.ReadAllText(sourcePath);
 
             Assert.Contains("sceGuLight(0, GU_DIRECTIONAL, GU_AMBIENT_AND_DIFFUSE, &lightVector);", sourceContents, StringComparison.Ordinal);
             Assert.DoesNotContain("sceGuLight(0, GU_DIRECTIONAL, GU_DIFFUSE, &lightVector);", sourceContents, StringComparison.Ordinal);
@@ -145,17 +121,13 @@ namespace helengine.psp.builder.tests {
         [Fact]
         public void Source_ModelCacheDoesNotReuseEmptyGuidModelIds() {
             string sourcePath = Path.Combine(
-                AppContext.BaseDirectory,
-                "..",
-                "..",
-                "..",
-                "..",
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
                 "src",
                 "platform",
                 "psp",
                 "rendering",
                 "PspRenderManager3D.cpp");
-            string sourceContents = File.ReadAllText(Path.GetFullPath(sourcePath));
+            string sourceContents = File.ReadAllText(sourcePath);
 
             Assert.Contains("bool IsCacheableModelId(const std::string& modelId)", sourceContents, StringComparison.Ordinal);
             Assert.Contains("modelId != \"00000000-0000-0000-0000-000000000000\";", sourceContents, StringComparison.Ordinal);
@@ -168,21 +140,136 @@ namespace helengine.psp.builder.tests {
         [Fact]
         public void Source_RenderCameraRestoresClipPlanesAndFullFrameScissor() {
             string sourcePath = Path.Combine(
-                AppContext.BaseDirectory,
-                "..",
-                "..",
-                "..",
-                "..",
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
                 "src",
                 "platform",
                 "psp",
                 "rendering",
                 "PspRenderManager3D.cpp");
-            string sourceContents = File.ReadAllText(Path.GetFullPath(sourcePath));
+            string sourceContents = File.ReadAllText(sourcePath);
 
             Assert.Contains("sceGuEnable(GU_CLIP_PLANES);", sourceContents, StringComparison.Ordinal);
             Assert.Contains("sceGuEnable(GU_SCISSOR_TEST);", sourceContents, StringComparison.Ordinal);
             Assert.Contains("sceGuScissor(0, 0, mainWindowSize.X, mainWindowSize.Y);", sourceContents, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Ensures the PSP 3D renderer and runtime material follow the shared shader-material contract expected by generated core.
+        /// </summary>
+        [Fact]
+        public void Source_RendererAndRuntimeMaterialUseShaderMaterialAssetContract() {
+            string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+            string renderManagerHeaderPath = Path.Combine(
+                repositoryRootPath,
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRenderManager3D.hpp");
+            string runtimeMaterialHeaderPath = Path.Combine(
+                repositoryRootPath,
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRuntimeMaterial.hpp");
+            string runtimeMaterialSourcePath = Path.Combine(
+                repositoryRootPath,
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRuntimeMaterial.cpp");
+
+            string renderManagerHeaderContents = File.ReadAllText(renderManagerHeaderPath);
+            string runtimeMaterialHeaderContents = File.ReadAllText(runtimeMaterialHeaderPath);
+            string runtimeMaterialSourceContents = File.ReadAllText(runtimeMaterialSourcePath);
+
+            Assert.Contains("RuntimeMaterial* BuildMaterialFromRaw(ShaderMaterialAsset* materialAsset, ShaderAsset* shaderAsset) override;", renderManagerHeaderContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("RuntimeMaterial* BuildMaterialFromRaw(MaterialAsset* materialAsset, ShaderAsset* shaderAsset) override;", renderManagerHeaderContents, StringComparison.Ordinal);
+            Assert.Contains("void LoadFromCooked(ShaderMaterialAsset* materialAsset);", runtimeMaterialHeaderContents, StringComparison.Ordinal);
+            Assert.Contains("void PspRuntimeMaterial::LoadFromCooked(ShaderMaterialAsset* materialAsset)", runtimeMaterialSourceContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("void LoadFromCooked(MaterialAsset* materialAsset);", runtimeMaterialHeaderContents, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Ensures the PSP renderer implements the generated shader-material runtime interface expected by packaged material loading.
+        /// </summary>
+        [Fact]
+        public void Source_RendererImplementsShaderRuntimeInterface() {
+            string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+            string renderManagerHeaderPath = Path.Combine(
+                repositoryRootPath,
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRenderManager3D.hpp");
+            string renderManagerSourcePath = Path.Combine(
+                repositoryRootPath,
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRenderManager3D.cpp");
+
+            string renderManagerHeaderContents = File.ReadAllText(renderManagerHeaderPath);
+            string renderManagerSourceContents = File.ReadAllText(renderManagerSourcePath);
+
+            Assert.Contains("public IShaderRenderManager3D", renderManagerHeaderContents, StringComparison.Ordinal);
+            Assert.Contains("ShaderCompileTarget get_ShaderCompileTarget() override;", renderManagerHeaderContents, StringComparison.Ordinal);
+            Assert.Contains("void InvalidateShaderResources(std::string shaderAssetId, ShaderAsset* shaderAsset) override;", renderManagerHeaderContents, StringComparison.Ordinal);
+            Assert.Contains("ShaderCompileTarget PspRenderManager3D::get_ShaderCompileTarget()", renderManagerSourceContents, StringComparison.Ordinal);
+            Assert.Contains("return ShaderCompileTarget::DirectX11;", renderManagerSourceContents, StringComparison.Ordinal);
+            Assert.Contains("void PspRenderManager3D::InvalidateShaderResources(std::string shaderAssetId, ShaderAsset* shaderAsset)", renderManagerSourceContents, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Ensures the PSP runtime material stays shader-backed so it can use the shared layout and property-block helpers.
+        /// </summary>
+        [Fact]
+        public void Source_RuntimeMaterialInheritsShaderRuntimeMaterialContract() {
+            string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+            string runtimeMaterialHeaderPath = Path.Combine(
+                repositoryRootPath,
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRuntimeMaterial.hpp");
+
+            string runtimeMaterialHeaderContents = File.ReadAllText(runtimeMaterialHeaderPath);
+
+            Assert.Contains("class PspRuntimeMaterial final : public ShaderRuntimeMaterial", runtimeMaterialHeaderContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("class PspRuntimeMaterial final : public RuntimeMaterial", runtimeMaterialHeaderContents, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Ensures the PSP renderer overrides the packaged raw-material entrypoint used by runtime scene loading.
+        /// </summary>
+        [Fact]
+        public void Source_RendererOverridesBuildMaterialFromRawAssetForPackagedSceneLoading() {
+            string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+            string renderManagerHeaderPath = Path.Combine(
+                repositoryRootPath,
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRenderManager3D.hpp");
+            string renderManagerSourcePath = Path.Combine(
+                repositoryRootPath,
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRenderManager3D.cpp");
+
+            string renderManagerHeaderContents = File.ReadAllText(renderManagerHeaderPath);
+            string renderManagerSourceContents = File.ReadAllText(renderManagerSourcePath);
+
+            Assert.Contains("RuntimeMaterial* BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string contentRootPath, std::string materialAssetPath) override;", renderManagerHeaderContents, StringComparison.Ordinal);
+            Assert.Contains("ShaderRuntimeMaterialLoader::BuildMaterialFromRawAsset(this, assetContentManager, contentRootPath, materialAssetPath);", renderManagerSourceContents, StringComparison.Ordinal);
         }
     }
 }
