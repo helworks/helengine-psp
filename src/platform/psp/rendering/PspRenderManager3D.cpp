@@ -60,7 +60,7 @@ namespace helengine::psp::rendering {
                 && modelId != "00000000-0000-0000-0000-000000000000";
         }
 
-        /// Converts one generated matrix into the column-major layout expected by PSP GU.
+        /// Copies one generated matrix into the PSP upload buffer without reordering fields.
         PspMatrixBuffer CreatePspMatrixBuffer(const float4x4& matrix) {
             PspMatrixBuffer buffer {};
             buffer.M[0][0] = matrix.M11;
@@ -230,19 +230,19 @@ namespace helengine::psp::rendering {
             float3 position = entity->get_Position();
 
             float4x4 rotation;
-            float4x4::CreateFromQuaternion(orientation, rotation);
+            float4x4::CreateFromQuaternion__ref0_out1(orientation, rotation);
 
             float4x4 size;
-            float4x4::CreateScale(scale.X, scale.Y, scale.Z, size);
+            float4x4::CreateScale__out3(scale.X, scale.Y, scale.Z, size);
 
             float4x4 rotationScale;
-            float4x4::Multiply(rotation, size, rotationScale);
+            float4x4::Multiply__ref0_ref1_out2(rotation, size, rotationScale);
 
             float4x4 translation;
-            float4x4::CreateTranslation(position, translation);
+            float4x4::CreateTranslation__ref0_out1(position, translation);
 
             float4x4 world;
-            float4x4::Multiply(rotationScale, translation, world);
+            float4x4::Multiply__ref0_ref1_out2(rotationScale, translation, world);
             return world;
         }
 
@@ -256,13 +256,13 @@ namespace helengine::psp::rendering {
             float3 position = entity->get_Position();
 
             float4x4 rotation;
-            float4x4::CreateFromQuaternion(orientation, rotation);
+            float4x4::CreateFromQuaternion__ref0_out1(orientation, rotation);
 
             float4x4 translation;
-            float4x4::CreateTranslation(position, translation);
+            float4x4::CreateTranslation__ref0_out1(position, translation);
 
             float4x4 world;
-            float4x4::Multiply(rotation, translation, world);
+            float4x4::Multiply__ref0_ref1_out2(rotation, translation, world);
             return world;
         }
 
@@ -339,10 +339,11 @@ namespace helengine::psp::rendering {
             return vertices;
         }
 
-        /// Builds one transient textured fixed-function vertex stream with object-space positions pre-scaled for non-uniform GPU lighting.
-        PspRuntimeModel::FixedFunctionTexturedVertex* CreateScaledFixedFunctionTexturedVertices(
+        /// Builds one transient textured fixed-function vertex stream with normalized UVs and optional object-space position scaling.
+        PspRuntimeModel::FixedFunctionTexturedVertex* CreateTransientFixedFunctionTexturedVertices(
             const PspRuntimeModel* runtimeModel,
-            const float3& scale) {
+            PspRuntimeTexture* texture,
+            const float3* scale) {
             if (runtimeModel == nullptr || !runtimeModel->HasFixedFunctionTexturedVertices()) {
                 return nullptr;
             }
@@ -363,9 +364,9 @@ namespace helengine::psp::rendering {
                     sourceVertex.NX,
                     sourceVertex.NY,
                     sourceVertex.NZ,
-                    sourceVertex.X * scale.X,
-                    sourceVertex.Y * scale.Y,
-                    sourceVertex.Z * scale.Z
+                    scale != nullptr ? sourceVertex.X * scale->X : sourceVertex.X,
+                    scale != nullptr ? sourceVertex.Y * scale->Y : sourceVertex.Y,
+                    scale != nullptr ? sourceVertex.Z * scale->Z : sourceVertex.Z
                 };
             }
 
@@ -544,7 +545,11 @@ namespace helengine::psp::rendering {
 
             SetTextureEnabled(true);
             sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-            sceGuTexImage(0, texture->get_Width(), texture->get_Height(), texture->get_Width(), texture->GetPixelsAbgr8888());
+            sceGuTexMapMode(GU_TEXTURE_COORDS, 0, 0);
+            sceGuTexProjMapMode(GU_UV);
+            sceGuTexScale(1.0f, 1.0f);
+            sceGuTexOffset(0.0f, 0.0f);
+            sceGuTexImage(0, texture->get_Width(), texture->get_Height(), texture->GetTextureBufferWidth(), texture->GetPixelsAbgr8888());
             sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
             sceGuTexFilter(GU_NEAREST, GU_NEAREST);
             sceGuTexWrap(GU_REPEAT, GU_REPEAT);
@@ -667,9 +672,10 @@ namespace helengine::psp::rendering {
         ConfigureFixedFunctionMaterial(baseColor, useLighting);
         PspRenderProfiler::Record3DFixedFunctionMaterialSetup(PspRenderProfiler::GetTimestampMicroseconds() - materialSetupStartMicroseconds);
 
-        const PspRuntimeModel::FixedFunctionTexturedVertex* vertices = positionScale != nullptr
-            ? CreateScaledFixedFunctionTexturedVertices(runtimeModel, *positionScale)
-            : runtimeModel->GetFixedFunctionTexturedVertices();
+        const PspRuntimeModel::FixedFunctionTexturedVertex* vertices = CreateTransientFixedFunctionTexturedVertices(
+            runtimeModel,
+            texture,
+            positionScale);
         const std::uint64_t drawStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         sceGumDrawArray(
             GU_TRIANGLES,
@@ -839,7 +845,10 @@ namespace helengine::psp::rendering {
             return;
         }
 
-        RuntimeMaterial* runtimeMaterial = drawable->get_Material();
+        Array<RuntimeMaterial*>* runtimeMaterials = drawable->get_Materials();
+        RuntimeMaterial* runtimeMaterial = runtimeMaterials != nullptr && runtimeMaterials->Length > 0
+            ? (*runtimeMaterials)[0]
+            : nullptr;
         const std::uint64_t materialResolveStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         RuntimeMaterial* rootMaterial = runtimeMaterial != nullptr ? runtimeMaterial->ResolveRootMaterial() : nullptr;
         PspRenderProfiler::Record3DMaterialResolve(PspRenderProfiler::GetTimestampMicroseconds() - materialResolveStartMicroseconds);
@@ -972,7 +981,7 @@ namespace helengine::psp::rendering {
         float3 cameraTarget = cameraPosition + cameraForward;
         CurrentCameraPosition = cameraPosition;
 
-        float4x4::CreateLookAt(cameraPosition, cameraTarget, cameraUp, CurrentView);
+        float4x4::CreateLookAt__ref0_ref1_ref2_out3(cameraPosition, cameraTarget, cameraUp, CurrentView);
 
         float aspectRatio = 1.0f;
         const int2 mainWindowSize = get_MainWindowSize();
@@ -983,8 +992,7 @@ namespace helengine::psp::rendering {
         constexpr float CameraFieldOfViewRadians = 0.78539816339f;
         const float nearPlaneDistance = camera->get_NearPlaneDistance();
         const float farPlaneDistance = camera->get_FarPlaneDistance();
-        float4x4::CreatePerspectiveFieldOfView(CameraFieldOfViewRadians, aspectRatio, nearPlaneDistance, farPlaneDistance, CurrentProjection);
-
+        float4x4::CreatePerspectiveFieldOfView__out4(CameraFieldOfViewRadians, aspectRatio, nearPlaneDistance, farPlaneDistance, CurrentProjection);
         PspMatrixBuffer viewMatrix = CreatePspMatrixBuffer(CurrentView);
         PspMatrixBuffer projectionMatrix = CreatePspMatrixBuffer(CurrentProjection);
 

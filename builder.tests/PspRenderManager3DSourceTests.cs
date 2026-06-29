@@ -79,6 +79,47 @@ namespace helengine.psp.builder.tests {
         }
 
         /// <summary>
+        /// Ensures PSP textured 3D draws preserve the engine's normalized UVs instead of multiplying them by texture dimensions.
+        /// </summary>
+        [Fact]
+        public void Source_TexturedDrawsPreserveNormalizedUvs() {
+            string sourcePath = Path.Combine(
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRenderManager3D.cpp");
+            string sourceContents = File.ReadAllText(sourcePath);
+
+            Assert.DoesNotContain("ConvertNormalizedTextureCoordinatesToPspTexels", sourceContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("normalizedTextureCoordinates.X * texture->get_Width()", sourceContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("normalizedTextureCoordinates.Y * texture->get_Height()", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("sourceVertex.U,", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("sourceVertex.V,", sourceContents, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Ensures PSP textured 3D draws explicitly restore GU UV mapping state so 3D texture coordinates cannot inherit stale mapping or scale state.
+        /// </summary>
+        [Fact]
+        public void Source_TexturedDrawsResetGuTextureCoordinateState() {
+            string sourcePath = Path.Combine(
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRenderManager3D.cpp");
+            string sourceContents = File.ReadAllText(sourcePath);
+
+            Assert.Contains("sceGuTexMapMode(GU_TEXTURE_COORDS, 0, 0);", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("sceGuTexProjMapMode(GU_UV);", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("sceGuTexScale(1.0f, 1.0f);", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("sceGuTexOffset(0.0f, 0.0f);", sourceContents, StringComparison.Ordinal);
+        }
+
+        /// <summary>
         /// Ensures PSP camera projections honor authored clip planes instead of applying one global far-plane distance.
         /// </summary>
         [Fact]
@@ -151,6 +192,25 @@ namespace helengine.psp.builder.tests {
             Assert.Contains("sceGuEnable(GU_CLIP_PLANES);", sourceContents, StringComparison.Ordinal);
             Assert.Contains("sceGuEnable(GU_SCISSOR_TEST);", sourceContents, StringComparison.Ordinal);
             Assert.Contains("sceGuScissor(0, 0, mainWindowSize.X, mainWindowSize.Y);", sourceContents, StringComparison.Ordinal);
+        }
+
+        /// Ensures PSP GU matrix uploads preserve the generated row-major field order in the native upload buffer.
+        /// </summary>
+        [Fact]
+        public void Source_CreatePspMatrixBufferPreservesGeneratedMatrixFieldOrder() {
+            string sourcePath = Path.Combine(
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRenderManager3D.cpp");
+            string sourceContents = File.ReadAllText(sourcePath);
+
+            Assert.Contains("buffer.M[0][1] = matrix.M12;", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("buffer.M[1][0] = matrix.M21;", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("buffer.M[2][3] = matrix.M34;", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("buffer.M[3][2] = matrix.M43;", sourceContents, StringComparison.Ordinal);
         }
 
         /// <summary>
