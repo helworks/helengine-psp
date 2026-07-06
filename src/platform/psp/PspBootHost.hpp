@@ -50,15 +50,6 @@ namespace helengine::psp {
         /// Returns the current runtime loaded-scene count.
         int32_t GetLoadedSceneCount() const;
 
-        /// Returns whether the PSP return bind is currently held on raw pad input.
-        bool IsReturnButtonDown() const;
-
-        /// Emits one focused runtime transition trace line with scene, memory, and input state.
-        void TraceRuntimeTransitionState(const char* phaseName, const std::string& primarySceneId, int32_t loadedSceneCount, int32_t freeMemoryBytes, bool returnButtonDown) const;
-
-        /// Emits one focused managed-runtime transition snapshot captured inside generated-core scene loading code.
-        void TraceManagedTransitionState(const char* phaseName) const;
-
         /// Runs the normal generated-core update and draw loop after startup succeeds.
         void RunMainLoop();
 
@@ -112,12 +103,6 @@ namespace helengine::psp {
 
         /// Stores the last observed primary loaded-scene id written to the PSP boot log.
         std::string LastTracedPrimarySceneId;
-
-        /// Stores whether the raw PSP return bind was held on the previous frame.
-        bool WasReturnButtonDownLastFrame;
-
-        /// Stores how many more frames should emit focused transition tracing after a return bind edge.
-        int32_t ReturnTransitionTraceFramesRemaining;
 
     };
 }

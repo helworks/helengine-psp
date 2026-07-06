@@ -74,8 +74,11 @@ namespace helengine.psp.builder.tests {
             string sourceContents = File.ReadAllText(sourcePath);
 
             Assert.Contains("PspRuntimeMaterial* pspRuntimeMaterial = static_cast<PspRuntimeMaterial*>(runtimeMaterial);", sourceContents, StringComparison.Ordinal);
-            Assert.Contains("PspRuntimeMaterial* rootPspRuntimeMaterial = static_cast<PspRuntimeMaterial*>(rootMaterial);", sourceContents, StringComparison.Ordinal);
             Assert.Contains("const bool hasTexture = pspRuntimeMaterial->TryResolveTexture(texture);", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("const float4& baseColor = pspRuntimeMaterial->GetBaseColor();", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("const bool useLighting = UsesDirectionalLighting(pspRuntimeMaterial);", sourceContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("const float4& baseColor = rootPspRuntimeMaterial->GetBaseColor();", sourceContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("const bool useLighting = UsesDirectionalLighting(rootPspRuntimeMaterial);", sourceContents, StringComparison.Ordinal);
         }
 
         /// <summary>
@@ -249,6 +252,10 @@ namespace helengine.psp.builder.tests {
             Assert.DoesNotContain("RuntimeMaterial* BuildMaterialFromRaw(MaterialAsset* materialAsset, ShaderAsset* shaderAsset) override;", renderManagerHeaderContents, StringComparison.Ordinal);
             Assert.Contains("void LoadFromCooked(ShaderMaterialAsset* materialAsset);", runtimeMaterialHeaderContents, StringComparison.Ordinal);
             Assert.Contains("void PspRuntimeMaterial::LoadFromCooked(ShaderMaterialAsset* materialAsset)", runtimeMaterialSourceContents, StringComparison.Ordinal);
+            Assert.Contains("const PspRuntimeMaterial* GetParentPspRuntimeMaterial() const;", runtimeMaterialHeaderContents, StringComparison.Ordinal);
+            Assert.Contains("if (HasAuthoredBaseColor) {", runtimeMaterialSourceContents, StringComparison.Ordinal);
+            Assert.Contains("if (HasAuthoredLightingConfiguration) {", runtimeMaterialSourceContents, StringComparison.Ordinal);
+            Assert.Contains("const PspRuntimeMaterial* parentMaterial = GetParentPspRuntimeMaterial();", runtimeMaterialSourceContents, StringComparison.Ordinal);
             Assert.DoesNotContain("void LoadFromCooked(MaterialAsset* materialAsset);", runtimeMaterialHeaderContents, StringComparison.Ordinal);
         }
 

@@ -12,7 +12,7 @@ public sealed class CityDemoDiscMainMenuSceneTests {
     /// <summary>
     /// Ensures the packaged PSP demo menu export contains the cooked menu scene and both menu fonts.
     /// </summary>
-    [Fact]
+    [Fact(Skip = "Requires a manually exported PSP demo disc package at C:\\tmp\\city-psp-demo-disc-menu-build.")]
     public void DemoDiscMainMenu_export_includes_scene_and_fonts() {
         string scenePath = Path.Combine(DemoDiscMenuPackageRootPath, @"cooked\scenes\DemoDiscMainMenu.hasset");
         string titleFontPath = Path.Combine(DemoDiscMenuPackageRootPath, @"cooked\Fonts\DemoDiscTitle.hefont");

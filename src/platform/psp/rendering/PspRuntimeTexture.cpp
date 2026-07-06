@@ -37,6 +37,16 @@ namespace helengine::psp::rendering {
         return !PixelsAbgr8888.empty();
     }
 
+    /// Gets the GU-facing texture buffer width used as the native row stride.
+    std::uint16_t PspRuntimeTexture::GetTextureBufferWidth() const {
+        return TextureBufferWidth;
+    }
+
+    /// Assigns the GU-facing texture buffer width used as the native row stride.
+    void PspRuntimeTexture::SetTextureBufferWidth(std::uint16_t textureBufferWidth) {
+        TextureBufferWidth = textureBufferWidth;
+    }
+
     /// Replaces the owned ABGR8888 pixel buffer.
     void PspRuntimeTexture::SetPixelsAbgr8888(std::vector<std::uint32_t>&& pixels) {
         PixelsAbgr8888 = std::move(pixels);

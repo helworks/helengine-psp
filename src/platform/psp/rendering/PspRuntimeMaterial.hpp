@@ -31,11 +31,20 @@ namespace helengine::psp::rendering {
         void LoadFromCooked(ShaderMaterialAsset* materialAsset);
 
     private:
+        /// Resolves the parent PSP runtime material when this material inherits PSP-specific authored state.
+        const PspRuntimeMaterial* GetParentPspRuntimeMaterial() const;
+
         /// Stores the authored base color.
         float4 BaseColor;
 
+        /// Stores whether one cooked base-color buffer explicitly authored the local base color.
+        bool HasAuthoredBaseColor;
+
         /// Stores whether the material receives scene lighting.
         bool ReceivesLighting;
+
+        /// Stores whether one cooked lighting buffer explicitly authored the local lighting configuration.
+        bool HasAuthoredLightingConfiguration;
 
         /// Stores the PSP lighting-response mode.
         PspMaterialLightingResponse LightingResponse;

@@ -21,6 +21,7 @@
 #include "ITextDrawable2D.hpp"
 #include "RoundedRectComponent.hpp"
 #include "TextComponent.hpp"
+#include "TextLayoutAlignmentUtils.hpp"
 #include "TextLayoutUtils.hpp"
 #include "TextureAsset.hpp"
 #include "platform/psp/rendering/PspRuntimeTexture.hpp"
@@ -119,7 +120,7 @@ namespace helengine::psp::rendering {
 
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-        sceGuTexImage(0, texture->get_Width(), texture->get_Height(), texture->get_Width(), texture->GetPixelsAbgr8888());
+        sceGuTexImage(0, texture->get_Width(), texture->get_Height(), texture->GetTextureBufferWidth(), texture->GetPixelsAbgr8888());
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
@@ -199,12 +200,23 @@ namespace helengine::psp::rendering {
             resolvedSize = int2(texture->get_Width(), texture->get_Height());
         }
 
-        DrawTexturedQuad(
+        Entity* parent = sprite->get_Parent();
+        float3 scale = parent->get_Scale();
+        const float width = static_cast<float>(static_cast<double>(resolvedSize.X) * static_cast<double>(scale.X));
+        const float height = static_cast<float>(static_cast<double>(resolvedSize.Y) * static_cast<double>(scale.Y));
+        float3 rotatedRight = float4::RotateVector(float3::get_UnitX(), parent->get_Orientation());
+        const float rotationRadians = static_cast<float>(std::atan2(
+            static_cast<double>(rotatedRight.Y),
+            static_cast<double>(rotatedRight.X)));
+
+        DrawTexturedQuadTransformed(
             texture,
-            sprite->get_Parent()->get_Position(),
-            resolvedSize,
+            parent->get_Position(),
+            width,
+            height,
             sprite->get_SourceRect(),
-            sprite->get_Color());
+            sprite->get_Color(),
+            rotationRadians);
     }
 
     /// Draws bitmap-font text by batching all visible glyphs into one textured triangle submission.
@@ -496,6 +508,7 @@ namespace helengine::psp::rendering {
             const int2 size = text->get_Size();
             const byte4 color = text->get_Color();
             const bool wrapText = text->get_WrapText();
+            const TextAlignment alignment = text->get_Alignment();
             const float fontScale = text->get_FontScale();
             const std::string textValue = text->get_Text();
             const bool usesStaticSurface = ShouldUseStaticTextSurface(text);
@@ -507,6 +520,7 @@ namespace helengine::psp::rendering {
                 && entry.Color.Z == color.Z
                 && entry.Color.W == color.W
                 && entry.WrapText == wrapText
+                && entry.Alignment == alignment
                 && entry.FontScale == fontScale
                 && entry.UsesStaticSurface == usesStaticSurface
                 && entry.RawText == textValue) {
@@ -573,6 +587,7 @@ namespace helengine::psp::rendering {
         cacheEntry.Size = text->get_Size();
         cacheEntry.Color = color;
         cacheEntry.WrapText = text->get_WrapText();
+        cacheEntry.Alignment = text->get_Alignment();
         cacheEntry.FontScale = fontScaleValue;
         cacheEntry.GlyphCount = 0;
         cacheEntry.UsesStaticSurface = ShouldUseStaticTextSurface(text);
@@ -587,12 +602,56 @@ namespace helengine::psp::rendering {
         const double lineHeight = std::max(static_cast<double>(font->get_LineHeight()) * fontScale, 1.0d);
         const double baseX = 0.0;
         const double baseY = 0.0;
+        const int32_t layoutWidth = text->get_Size().X;
         const std::uint32_t packedColor = ConvertColorToAbgr(color);
+        std::vector<double> lineOffsets;
+        lineOffsets.reserve(static_cast<std::size_t>(std::count(content.begin(), content.end(), '\n')) + 1u);
+        std::string currentLine;
+        currentLine.reserve(content.size());
+        for (char character : content) {
+            if (character == '\r') {
+                continue;
+            }
+
+            if (character == '\n') {
+                const double visibleLineWidth = TextLayoutAlignmentUtils::MeasureVisibleLineWidth(
+                    currentLine,
+                    font,
+                    fontScale,
+                    static_cast<double>(font->get_AtlasWidth()));
+                lineOffsets.push_back(TextLayoutAlignmentUtils::ResolveHorizontalOffset(
+                    text->get_Alignment(),
+                    layoutWidth,
+                    visibleLineWidth));
+                currentLine.clear();
+                continue;
+            }
+
+            currentLine.push_back(character);
+        }
+
+        const double trailingVisibleLineWidth = TextLayoutAlignmentUtils::MeasureVisibleLineWidth(
+            currentLine,
+            font,
+            fontScale,
+            static_cast<double>(font->get_AtlasWidth()));
+        lineOffsets.push_back(TextLayoutAlignmentUtils::ResolveHorizontalOffset(
+            text->get_Alignment(),
+            layoutWidth,
+            trailingVisibleLineWidth));
+        std::size_t lineIndex = 0u;
+        double lineOffsetX = lineOffsets.empty() ? 0.0 : lineOffsets[0];
 
         for (char character : content) {
+            if (character == '\r') {
+                continue;
+            }
+
             if (character == '\n') {
                 offsetY += lineHeight;
                 offsetX = 0.0;
+                lineIndex++;
+                lineOffsetX = lineIndex < lineOffsets.size() ? lineOffsets[lineIndex] : 0.0;
                 continue;
             }
 
@@ -610,9 +669,9 @@ namespace helengine::psp::rendering {
             const double glyphWidth = glyph.SourceRect.Z * font->get_AtlasWidth() * fontScale;
             const double glyphHeight = glyph.SourceRect.W * font->get_AtlasHeight() * fontScale;
             const double snappedLineOffsetY = std::round(offsetY);
-            const double drawX = std::round(baseX + offsetX);
+            const double drawX = std::round(baseX + lineOffsetX + offsetX);
             const double drawY = std::round(baseY + snappedLineOffsetY + (glyph.OffsetY * fontScale));
-            const double drawRight = std::round(baseX + offsetX + glyphWidth);
+            const double drawRight = std::round(baseX + lineOffsetX + offsetX + glyphWidth);
             const double drawBottom = std::round(baseY + snappedLineOffsetY + (glyph.OffsetY * fontScale) + glyphHeight);
             const float4 textureSourceRect = ConvertSourceRectToTexturePixels(glyph.SourceRect, atlasTexture);
             const float left = static_cast<float>(drawX);
@@ -837,13 +896,57 @@ namespace helengine::psp::rendering {
         const double lineHeight = std::max(static_cast<double>(font->get_LineHeight()) * fontScale, 1.0d);
         const double baseX = 0.0;
         const double baseY = 0.0;
+        const int32_t layoutWidth = cacheEntry.Size.X;
+        std::vector<double> lineOffsets;
+        lineOffsets.reserve(static_cast<std::size_t>(std::count(cacheEntry.Content.begin(), cacheEntry.Content.end(), '\n')) + 1u);
+        std::string currentLine;
+        currentLine.reserve(cacheEntry.Content.size());
+        for (char character : cacheEntry.Content) {
+            if (character == '\r') {
+                continue;
+            }
+
+            if (character == '\n') {
+                const double visibleLineWidth = TextLayoutAlignmentUtils::MeasureVisibleLineWidth(
+                    currentLine,
+                    font,
+                    fontScale,
+                    static_cast<double>(font->get_AtlasWidth()));
+                lineOffsets.push_back(TextLayoutAlignmentUtils::ResolveHorizontalOffset(
+                    cacheEntry.Alignment,
+                    layoutWidth,
+                    visibleLineWidth));
+                currentLine.clear();
+                continue;
+            }
+
+            currentLine.push_back(character);
+        }
+
+        const double trailingVisibleLineWidth = TextLayoutAlignmentUtils::MeasureVisibleLineWidth(
+            currentLine,
+            font,
+            fontScale,
+            static_cast<double>(font->get_AtlasWidth()));
+        lineOffsets.push_back(TextLayoutAlignmentUtils::ResolveHorizontalOffset(
+            cacheEntry.Alignment,
+            layoutWidth,
+            trailingVisibleLineWidth));
 
         double offsetX = 0.0;
         double offsetY = 0.0;
+        std::size_t lineIndex = 0u;
+        double lineOffsetX = lineOffsets.empty() ? 0.0 : lineOffsets[0];
         for (char character : cacheEntry.Content) {
+            if (character == '\r') {
+                continue;
+            }
+
             if (character == '\n') {
                 offsetY += lineHeight;
                 offsetX = 0.0;
+                lineIndex++;
+                lineOffsetX = lineIndex < lineOffsets.size() ? lineOffsets[lineIndex] : 0.0;
                 continue;
             }
 
@@ -860,9 +963,9 @@ namespace helengine::psp::rendering {
             const double glyphWidth = glyph.SourceRect.Z * font->get_AtlasWidth() * fontScale;
             const double glyphHeight = glyph.SourceRect.W * font->get_AtlasHeight() * fontScale;
             const double snappedLineOffsetY = std::round(offsetY);
-            const double drawX = std::round(baseX + offsetX);
+            const double drawX = std::round(baseX + lineOffsetX + offsetX);
             const double drawY = std::round(baseY + snappedLineOffsetY + (glyph.OffsetY * fontScale));
-            const double drawRight = std::round(baseX + offsetX + glyphWidth);
+            const double drawRight = std::round(baseX + lineOffsetX + offsetX + glyphWidth);
             const double drawBottom = std::round(baseY + snappedLineOffsetY + (glyph.OffsetY * fontScale) + glyphHeight);
             const int32_t destinationLeft = std::max<int32_t>(0, static_cast<int32_t>(std::lround(drawX - minimumX)));
             const int32_t destinationTop = std::max<int32_t>(0, static_cast<int32_t>(std::lround(drawY - minimumY)));
@@ -994,6 +1097,86 @@ namespace helengine::psp::rendering {
             size,
             PspRenderProfiler::GetTimestampMicroseconds() - drawStartMicroseconds,
             drawArrayMicroseconds);
+    }
+
+    /// Draws one textured screen-space quad after applying authored scale and rotation around its center.
+    void PspRenderManager2D::DrawTexturedQuadTransformed(RuntimeTexture* texture, const float3& position, float width, float height, const float4& sourceRect, const byte4& color, float rotationRadians) {
+        const double absoluteWidth = std::abs(static_cast<double>(width));
+        const double absoluteHeight = std::abs(static_cast<double>(height));
+        if (texture == nullptr || absoluteWidth <= 0.0001d || absoluteHeight <= 0.0001d) {
+            return;
+        }
+
+        if (std::abs(static_cast<double>(rotationRadians)) <= 0.0001d) {
+            DrawTexturedQuad(
+                texture,
+                position,
+                int2(
+                    static_cast<int32_t>(std::lround(width)),
+                    static_cast<int32_t>(std::lround(height))),
+                sourceRect,
+                color);
+            return;
+        }
+
+        const std::uint32_t packedColor = ConvertColorToAbgr(color);
+        const float4 textureSourceRect = ConvertSourceRectToTexturePixels(sourceRect, texture);
+        const double centerX = static_cast<double>(position.X) + (static_cast<double>(width) * 0.5d);
+        const double centerY = static_cast<double>(position.Y) + (static_cast<double>(height) * 0.5d);
+        const double halfWidth = static_cast<double>(width) * 0.5d;
+        const double halfHeight = static_cast<double>(height) * 0.5d;
+        const double rotationSin = std::sin(static_cast<double>(rotationRadians));
+        const double rotationCos = std::cos(static_cast<double>(rotationRadians));
+
+        const double localLeft = -halfWidth;
+        const double localRight = halfWidth;
+        const double localTop = -halfHeight;
+        const double localBottom = halfHeight;
+
+        Psp2DVertex vertices[6] = {};
+        vertices[0].U = textureSourceRect.X;
+        vertices[0].V = textureSourceRect.Y;
+        vertices[0].Color = packedColor;
+        vertices[0].X = static_cast<float>(centerX + (localLeft * rotationCos) - (localTop * rotationSin));
+        vertices[0].Y = static_cast<float>(centerY + (localLeft * rotationSin) + (localTop * rotationCos));
+        vertices[0].Z = position.Z;
+
+        vertices[1].U = textureSourceRect.X + textureSourceRect.Z;
+        vertices[1].V = textureSourceRect.Y;
+        vertices[1].Color = packedColor;
+        vertices[1].X = static_cast<float>(centerX + (localRight * rotationCos) - (localTop * rotationSin));
+        vertices[1].Y = static_cast<float>(centerY + (localRight * rotationSin) + (localTop * rotationCos));
+        vertices[1].Z = position.Z;
+
+        vertices[2].U = textureSourceRect.X + textureSourceRect.Z;
+        vertices[2].V = textureSourceRect.Y + textureSourceRect.W;
+        vertices[2].Color = packedColor;
+        vertices[2].X = static_cast<float>(centerX + (localRight * rotationCos) - (localBottom * rotationSin));
+        vertices[2].Y = static_cast<float>(centerY + (localRight * rotationSin) + (localBottom * rotationCos));
+        vertices[2].Z = position.Z;
+
+        vertices[3].U = textureSourceRect.X;
+        vertices[3].V = textureSourceRect.Y;
+        vertices[3].Color = packedColor;
+        vertices[3].X = vertices[0].X;
+        vertices[3].Y = vertices[0].Y;
+        vertices[3].Z = position.Z;
+
+        vertices[4].U = textureSourceRect.X + textureSourceRect.Z;
+        vertices[4].V = textureSourceRect.Y + textureSourceRect.W;
+        vertices[4].Color = packedColor;
+        vertices[4].X = vertices[2].X;
+        vertices[4].Y = vertices[2].Y;
+        vertices[4].Z = position.Z;
+
+        vertices[5].U = textureSourceRect.X;
+        vertices[5].V = textureSourceRect.Y + textureSourceRect.W;
+        vertices[5].Color = packedColor;
+        vertices[5].X = static_cast<float>(centerX + (localLeft * rotationCos) - (localBottom * rotationSin));
+        vertices[5].Y = static_cast<float>(centerY + (localLeft * rotationSin) + (localBottom * rotationCos));
+        vertices[5].Z = position.Z;
+
+        DrawTexturedTriangles(vertices, 6, texture);
     }
 
     /// Draws one textured 2D triangle list using the PSP GU textured vertex path.

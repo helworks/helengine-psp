@@ -11,6 +11,7 @@
 #include "IRenderVisitor2D.hpp"
 #include "RenderManager2D.hpp"
 #include "RuntimeTexture.hpp"
+#include "TextAlignment.hpp"
 #include "TextureAsset.hpp"
 #include "byte4.hpp"
 #include "float4.hpp"
@@ -85,6 +86,9 @@ namespace helengine::psp::rendering {
 
             /// Stores whether wrapping was enabled when the cache was built.
             bool WrapText = false;
+
+            /// Stores the horizontal alignment used when the cache was built.
+            TextAlignment Alignment = TextAlignment::Left;
 
             /// Stores the glyph scale used when the cache was built.
             float FontScale = 0.0f;
@@ -203,6 +207,9 @@ namespace helengine::psp::rendering {
 
         /// Draws one textured screen-space quad using normalized UV coordinates.
         void DrawTexturedQuad(RuntimeTexture* texture, const float3& position, const int2& size, const float4& sourceRect, const byte4& color);
+
+        /// Draws one textured screen-space quad after applying authored scale and rotation around its center.
+        void DrawTexturedQuadTransformed(RuntimeTexture* texture, const float3& position, float width, float height, const float4& sourceRect, const byte4& color, float rotationRadians);
 
         /// Draws one filled rounded rectangle using textured white geometry and triangle fans for the corners.
         void DrawFilledRoundedRect(const float3& position, const int2& size, float radius, const byte4& color);

@@ -857,9 +857,8 @@ namespace helengine::psp::rendering {
         }
         
         PspRuntimeMaterial* pspRuntimeMaterial = static_cast<PspRuntimeMaterial*>(runtimeMaterial);
-        PspRuntimeMaterial* rootPspRuntimeMaterial = static_cast<PspRuntimeMaterial*>(rootMaterial);
-        const float4& baseColor = rootPspRuntimeMaterial->GetBaseColor();
-        const bool useLighting = UsesDirectionalLighting(rootPspRuntimeMaterial);
+        const float4& baseColor = pspRuntimeMaterial->GetBaseColor();
+        const bool useLighting = UsesDirectionalLighting(pspRuntimeMaterial);
         PspRuntimeTexture* texture = nullptr;
         const bool hasTexture = pspRuntimeMaterial->TryResolveTexture(texture);
         const float3 worldScale = drawableParent->get_Scale();

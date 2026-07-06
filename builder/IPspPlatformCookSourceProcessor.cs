@@ -16,11 +16,11 @@ public interface IPspPlatformCookSourceProcessor {
     TextureAsset CookTexture(string sourceAssetPath, string assetId, TextureAssetProcessorSettings settings);
 
     /// <summary>
-    /// Imports one source font asset and applies the resolved PSP atlas texture processor settings.
+    /// Imports one source font atlas asset and applies the resolved PSP atlas texture processor settings.
     /// </summary>
     /// <param name="sourceAssetPath">Absolute source font path emitted by the editor build graph.</param>
-    /// <param name="assetId">Stable runtime asset identifier the cooked font should preserve for atlas ownership.</param>
+    /// <param name="assetId">Stable runtime asset identifier the cooked atlas texture should preserve.</param>
     /// <param name="settings">Resolved PSP texture processor settings supplied by the editor.</param>
-    /// <returns>Processed runtime font payload ready for serialization.</returns>
-    FontAsset CookFont(string sourceAssetPath, string assetId, TextureAssetProcessorSettings settings);
+    /// <returns>Processed runtime atlas texture payload ready for serialization.</returns>
+    TextureAsset CookFontAtlasTexture(string sourceAssetPath, string assetId, TextureAssetProcessorSettings settings);
 }

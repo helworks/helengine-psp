@@ -4,7 +4,12 @@
 
 namespace helengine::psp {
     /// Creates the PSP input backend.
-    PspInputBackend::PspInputBackend() {
+    PspInputBackend::PspInputBackend()
+        : GamepadBuffers {
+            new Array<InputGamepadState>(1),
+            new Array<InputGamepadState>(1)
+        },
+          ActiveGamepadBufferIndex(0) {
     }
 
     /// Captures one input frame from the PSP runtime.
@@ -18,7 +23,7 @@ namespace helengine::psp {
         InputFrameState frameState;
         frameState.set_GamepadCount(1);
 
-        Array<InputGamepadState>* gamepads = new Array<InputGamepadState>(1);
+        Array<InputGamepadState>* gamepads = GamepadBuffers[ActiveGamepadBufferIndex];
         InputGamepadState gamepadState;
         gamepadState.set_Connected(true);
         gamepadState.SetButtonDown(InputGamepadButton::DPadUp, (padData.Buttons & PSP_CTRL_UP) != 0);
@@ -38,6 +43,7 @@ namespace helengine::psp {
 
         (*gamepads)[0] = gamepadState;
         frameState.set_Gamepads(gamepads);
+        ActiveGamepadBufferIndex = (ActiveGamepadBufferIndex + 1) % 2;
         return frameState;
     }
 }

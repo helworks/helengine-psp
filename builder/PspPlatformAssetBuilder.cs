@@ -305,9 +305,7 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
             File.WriteAllBytes(destinationPath, global::helengine.files.AssetSerializer.SerializeToBytes(cookedTextureAsset));
             return;
         } else if (string.Equals(workItem.SourceAssetKind, "font-atlas-texture", StringComparison.OrdinalIgnoreCase)) {
-            FontAsset cookedFontAsset = PlatformCookSourceProcessor.CookFont(workItem.SourceAssetPath, assetId, settings);
-            TextureAsset cookedAtlasTextureAsset = cookedFontAsset.SourceTextureAsset
-                ?? throw new InvalidOperationException($"Cooked PSP font atlas work item '{workItem.WorkItemId}' did not produce a source atlas texture asset.");
+            TextureAsset cookedAtlasTextureAsset = PlatformCookSourceProcessor.CookFontAtlasTexture(workItem.SourceAssetPath, assetId, settings);
             File.WriteAllBytes(destinationPath, global::helengine.files.AssetSerializer.SerializeToBytes(cookedAtlasTextureAsset));
             return;
         }

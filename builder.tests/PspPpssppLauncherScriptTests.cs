@@ -5,10 +5,10 @@ namespace helengine.psp.builder.tests;
 /// </summary>
 public sealed class PspPpssppLauncherScriptTests {
     /// <summary>
-    /// Ensures the canonical launcher requires one explicit artifact path, stages the EBOOT into the PPSSPP memstick, and starts PPSSPP.
+    /// Ensures the canonical launcher requires one explicit artifact path, stages the full PSP app root into the PPSSPP memstick, and starts PPSSPP.
     /// </summary>
     [Fact]
-    public void Launcher_RequiresArtifactPath_StagesEboot_AndStartsPpsspp() {
+    public void Launcher_RequiresArtifactPath_StagesFullAppRoot_AndStartsPpsspp() {
         string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         string scriptPath = Path.Combine(repositoryRootPath, "scripts", "launch_in_emulator.ps1");
 
@@ -19,7 +19,7 @@ public sealed class PspPpssppLauncherScriptTests {
         Assert.Contains("[string]$ArtifactPath", scriptSource, StringComparison.Ordinal);
         Assert.Contains("PPSSPPWindows64.exe", scriptSource, StringComparison.Ordinal);
         Assert.Contains("EBOOT.PBP", scriptSource, StringComparison.Ordinal);
-        Assert.Contains("Copy-Item -LiteralPath $resolvedArtifactPath", scriptSource, StringComparison.Ordinal);
+        Assert.Contains("Copy-Item -LiteralPath $sourceRoot -Destination $targetRoot -Recurse -Force", scriptSource, StringComparison.Ordinal);
         Assert.Contains("PROCESS_ID=", scriptSource, StringComparison.Ordinal);
     }
 

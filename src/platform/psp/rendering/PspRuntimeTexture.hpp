@@ -25,6 +25,12 @@ namespace helengine::psp::rendering {
         /// Gets whether the texture owns pixel data.
         bool HasPixels() const;
 
+        /// Gets the GU-facing texture buffer width used as the native row stride.
+        std::uint16_t GetTextureBufferWidth() const;
+
+        /// Assigns the GU-facing texture buffer width used as the native row stride.
+        void SetTextureBufferWidth(std::uint16_t textureBufferWidth);
+
         /// Replaces the owned ABGR8888 pixel buffer.
         void SetPixelsAbgr8888(std::vector<std::uint32_t>&& pixels);
 
@@ -40,6 +46,9 @@ namespace helengine::psp::rendering {
     private:
         /// Stores PSP-ready ABGR8888 texels in row-major order.
         std::vector<std::uint32_t> PixelsAbgr8888;
+
+        /// Stores the GU-facing texture buffer width used as the native row stride.
+        std::uint16_t TextureBufferWidth = 0u;
 
         /// Stores the deterministic runtime asset id for cache reuse.
         std::uint64_t RuntimeAssetId = 0u;

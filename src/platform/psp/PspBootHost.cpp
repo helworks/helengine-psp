@@ -7,7 +7,6 @@
 #include <new>
 #include <string>
 
-#include <pspctrl.h>
 #include <pspdisplay.h>
 #include <pspdebug.h>
 #include <pspgu.h>
@@ -16,12 +15,22 @@
 
 #include "Core.hpp"
 #include "CoreInitializationOptions.hpp"
+#include "BepuPhysicsWorld3D.hpp"
+#include "BepuRuntimeComponentRegistration.hpp"
+#include "InputControlId.hpp"
+#include "InputControlKind.hpp"
+#include "InputDeviceKind.hpp"
 #include "LoadedSceneRecord.hpp"
+#include "ObjectManager.hpp"
 #include "PlatformInfo.hpp"
 #include "RenderManager2D.hpp"
 #include "RenderManager3D.hpp"
+#include "RuntimeSceneLoadService.hpp"
 #include "SceneManager.hpp"
 #include "SceneAsset.hpp"
+#include "StandardPlatformAction.hpp"
+#include "StandardPlatformActionBinding.hpp"
+#include "StandardPlatformInputConfiguration.hpp"
 #include "platform/psp/PspAppRootPathResolver.hpp"
 #include "platform/psp/PspBootTrace.hpp"
 #include "platform/psp/PspInputBackend.hpp"
@@ -32,8 +41,10 @@
 #include "runtime/native_exceptions.hpp"
 
 #if defined(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP) && HELENGINE_PSP_ENABLE_RUNTIME_STARTUP
+#include "runtime/native_list.hpp"
 #include "runtime/runtime_scene_catalog_manifest.hpp"
 #include "runtime/runtime_startup_manifest.hpp"
+#include "runtime/runtime_standard_platform_input_manifest.hpp"
 #endif
 
 PSP_MODULE_INFO("helengine_psp", 0, 1, 0);
@@ -58,6 +69,33 @@ namespace helengine::psp {
         constexpr const char* RuntimeMainLoopStageName = "RuntimeMainLoop";
 
         alignas(64) unsigned int DisplayListStorage[DisplayListByteCount / sizeof(unsigned int)];
+
+        /// Builds one runtime standard-platform input configuration from the generated manifest entries.
+        ::StandardPlatformInputConfiguration* BuildStandardPlatformInputConfiguration() {
+#if defined(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP) && HELENGINE_PSP_ENABLE_RUNTIME_STARTUP
+            std::size_t count = 0;
+            const HERuntimeStandardPlatformActionEntry* manifestEntries = he_runtime_standard_platform_action_entries(&count);
+            if (manifestEntries == nullptr || count == 0) {
+                return ::StandardPlatformInputConfiguration::get_Empty();
+            }
+
+            List<::StandardPlatformActionBinding*>* bindings = new List<::StandardPlatformActionBinding*>(static_cast<int32_t>(count));
+            for (int32_t index = 0; index < static_cast<int32_t>(count); index++) {
+                const HERuntimeStandardPlatformActionEntry& manifestEntry = manifestEntries[index];
+                bindings->Add(new ::StandardPlatformActionBinding(
+                    static_cast<::StandardPlatformAction>(manifestEntry.ActionId),
+                    ::InputControlId(
+                        static_cast<::InputDeviceKind>(manifestEntry.DeviceKind),
+                        static_cast<::InputControlKind>(manifestEntry.ControlKind),
+                        manifestEntry.DeviceIndex,
+                        manifestEntry.ControlIndex)));
+            }
+
+            return new ::StandardPlatformInputConfiguration(bindings);
+#else
+            return ::StandardPlatformInputConfiguration::get_Empty();
+#endif
+        }
     }
 
     /// Creates the PSP boot host with no initialized graphics or engine state.
@@ -72,9 +110,7 @@ namespace helengine::psp {
           EngineRenderManager2D(nullptr),
           EngineInputBackend(nullptr),
           LastTracedLoadedSceneCount(-1),
-          LastTracedPrimarySceneId(),
-          WasReturnButtonDownLastFrame(false),
-          ReturnTransitionTraceFramesRemaining(0) {
+          LastTracedPrimarySceneId() {
     }
 
     /// Initializes the PSP runtime and presents frames until shutdown.
@@ -203,6 +239,9 @@ namespace helengine::psp {
         EngineOptions->set_UpdateListInitialCapacity(64);
         EngineOptions->set_RenderList2DInitialCapacity(8);
         EngineOptions->set_RenderList3DInitialCapacity(64);
+        EngineOptions->set_PhysicsFixedStepSeconds(1.0 / 30.0);
+        EngineOptions->set_PhysicsMaxStepsPerUpdate(2);
+        EngineOptions->set_StandardPlatformInputConfiguration(BuildStandardPlatformInputConfiguration());
         PspRuntimeSceneCatalogFactory runtimeSceneCatalogFactory;
         EngineOptions->set_SceneCatalog(runtimeSceneCatalogFactory.Build());
 
@@ -221,6 +260,9 @@ namespace helengine::psp {
             EngineInputBackend,
             platformInfo,
             EngineOptions);
+        BepuPhysicsWorld3D* physicsWorld = BepuPhysicsWorld3D::CreateWithSolveSchedule(2, 1);
+        BepuRuntimeComponentRegistration::AttachRuntimeWorld(EngineCore, physicsWorld);
+        BepuRuntimeComponentRegistration::RegisterSceneBinding(EngineCore);
 
         CompleteBootStage();
     }
@@ -350,97 +392,16 @@ namespace helengine::psp {
         return loadedScenes->get_Count();
     }
 
-    /// Returns whether the PSP return bind is currently held on raw pad input.
-    bool PspBootHost::IsReturnButtonDown() const {
-        sceCtrlSetSamplingCycle(0);
-        sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
-
-        SceCtrlData padData {};
-        sceCtrlPeekBufferPositive(&padData, 1);
-        return (padData.Buttons & PSP_CTRL_CIRCLE) != 0
-            || (padData.Buttons & PSP_CTRL_TRIANGLE) != 0
-            || (padData.Buttons & PSP_CTRL_SELECT) != 0;
-    }
-
-    /// Emits one focused runtime transition trace line with scene, memory, and input state.
-    void PspBootHost::TraceRuntimeTransitionState(const char* phaseName, const std::string& primarySceneId, int32_t loadedSceneCount, int32_t freeMemoryBytes, bool returnButtonDown) const {
-        PspBootTrace::WriteLine(
-            std::string("TransitionTrace phase=") + phaseName
-            + " primary=" + (primarySceneId.empty() ? std::string("<none>") : primarySceneId)
-            + " count=" + std::to_string(loadedSceneCount)
-            + " freeMem=" + std::to_string(freeMemoryBytes)
-            + " returnDown=" + (returnButtonDown ? std::string("true") : std::string("false")));
-    }
-
-    /// Emits one focused managed-runtime transition snapshot captured inside generated-core scene loading code.
-    void PspBootHost::TraceManagedTransitionState(const char* phaseName) const {
-        if (EngineCore == nullptr) {
-            PspBootTrace::WriteLine(std::string("ManagedTransitionTrace phase=") + phaseName + " core=null");
-            return;
-        }
-
-        SceneManager* sceneManager = EngineCore->get_SceneManager();
-        if (sceneManager == nullptr) {
-            PspBootTrace::WriteLine(
-                std::string("ManagedTransitionTrace phase=") + phaseName
-                + " coreStage=" + EngineCore->get_LastSceneTransitionStage()
-                + " sceneManager=null");
-            return;
-        }
-
-        PspBootTrace::WriteLine(
-            std::string("ManagedTransitionTrace phase=") + phaseName
-            + " coreStage=" + EngineCore->get_LastSceneTransitionStage()
-            + " sceneStage=" + sceneManager->get_LastTraceStage()
-            + " sceneId=" + sceneManager->get_LastTraceSceneId()
-            + " loadedSceneCount=" + std::to_string(sceneManager->get_LastTraceLoadedSceneCount())
-            + " pendingCount=" + std::to_string(sceneManager->get_LastTracePendingOperationCount())
-            + " loadStage=" + EngineCore->get_SceneLoadService()->get_LastTraceStage()
-            + " loadRootIndex=" + std::to_string(EngineCore->get_SceneLoadService()->get_LastTraceRootEntityIndex())
-            + " loadDepth=" + std::to_string(EngineCore->get_SceneLoadService()->get_LastTraceEntityDepth())
-            + " loadComponentType=" + EngineCore->get_SceneLoadService()->get_LastTraceComponentTypeId()
-            + " textLoadStage=" + EngineCore->get_SceneLoadService()->get_LastTextLoadStage()
-            + " textFontPath=" + EngineCore->get_SceneLoadService()->get_LastTextFontRelativePath()
-            + " fontDeserializeStage=" + EngineCore->get_SceneLoadService()->get_LastFontDeserializeStage());
-    }
-
     /// Runs the normal generated-core update and draw loop after startup succeeds.
     void PspBootHost::RunMainLoop() {
         EnterBootStage(RuntimeMainLoopStageName);
         CompleteBootStage();
 
         while (true) {
-            const std::string preUpdatePrimarySceneId = GetPrimarySceneId();
-            const int32_t preUpdateLoadedSceneCount = GetLoadedSceneCount();
-            const int32_t preUpdateFreeMemoryBytes = sceKernelTotalFreeMemSize();
-            const bool returnButtonDown = IsReturnButtonDown();
-            const bool returnButtonPressedThisFrame = returnButtonDown && !WasReturnButtonDownLastFrame;
-            WasReturnButtonDownLastFrame = returnButtonDown;
-
-            if (returnButtonPressedThisFrame && !preUpdatePrimarySceneId.empty() && preUpdatePrimarySceneId != "DemoDiscMainMenu") {
-                ReturnTransitionTraceFramesRemaining = 90;
-                TraceRuntimeTransitionState("ReturnBindPressed", preUpdatePrimarySceneId, preUpdateLoadedSceneCount, preUpdateFreeMemoryBytes, returnButtonDown);
-            }
-
-            if (ReturnTransitionTraceFramesRemaining > 0) {
-                TraceRuntimeTransitionState("BeforeUpdate", preUpdatePrimarySceneId, preUpdateLoadedSceneCount, preUpdateFreeMemoryBytes, returnButtonDown);
-            }
-
             try {
                 EngineCore->Update();
             } catch (const std::bad_alloc&) {
-                TraceRuntimeTransitionState("UpdateBadAlloc", preUpdatePrimarySceneId, preUpdateLoadedSceneCount, preUpdateFreeMemoryBytes, returnButtonDown);
-                TraceManagedTransitionState("UpdateBadAlloc");
                 throw;
-            }
-
-            if (ReturnTransitionTraceFramesRemaining > 0) {
-                TraceRuntimeTransitionState(
-                    "AfterUpdate",
-                    GetPrimarySceneId(),
-                    GetLoadedSceneCount(),
-                    sceKernelTotalFreeMemSize(),
-                    IsReturnButtonDown());
             }
 
             SceneManager* sceneManager = EngineCore->get_SceneManager();
@@ -472,28 +433,8 @@ namespace helengine::psp {
 
             }
 
-            if (ReturnTransitionTraceFramesRemaining > 0) {
-                ReturnTransitionTraceFramesRemaining--;
-            }
-
             BeginFrame();
-            if (ReturnTransitionTraceFramesRemaining > 0) {
-                TraceRuntimeTransitionState(
-                    "BeforeDraw",
-                    GetPrimarySceneId(),
-                    GetLoadedSceneCount(),
-                    sceKernelTotalFreeMemSize(),
-                    IsReturnButtonDown());
-            }
             EngineCore->Draw();
-            if (ReturnTransitionTraceFramesRemaining > 0) {
-                TraceRuntimeTransitionState(
-                    "AfterDraw",
-                    GetPrimarySceneId(),
-                    GetLoadedSceneCount(),
-                    sceKernelTotalFreeMemSize(),
-                    IsReturnButtonDown());
-            }
             PresentFrame();
         }
     }

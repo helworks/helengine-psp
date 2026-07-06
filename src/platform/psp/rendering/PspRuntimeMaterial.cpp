@@ -17,22 +17,51 @@ namespace helengine::psp::rendering {
     /// Creates one PSP runtime material with lit-directional defaults.
     PspRuntimeMaterial::PspRuntimeMaterial()
         : BaseColor(1.0f, 1.0f, 1.0f, 1.0f),
+          HasAuthoredBaseColor(false),
           ReceivesLighting(true),
+          HasAuthoredLightingConfiguration(false),
           LightingResponse(PspMaterialLightingResponse::LitDirectional) {
     }
 
     /// Gets the authored base color used by the PSP renderer.
     const float4& PspRuntimeMaterial::GetBaseColor() const {
+        if (HasAuthoredBaseColor) {
+            return BaseColor;
+        }
+
+        const PspRuntimeMaterial* parentMaterial = GetParentPspRuntimeMaterial();
+        if (parentMaterial != nullptr) {
+            return parentMaterial->GetBaseColor();
+        }
+
         return BaseColor;
     }
 
     /// Gets whether the material receives scene lighting.
     bool PspRuntimeMaterial::GetReceivesLighting() const {
+        if (HasAuthoredLightingConfiguration) {
+            return ReceivesLighting;
+        }
+
+        const PspRuntimeMaterial* parentMaterial = GetParentPspRuntimeMaterial();
+        if (parentMaterial != nullptr) {
+            return parentMaterial->GetReceivesLighting();
+        }
+
         return ReceivesLighting;
     }
 
     /// Gets the PSP lighting-response mode.
     PspMaterialLightingResponse PspRuntimeMaterial::GetLightingResponse() const {
+        if (HasAuthoredLightingConfiguration) {
+            return LightingResponse;
+        }
+
+        const PspRuntimeMaterial* parentMaterial = GetParentPspRuntimeMaterial();
+        if (parentMaterial != nullptr) {
+            return parentMaterial->GetLightingResponse();
+        }
+
         return LightingResponse;
     }
 
@@ -59,6 +88,11 @@ namespace helengine::psp::rendering {
         }
 
         this->set_Id(materialAsset->get_Id());
+        BaseColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
+        HasAuthoredBaseColor = false;
+        ReceivesLighting = true;
+        HasAuthoredLightingConfiguration = false;
+        LightingResponse = PspMaterialLightingResponse::LitDirectional;
         if (materialAsset->ConstantBuffers == nullptr) {
             return;
         }
@@ -73,6 +107,7 @@ namespace helengine::psp::rendering {
                 float components[4] {};
                 std::memcpy(components, constantBuffer->Data->Data, sizeof(components));
                 BaseColor = float4(components[0], components[1], components[2], components[3]);
+                HasAuthoredBaseColor = true;
             } else if (constantBuffer->get_Name() == LightingConfigBufferName && constantBuffer->Data->Length >= 8) {
                 float configuration[2] {};
                 std::memcpy(configuration, constantBuffer->Data->Data, sizeof(configuration));
@@ -80,7 +115,23 @@ namespace helengine::psp::rendering {
                 LightingResponse = configuration[1] < 0.5f
                     ? PspMaterialLightingResponse::Unlit
                     : PspMaterialLightingResponse::LitDirectional;
+                HasAuthoredLightingConfiguration = true;
             }
         }
+    }
+
+    /// Resolves the parent PSP runtime material when this material inherits PSP-specific authored state.
+    const PspRuntimeMaterial* PspRuntimeMaterial::GetParentPspRuntimeMaterial() const {
+        RuntimeMaterial* parentMaterial = const_cast<PspRuntimeMaterial*>(this)->get_ParentMaterial();
+        if (parentMaterial == nullptr) {
+            return nullptr;
+        }
+
+        const PspRuntimeMaterial* parentPspMaterial = dynamic_cast<PspRuntimeMaterial*>(parentMaterial);
+        if (parentPspMaterial == nullptr) {
+            throw std::runtime_error("PSP runtime materials must inherit from other PSP runtime materials.");
+        }
+
+        return parentPspMaterial;
     }
 }

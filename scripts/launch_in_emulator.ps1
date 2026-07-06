@@ -14,6 +14,16 @@ if ([System.IO.Path]::GetFileName($resolvedArtifactPath) -ine 'EBOOT.PBP') {
     throw "Expected the PSP artifact to be EBOOT.PBP but got '$resolvedArtifactPath'."
 }
 
+$sourceRoot = Split-Path -Path $resolvedArtifactPath -Parent
+if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container)) {
+    throw "PSP app root was not found at $sourceRoot."
+}
+
+$sourceCookedRoot = Join-Path $sourceRoot 'cooked'
+if (-not (Test-Path -LiteralPath $sourceCookedRoot -PathType Container)) {
+    throw "Expected the PSP app root to contain cooked payloads at $sourceCookedRoot."
+}
+
 $ppssppExePath = 'C:\dev\helworks\emus\ppsspp_win\PPSSPPWindows64.exe'
 $targetRoot = 'C:\dev\helworks\emus\ppsspp_win\memstick\PSP\GAME\HELENGINE'
 $targetEbootPath = Join-Path $targetRoot 'EBOOT.PBP'
@@ -36,12 +46,12 @@ if (Test-Path -LiteralPath $targetRoot) {
     Remove-Item -LiteralPath $targetRoot -Recurse -Force
 }
 
-New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
-Copy-Item -LiteralPath $resolvedArtifactPath -Destination $targetEbootPath -Force
+Copy-Item -LiteralPath $sourceRoot -Destination $targetRoot -Recurse -Force
 
 $artifactItem = Get-Item -LiteralPath $resolvedArtifactPath
 Write-Output ("ARTIFACT=" + $resolvedArtifactPath)
 Write-Output ("ARTIFACT_LAST_WRITE_TIME=" + $artifactItem.LastWriteTime.ToString('O'))
+Write-Output ("SOURCE_ROOT=" + $sourceRoot)
 Write-Output ("PPSSPP=" + $ppssppExePath)
 Write-Output ("TARGET_EBOOT=" + $targetEbootPath)
 

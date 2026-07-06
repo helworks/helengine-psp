@@ -7,6 +7,7 @@ using helengine.baseplatform.Targets;
 using helengine.baseplatform.Results;
 using helengine;
 using helengine.editor;
+using System.Reflection;
 
 namespace helengine.psp.builder.tests;
 
@@ -77,6 +78,30 @@ public sealed class PspPlatformAssetBuilderTests {
                 Assert.Equal("{\"maxResolution\":0,\"colorFormat\":\"Indexed8\",\"alphaPrecision\":\"A8\"}", capability.DefaultSerializedPlatformSettings);
                 AssertTextureFormatCapabilities(capability.TextureFormatCapabilities);
             });
+    }
+
+    /// <summary>
+    /// Ensures the PSP default codegen profile publishes the generic native C++ platform-shape options required by the shared generator.
+    /// </summary>
+    [Fact]
+    public void Default_codegen_profile_exposes_required_custom_cpp_platform_shape_options() {
+        PspPlatformAssetBuilder builder = new();
+        PlatformCodegenProfileDefinition codegenProfile = Assert.Single(
+            builder.Definition.CodegenProfiles,
+            profile => profile.ProfileId == "default");
+
+        Assert.Contains(
+            codegenProfile.Settings,
+            setting => setting.SettingId == "generated-math-convention"
+                && setting.DefaultValue == "native-column-vector");
+        Assert.Contains(
+            codegenProfile.Settings,
+            setting => setting.SettingId == "pointer-size-bytes"
+                && setting.DefaultValue == "4");
+        Assert.Contains(
+            codegenProfile.Settings,
+            setting => setting.SettingId == "type-remaps"
+                && setting.DefaultValue == "System.Numerics.Vector2=helengine.float2;System.Numerics.Vector3=helengine.float3;System.Numerics.Vector4=helengine.float4;System.Numerics.Quaternion=helengine.float4");
     }
 
     /// <summary>
@@ -1025,7 +1050,7 @@ public sealed class PspPlatformAssetBuilderTests {
 
             string outputTexturePath = Path.Combine(outputRoot, "PSP", "GAME", "HELENGINE", "cooked", "fonts", "default.ps2tex");
             Assert.True(File.Exists(outputTexturePath));
-            FontAsset expectedCookedFontAsset = sourceProcessor.CookFont(
+            TextureAsset expectedCookedTextureAsset = sourceProcessor.CookFontAtlasTexture(
                 sourceFontPath,
                 "fonts/default.hefont",
                 new TextureAssetProcessorSettings {
@@ -1033,7 +1058,6 @@ public sealed class PspPlatformAssetBuilderTests {
                     ColorFormat = TextureAssetColorFormat.Rgba4444,
                     AlphaPrecision = TextureAssetAlphaPrecision.A4
                 });
-            TextureAsset expectedCookedTextureAsset = expectedCookedFontAsset.SourceTextureAsset ?? throw new InvalidOperationException("Expected cooked font atlas texture asset was not produced.");
             byte[] expectedTextureBytes = global::helengine.files.AssetSerializer.SerializeToBytes(expectedCookedTextureAsset);
             Assert.Equal(expectedTextureBytes, File.ReadAllBytes(outputTexturePath));
         } finally {
@@ -1076,6 +1100,7 @@ public sealed class PspPlatformAssetBuilderTests {
             string textureAssetId = WriteSourceTextureAssetAndReturnAssetId(projectRootPath, textureRelativePath, "psp");
             WritePspMaterialAsset(projectRootPath, materialRelativePath, textureAssetId);
             WriteSceneAssetWithMaterial(projectRootPath, sceneId, materialRelativePath);
+            SeedBuiltInStandardShaderAsset(ShaderCompileTarget.DirectX11);
             PspPlatformAssetBuilder builder = new(new FakePspNativeBuildExecutor(), new FakePspPlatformCookSourceProcessor(
                 new TextureAsset {
                     Width = 1,
@@ -1110,6 +1135,49 @@ public sealed class PspPlatformAssetBuilderTests {
             } catch {
             }
         }
+    }
+
+    /// <summary>
+    /// Seeds the built-in shader cache with one precompiled standard shader so scene-packager tests do not require runtime shader compilation.
+    /// </summary>
+    /// <param name="target">Shader compile target whose cache entry should be seeded.</param>
+    static void SeedBuiltInStandardShaderAsset(ShaderCompileTarget target) {
+        string shaderPath = EditorBuiltInShaderAssetLibrary.ResolveShaderPath("ForwardStandardShader.hlsl");
+        string cacheKey = string.Concat(target.ToString(), "|", shaderPath);
+        ShaderAsset shaderAsset = new ShaderAsset {
+            Id = "ForwardStandardShader",
+            Name = "ForwardStandardShader",
+            TargetName = ShaderTargetNames.GetTargetName(target),
+            Programs = [
+                new ShaderProgramAsset {
+                    Name = "ForwardStandardShader.vs",
+                    Stage = ShaderStage.Vertex,
+                    EntryPoint = "VS",
+                    Bindings = Array.Empty<ShaderBindingAsset>(),
+                    Inputs = Array.Empty<ShaderVertexElementAsset>(),
+                    Outputs = Array.Empty<ShaderVertexElementAsset>(),
+                    Variants = [
+                        new ShaderVariantAsset {
+                            Name = "default",
+                            Defines = Array.Empty<string>()
+                        }
+                    ]
+                }
+            ],
+            Binaries = [
+                new ShaderBinaryAsset {
+                    ProgramName = "ForwardStandardShader.vs",
+                    Stage = ShaderStage.Vertex,
+                    TargetName = ShaderTargetNames.GetTargetName(target),
+                    Variant = "default",
+                    Bytecode = [1, 2, 3, 4]
+                }
+            ]
+        };
+
+        FieldInfo cacheField = typeof(EditorBuiltInShaderAssetLibrary).GetField("ShaderAssetsByKey", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new InvalidOperationException("Built-in shader cache field was not found.");
+        Dictionary<string, ShaderAsset> cache = Assert.IsType<Dictionary<string, ShaderAsset>>(cacheField.GetValue(null));
+        cache[cacheKey] = shaderAsset;
     }
 
     /// <summary>
@@ -1284,19 +1352,17 @@ public sealed class PspPlatformAssetBuilderTests {
     /// <param name="materialRelativePath">Project-relative material path to encode.</param>
     /// <returns>Serialized mesh-component payload.</returns>
     static byte[] WriteMeshComponentPayload(string materialRelativePath) {
-        MeshComponentPersistenceDescriptor descriptor = new MeshComponentPersistenceDescriptor();
-        MeshComponent meshComponent = new MeshComponent {
-            Material = new TestRuntimeMaterial()
-        };
-        EntityComponentSaveState saveState = new EntityComponentSaveState();
-        saveState.SetAssetReference("Material", new SceneAssetReference {
-            SourceKind = SceneAssetReferenceSourceKind.FileSystem,
-            RelativePath = materialRelativePath,
-            ProviderId = string.Empty,
-            AssetId = string.Empty
+        MeshComponent meshComponent = new MeshComponent();
+        meshComponent.SetMaterials(new RuntimeMaterial[] {
+            new TestRuntimeMaterial()
         });
+        EntityComponentSaveState saveState = new EntityComponentSaveState();
+        saveState.SetAssetReference(
+            "Materials[0]",
+            global::helengine.SceneAssetReferenceFactory.CreateFileSystemMaterial(materialRelativePath));
 
-        SceneComponentAssetRecord record = descriptor.SerializeComponent(meshComponent, 0, saveState);
+        ComponentPersistenceRegistry persistenceRegistry = new ComponentPersistenceRegistry();
+        SceneComponentAssetRecord record = persistenceRegistry.GetDescriptor(meshComponent).SerializeComponent(meshComponent, 0, saveState);
         return record.Payload;
     }
 }

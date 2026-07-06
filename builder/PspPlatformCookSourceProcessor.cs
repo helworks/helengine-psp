@@ -18,6 +18,11 @@ public sealed class PspPlatformCookSourceProcessor : IPspPlatformCookSourceProce
     const string EditorWindowsAssemblyRelativePath = @"engine\helengine.editor.windows\bin\Debug\net9.0-windows\helengine.editor.windows.dll";
 
     /// <summary>
+    /// Relative editor host assembly path used when the importer-host assembly has not been loaded yet.
+    /// </summary>
+    const string EditorAppAssemblyRelativePath = @"helengine.ui\helengine.editor.app\bin\Debug\net9.0-windows\helengine.editor.app.dll";
+
+    /// <summary>
     /// Shared texture processor used to apply editor-resolved PSP texture settings.
     /// </summary>
     readonly TextureAssetProcessor TextureAssetProcessor;
@@ -71,33 +76,28 @@ public sealed class PspPlatformCookSourceProcessor : IPspPlatformCookSourceProce
     }
 
     /// <summary>
-    /// Imports one source font asset and applies the resolved PSP atlas texture processor settings.
+    /// Imports one source font atlas asset and applies the resolved PSP atlas texture processor settings.
     /// </summary>
     /// <param name="sourceAssetPath">Absolute source font path emitted by the editor build graph.</param>
-    /// <param name="assetId">Stable runtime asset identifier the cooked font should preserve for atlas ownership.</param>
+    /// <param name="assetId">Stable runtime asset identifier the cooked atlas texture should preserve.</param>
     /// <param name="settings">Resolved PSP texture processor settings supplied by the editor.</param>
-    /// <returns>Processed runtime font payload ready for serialization.</returns>
-    public FontAsset CookFont(string sourceAssetPath, string assetId, TextureAssetProcessorSettings settings) {
+    /// <returns>Processed runtime atlas texture payload ready for serialization.</returns>
+    public TextureAsset CookFontAtlasTexture(string sourceAssetPath, string assetId, TextureAssetProcessorSettings settings) {
         if (string.IsNullOrWhiteSpace(sourceAssetPath)) {
             throw new ArgumentException("Source font path must be provided.", nameof(sourceAssetPath));
         } else if (string.IsNullOrWhiteSpace(assetId)) {
-            throw new ArgumentException("Font asset id must be provided.", nameof(assetId));
+            throw new ArgumentException("Font atlas asset id must be provided.", nameof(assetId));
         } else if (settings == null) {
             throw new ArgumentNullException(nameof(settings));
         } else if (!File.Exists(sourceAssetPath)) {
             throw new FileNotFoundException("Source font file was not found.", sourceAssetPath);
         }
 
-        FontAsset importedFontAsset = LoadSourceFontAsset(sourceAssetPath);
-        if (importedFontAsset.SourceTextureAsset == null) {
-            throw new InvalidOperationException($"Source font '{sourceAssetPath}' did not provide an atlas texture payload.");
-        }
-
-        TextureAsset cookedAtlasAsset = TextureAssetProcessor.Apply(importedFontAsset.SourceTextureAsset, settings);
-        importedFontAsset.ApplyProcessedSourceTextureAsset(cookedAtlasAsset);
-        importedFontAsset.SourceTextureAsset.Id = assetId + FontAtlasSuffix;
-        importedFontAsset.SourceTextureAsset.RuntimeAssetId = RuntimeAssetIdGenerator.Generate(importedFontAsset.SourceTextureAsset.Id);
-        return importedFontAsset;
+        TextureAsset importedAtlasTextureAsset = LoadSourceFontAtlasTexture(sourceAssetPath);
+        TextureAsset cookedAtlasAsset = TextureAssetProcessor.Apply(importedAtlasTextureAsset, settings);
+        cookedAtlasAsset.Id = assetId + FontAtlasSuffix;
+        cookedAtlasAsset.RuntimeAssetId = RuntimeAssetIdGenerator.Generate(cookedAtlasAsset.Id);
+        return cookedAtlasAsset;
     }
 
     /// <summary>
@@ -126,19 +126,83 @@ public sealed class PspPlatformCookSourceProcessor : IPspPlatformCookSourceProce
     }
 
     /// <summary>
-    /// Loads one source font asset from either a packaged <c>.hefont</c> document or a source font file.
+    /// Loads one source font atlas asset from either a packaged <c>.hefont</c> document, one serialized texture-asset payload, one raw source texture file, or one raw source font file.
     /// </summary>
     /// <param name="sourceAssetPath">Absolute source font path emitted by the editor build graph.</param>
-    /// <returns>Imported or deserialized runtime font asset.</returns>
-    FontAsset LoadSourceFontAsset(string sourceAssetPath) {
+    /// <returns>Imported or deserialized raw atlas texture asset.</returns>
+    TextureAsset LoadSourceFontAtlasTexture(string sourceAssetPath) {
         if (string.Equals(Path.GetExtension(sourceAssetPath), ".hefont", StringComparison.OrdinalIgnoreCase)) {
             using FileStream stream = new FileStream(sourceAssetPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            return global::helengine.files.FontAssetBinarySerializer.Deserialize(stream);
+            FontAsset fontAsset = global::helengine.files.FontAssetBinarySerializer.Deserialize(stream);
+            if (fontAsset.SourceTextureAsset == null) {
+                throw new InvalidOperationException($"Packaged font source '{sourceAssetPath}' did not provide an atlas texture payload.");
+            }
+
+            return fontAsset.SourceTextureAsset;
         }
 
+        if (string.Equals(Path.GetExtension(sourceAssetPath), ".hasset", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(Path.GetExtension(sourceAssetPath), ".hetex", StringComparison.OrdinalIgnoreCase)) {
+            using FileStream stream = new FileStream(sourceAssetPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return global::helengine.files.AssetSerializer.Deserialize(stream) as TextureAsset
+                ?? throw new InvalidOperationException($"Serialized texture source '{sourceAssetPath}' did not contain a TextureAsset payload.");
+        }
+
+        if (CanResolveTextureImporter(sourceAssetPath)) {
+            TextureImporterRegistration importer = ResolveTextureImporter(sourceAssetPath);
+            using FileStream stream = new FileStream(sourceAssetPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            TextureAsset importedTextureAsset = importer.Importer.ImportTexture(stream);
+            if (importedTextureAsset == null) {
+                throw new InvalidOperationException($"Texture importer '{importer.ImporterId}' did not return a texture asset for '{sourceAssetPath}'.");
+            }
+
+            return importedTextureAsset;
+        }
+
+        FontAsset importedFontAsset = ImportRawFontAsset(sourceAssetPath);
+        if (importedFontAsset.SourceTextureAsset == null) {
+            throw new InvalidOperationException($"Source font '{sourceAssetPath}' did not provide an atlas texture payload.");
+        }
+
+        return importedFontAsset.SourceTextureAsset;
+    }
+
+    /// <summary>
+    /// Returns whether one source path can be imported through the default editor texture importer registrations.
+    /// </summary>
+    /// <param name="sourceAssetPath">Absolute source texture path.</param>
+    /// <returns>True when one registered texture importer supports the source extension; otherwise false.</returns>
+    bool CanResolveTextureImporter(string sourceAssetPath) {
+        if (string.IsNullOrWhiteSpace(sourceAssetPath)) {
+            throw new ArgumentException("Source texture path must be provided.", nameof(sourceAssetPath));
+        }
+
+        string normalizedExtension = NormalizeExtension(Path.GetExtension(sourceAssetPath));
+        IReadOnlyList<TextureImporterRegistration> registrations = GetTextureImporterRegistrations();
+        for (int registrationIndex = 0; registrationIndex < registrations.Count; registrationIndex++) {
+            TextureImporterRegistration registration = registrations[registrationIndex];
+            string[] extensions = registration.Extensions;
+            for (int extensionIndex = 0; extensionIndex < extensions.Length; extensionIndex++) {
+                if (string.Equals(extensions[extensionIndex], normalizedExtension, StringComparison.OrdinalIgnoreCase)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Imports one raw source font file through the editor host font importer.
+    /// </summary>
+    /// <param name="sourceAssetPath">Absolute source font path emitted by the editor build graph.</param>
+    /// <returns>Imported runtime font asset.</returns>
+    FontAsset ImportRawFontAsset(string sourceAssetPath) {
         IFontImporter importer = GetFontImporter();
         using FileStream fontStream = new FileStream(sourceAssetPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        FontAsset importedFontAsset = importer.ImportFont(fontStream);
+        FontAsset importedFontAsset = importer.ImportFont(fontStream, new FontAssetProcessorSettings {
+            PixelSize = FontAssetProcessorSettings.DefaultPixelSize
+        });
         if (importedFontAsset == null) {
             throw new InvalidOperationException($"Font importer '{importer.GetType().FullName}' did not return a font asset for '{sourceAssetPath}'.");
         }
@@ -181,22 +245,61 @@ public sealed class PspPlatformCookSourceProcessor : IPspPlatformCookSourceProce
     }
 
     /// <summary>
-    /// Gets the lazily loaded default source font importer provided by the Windows editor backend.
+    /// Gets the lazily loaded default source font importer provided by the editor host.
     /// </summary>
-    /// <returns>Windows editor source font importer.</returns>
+    /// <returns>Editor-host source font importer.</returns>
     IFontImporter GetFontImporter() {
         if (FontImporterValue != null) {
             return FontImporterValue;
         }
 
-        Assembly editorWindowsAssembly = LoadEditorWindowsAssembly();
-        Type fontImporterType = editorWindowsAssembly.GetType("helengine.editor.GdiFontImporter", true)
-            ?? throw new InvalidOperationException("Windows editor backend did not expose helengine.editor.GdiFontImporter.");
-        object fontImporter = Activator.CreateInstance(fontImporterType)
-            ?? throw new InvalidOperationException("Windows editor backend could not instantiate helengine.editor.GdiFontImporter.");
-        FontImporterValue = fontImporter as IFontImporter
-            ?? throw new InvalidOperationException("Windows editor font importer does not implement helengine.editor.IFontImporter.");
-        return FontImporterValue;
+        Assembly editorAppAssembly = LoadEditorAppAssembly();
+        Type importerFactoryType = editorAppAssembly.GetType("helengine.editor.app.EditorHostImporterFactory", true)
+            ?? throw new InvalidOperationException("Editor host assembly did not expose helengine.editor.app.EditorHostImporterFactory.");
+        MethodInfo createDefaultMethod = importerFactoryType.GetMethod("CreateDefault", BindingFlags.Public | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Editor host assembly did not expose EditorHostImporterFactory.CreateDefault().");
+        object result = createDefaultMethod.Invoke(null, null)
+            ?? throw new InvalidOperationException("Editor host assembly returned no default importer registrations.");
+        IReadOnlyList<IAssetImporterRegistration> registrations = result as IReadOnlyList<IAssetImporterRegistration>
+            ?? throw new InvalidOperationException("Editor host assembly returned an unexpected importer registration collection.");
+
+        for (int index = 0; index < registrations.Count; index++) {
+            if (registrations[index] is FontImporterRegistration fontRegistration &&
+                string.Equals(fontRegistration.ImporterId, "gdi-font", StringComparison.OrdinalIgnoreCase)) {
+                FontImporterValue = fontRegistration.Importer;
+                return FontImporterValue;
+            }
+        }
+
+        throw new InvalidOperationException("Editor host assembly did not expose a gdi-font importer registration.");
+    }
+
+    /// <summary>
+    /// Loads the editor host assembly that owns the current default importer registrations.
+    /// </summary>
+    /// <returns>Loaded editor host assembly.</returns>
+    Assembly LoadEditorAppAssembly() {
+        Assembly[] loadedAssemblies = AppDomain.CurrentDomain.GetAssemblies();
+        for (int index = 0; index < loadedAssemblies.Length; index++) {
+            Assembly assembly = loadedAssemblies[index];
+            if (string.Equals(assembly.GetName().Name, "helengine.editor.app", StringComparison.OrdinalIgnoreCase)) {
+                return assembly;
+            }
+        }
+
+        try {
+            return Assembly.Load("helengine.editor.app");
+        } catch {
+        }
+
+        string assemblyPath = Path.Combine(ResolveHelengineRootPath(), NormalizeRelativePath(EditorAppAssemblyRelativePath));
+        if (!File.Exists(assemblyPath)) {
+            throw new FileNotFoundException(
+                "Editor host assembly 'helengine.editor.app' was not found. Build helengine.editor.app before executing PSP builder-owned font cook work items.",
+                assemblyPath);
+        }
+
+        return Assembly.LoadFrom(assemblyPath);
     }
 
     /// <summary>

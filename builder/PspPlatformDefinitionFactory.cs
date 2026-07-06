@@ -9,6 +9,21 @@ namespace helengine.psp.builder;
 /// </summary>
 public static class PspPlatformDefinitionFactory {
     /// <summary>
+    /// Generic native numeric type remaps required by custom C++ platforms that cannot emit System.Numerics runtime types directly.
+    /// </summary>
+    const string NativeNumericTypeRemaps = "System.Numerics.Vector2=helengine.float2;System.Numerics.Vector3=helengine.float3;System.Numerics.Vector4=helengine.float4;System.Numerics.Quaternion=helengine.float4";
+
+    /// <summary>
+    /// Generic generated-math-convention value that instructs the shared C++ generator to emit native column-vector math helpers.
+    /// </summary>
+    const string NativeColumnVectorMathConvention = "native-column-vector";
+
+    /// <summary>
+    /// Pointer-size contract forwarded to the shared C++ generator for PSP-native output.
+    /// </summary>
+    const string PointerSizeInBytes = "4";
+
+    /// <summary>
     /// Creates the serialized default PSP texture settings contract used when assets do not provide an explicit PSP override.
     /// </summary>
     /// <returns>Serialized default PSP texture settings.</returns>
@@ -245,6 +260,27 @@ public static class PspPlatformDefinitionFactory {
                             PlatformSettingKind.Boolean,
                             "true",
                             true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "generated-math-convention",
+                            "Generated Math Convention",
+                            PlatformSettingKind.Text,
+                            NativeColumnVectorMathConvention,
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "pointer-size-bytes",
+                            "Pointer Size (Bytes)",
+                            PlatformSettingKind.Text,
+                            PointerSizeInBytes,
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "type-remaps",
+                            "Type Remaps",
+                            PlatformSettingKind.Text,
+                            NativeNumericTypeRemaps,
+                            true,
                             [])
                     ])
             ],
@@ -278,7 +314,8 @@ public static class PspPlatformDefinitionFactory {
                     PlatformAssetCookOwnershipKind.BuilderOwned,
                     "psp-font-atlas-texture",
                     CreateDefaultSerializedFontAtlasTextureCookSettings(),
-                    CreateTextureFormatCapabilities())
+                    CreateTextureFormatCapabilities(),
+                    ".ps2tex")
             ]);
     }
 
