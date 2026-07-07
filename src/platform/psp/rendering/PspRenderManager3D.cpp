@@ -724,8 +724,8 @@ namespace helengine::psp::rendering {
     }
 
     /// Builds one shader-backed runtime material from the packaged material asset path used by scene loading.
-    RuntimeMaterial* PspRenderManager3D::BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string contentRootPath, std::string materialAssetPath) {
-        return ShaderRuntimeMaterialLoader::BuildMaterialFromRawAsset(this, assetContentManager, contentRootPath, materialAssetPath);
+    RuntimeMaterial* PspRenderManager3D::BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string materialAssetPath) {
+        return ShaderRuntimeMaterialLoader::BuildMaterialFromRawAsset(this, assetContentManager, materialAssetPath);
     }
 
     /// Builds a runtime material placeholder and captures the authored base color.

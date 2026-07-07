@@ -17,6 +17,7 @@
 #include "CoreInitializationOptions.hpp"
 #include "BepuPhysicsWorld3D.hpp"
 #include "BepuRuntimeComponentRegistration.hpp"
+#include "HostFileSystemContentStreamSource.hpp"
 #include "InputControlId.hpp"
 #include "InputControlKind.hpp"
 #include "InputDeviceKind.hpp"
@@ -233,7 +234,7 @@ namespace helengine::psp {
 
         EngineCore = new Core();
         EngineOptions = EngineCore->get_InitializationOptions();
-        EngineOptions->set_ContentRootPath(appRootPath);
+        EngineOptions->set_ContentStreamSource(new HostFileSystemContentStreamSource(appRootPath));
         EngineOptions->set_UpdateOrderLayers(4);
         EngineOptions->set_RenderOrderLayers3D(4);
         EngineOptions->set_UpdateListInitialCapacity(64);

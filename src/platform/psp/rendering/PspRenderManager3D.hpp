@@ -29,7 +29,7 @@ namespace helengine::psp::rendering {
         RuntimeModel* BuildModelFromRaw(ModelAsset* data) override;
 
         /// Builds one shader-backed runtime material from the packaged material asset path used by scene loading.
-        RuntimeMaterial* BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string contentRootPath, std::string materialAssetPath) override;
+        RuntimeMaterial* BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string materialAssetPath) override;
 
         /// Builds a runtime material placeholder and captures the authored base color.
         RuntimeMaterial* BuildMaterialFromRaw(ShaderMaterialAsset* materialAsset, ShaderAsset* shaderAsset) override;

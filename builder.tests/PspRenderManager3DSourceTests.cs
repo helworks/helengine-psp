@@ -335,8 +335,8 @@ namespace helengine.psp.builder.tests {
             string renderManagerHeaderContents = File.ReadAllText(renderManagerHeaderPath);
             string renderManagerSourceContents = File.ReadAllText(renderManagerSourcePath);
 
-            Assert.Contains("RuntimeMaterial* BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string contentRootPath, std::string materialAssetPath) override;", renderManagerHeaderContents, StringComparison.Ordinal);
-            Assert.Contains("ShaderRuntimeMaterialLoader::BuildMaterialFromRawAsset(this, assetContentManager, contentRootPath, materialAssetPath);", renderManagerSourceContents, StringComparison.Ordinal);
+            Assert.Contains("RuntimeMaterial* BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string materialAssetPath) override;", renderManagerHeaderContents, StringComparison.Ordinal);
+            Assert.Contains("ShaderRuntimeMaterialLoader::BuildMaterialFromRawAsset(this, assetContentManager, materialAssetPath);", renderManagerSourceContents, StringComparison.Ordinal);
         }
     }
 }

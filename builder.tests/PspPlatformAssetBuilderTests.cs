@@ -1261,7 +1261,7 @@ public sealed class PspPlatformAssetBuilderTests {
         Directory.CreateDirectory(Path.GetDirectoryName(textureSourcePath)!);
         File.WriteAllBytes(textureSourcePath, [1, 2, 3, 4]);
 
-        ContentManager contentManager = new ContentManager(projectRootPath);
+        ContentManager contentManager = new ContentManager(new HostFileSystemContentStreamSource(projectRootPath));
         AssetImportManager assetImportManager = new AssetImportManager(projectRootPath, contentManager);
         assetImportManager.CurrentPlatformId = platformId;
         assetImportManager.RegisterTextureImporter(new TextureImporterRegistration("test-texture", new PspBuilderTestTextureImporter(), [".png"]));
