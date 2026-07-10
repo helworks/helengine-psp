@@ -52,6 +52,7 @@ set(HELENGINE_PSP_SOURCES
     src/platform/psp/PspInputBackend.cpp
     src/platform/psp/PspPackagedAssetLoader.cpp
     src/platform/psp/PspRuntimeSceneCatalogFactory.cpp
+    src/platform/psp/audio/PspAudioBackend.cpp
     src/platform/psp/rendering/PspRenderProfiler.cpp
     src/platform/psp/rendering/PspRenderManager2D.cpp
     src/platform/psp/rendering/PspRuntimeTexture.cpp
@@ -106,6 +107,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     pspge
     pspgu
     pspgum
+    pspaudio
     pspctrl
 )
 

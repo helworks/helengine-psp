@@ -265,6 +265,94 @@ public sealed class PspPackagedRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures the PSP app heap budget leaves headroom for scene swaps that overlap two large cooked music tracks.
+    /// </summary>
+    [Fact]
+    public void PspBootHost_uses_expanded_heap_budget_for_scene_music_transitions() {
+        string sourcePath = Path.Combine(
+            PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+            "src",
+            "platform",
+            "psp",
+            "PspBootHost.cpp");
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("PSP_HEAP_SIZE_KB(24 * 1024);", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the PSP boot host wires one native audio backend into generated core before scene audio sources start playback.
+    /// </summary>
+    [Fact]
+    public void PspBootHost_wires_generated_core_audio_backend() {
+        string headerPath = Path.Combine(
+            PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+            "src",
+            "platform",
+            "psp",
+            "PspBootHost.hpp");
+        string sourcePath = Path.Combine(
+            PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+            "src",
+            "platform",
+            "psp",
+            "PspBootHost.cpp");
+        string header = File.ReadAllText(headerPath);
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("class IAudioBackend;", header, StringComparison.Ordinal);
+        Assert.Contains("::IAudioBackend* EngineAudioBackend;", header, StringComparison.Ordinal);
+        Assert.Contains("#include \"IAudioBackend.hpp\"", source, StringComparison.Ordinal);
+        Assert.Contains("#include \"platform/psp/audio/PspAudioBackend.hpp\"", source, StringComparison.Ordinal);
+        Assert.Contains("EngineAudioBackend = new PspAudioBackend();", source, StringComparison.Ordinal);
+        Assert.Contains("EngineCore->SetAudioBackend(EngineAudioBackend);", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the PSP boot host registers the kernel exit callback and breaks both frame loops when the Home button requests shutdown.
+    /// </summary>
+    [Fact]
+    public void PspBootHost_registers_home_button_exit_callback_and_exits_cleanly() {
+        string headerPath = Path.Combine(
+            PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+            "src",
+            "platform",
+            "psp",
+            "PspBootHost.hpp");
+        string sourcePath = Path.Combine(
+            PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+            "src",
+            "platform",
+            "psp",
+            "PspBootHost.cpp");
+        string header = File.ReadAllText(headerPath);
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("std::atomic<bool> ExitRequested;", header, StringComparison.Ordinal);
+        Assert.Contains("void RegisterExitCallback();", header, StringComparison.Ordinal);
+        Assert.Contains("static int HandleExitCallback", header, StringComparison.Ordinal);
+        Assert.Contains("static int ExitCallbackThreadEntry", header, StringComparison.Ordinal);
+        Assert.Contains("RegisterExitCallback();", source, StringComparison.Ordinal);
+        Assert.Contains("sceKernelCreateCallback(", source, StringComparison.Ordinal);
+        Assert.Contains("sceKernelRegisterExitCallback", source, StringComparison.Ordinal);
+        Assert.Contains("sceKernelSleepThreadCB();", source, StringComparison.Ordinal);
+        Assert.Contains("while (!IsExitRequested())", source, StringComparison.Ordinal);
+        Assert.Contains("sceKernelExitGame();", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the PSP native build compiles and links the dedicated audio backend used by scene-authored menu and showcase music.
+    /// </summary>
+    [Fact]
+    public void CMakeLists_compiles_and_links_the_psp_audio_backend() {
+        string cmakePath = Path.Combine(PspRepositoryPathResolver.ResolveRepositoryRootPath(), "CMakeLists.txt");
+        string cmakeSource = File.ReadAllText(cmakePath);
+
+        Assert.Contains("src/platform/psp/audio/PspAudioBackend.cpp", cmakeSource, StringComparison.Ordinal);
+        Assert.Contains("pspaudio", cmakeSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures PSP font release follows the engine disposal contract instead of manually deleting partial native state.
     /// </summary>
     [Fact]
@@ -280,11 +368,50 @@ public sealed class PspPackagedRuntimeSourceTests {
 
         Assert.Contains("font->Dispose();", source, StringComparison.Ordinal);
         Assert.Contains("ReleaseTexture(texture);", source, StringComparison.Ordinal);
-        Assert.Contains("texture->Dispose();", source, StringComparison.Ordinal);
-        Assert.Contains("delete texture;", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("texture->Dispose();", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("delete texture;", source, StringComparison.Ordinal);
         Assert.DoesNotContain("delete sourceTextureAsset->Colors;", source, StringComparison.Ordinal);
         Assert.DoesNotContain("delete font->get_FontInfo();", source, StringComparison.Ordinal);
         Assert.DoesNotContain("delete font->get_Characters();", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures PSP 2D texture release owns the full runtime-texture lifetime instead of leaking scene-owned sprite textures between scene swaps.
+    /// </summary>
+    [Fact]
+    public void PspRenderManager2D_release_texture_disposes_and_deletes_runtime_textures() {
+        string sourcePath = Path.Combine(
+            PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+            "src",
+            "platform",
+            "psp",
+            "rendering",
+            "PspRenderManager2D.cpp");
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("TextureCache.ReleaseTexture(pspTexture);", source, StringComparison.Ordinal);
+        Assert.Contains("pspTexture->Dispose();", source, StringComparison.Ordinal);
+        Assert.Contains("delete pspTexture;", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures PSP 3D runtime model and material releases actually dispose and delete native allocations during repeated scene swaps.
+    /// </summary>
+    [Fact]
+    public void PspRenderManager3D_release_paths_dispose_and_delete_runtime_assets() {
+        string sourcePath = Path.Combine(
+            PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+            "src",
+            "platform",
+            "psp",
+            "rendering",
+            "PspRenderManager3D.cpp");
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("model->Dispose();", source, StringComparison.Ordinal);
+        Assert.Contains("delete model;", source, StringComparison.Ordinal);
+        Assert.Contains("material->Dispose();", source, StringComparison.Ordinal);
+        Assert.Contains("delete material;", source, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -1,7 +1,10 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <string>
+
+#include <pspkernel.h>
 
 class Core;
 class CoreInitializationOptions;
@@ -9,6 +12,7 @@ class PlatformInfo;
 class RenderManager2D;
 class RenderManager3D;
 class IInputBackend;
+class IAudioBackend;
 class SceneAsset;
 class SceneManager;
 
@@ -56,6 +60,18 @@ namespace helengine::psp {
         /// Presents a stable blank frame continuously while generated-core runtime startup is isolated.
         void RunIsolatedFrameLoop();
 
+        /// Registers the PSP kernel exit callback so the Home button can request a clean shutdown.
+        void RegisterExitCallback();
+
+        /// Returns whether the PSP Home button requested application shutdown.
+        bool IsExitRequested() const;
+
+        /// Handles the PSP kernel exit callback and records one shutdown request on the owning host.
+        static int HandleExitCallback(int argument1, int argument2, void* common);
+
+        /// Owns the dedicated PSP callback thread that registers the Home-button exit callback.
+        static int ExitCallbackThreadEntry(SceSize argumentsSize, void* arguments);
+
         /// Records the currently executing boot stage for trace and fatal diagnostics.
         void EnterBootStage(const char* stageName);
 
@@ -98,11 +114,23 @@ namespace helengine::psp {
         /// Stores the PSP input backend used by generated core.
         ::IInputBackend* EngineInputBackend;
 
+        /// Stores the PSP audio backend used by generated core scene audio sources.
+        ::IAudioBackend* EngineAudioBackend;
+
         /// Stores the last observed runtime loaded-scene count written to the PSP boot log.
         int32_t LastTracedLoadedSceneCount;
 
         /// Stores the last observed primary loaded-scene id written to the PSP boot log.
         std::string LastTracedPrimarySceneId;
+
+        /// Stores whether the PSP Home button requested shutdown.
+        std::atomic<bool> ExitRequested;
+
+        /// Stores the kernel callback identifier used for Home-button exit notifications.
+        int ExitCallbackId;
+
+        /// Stores the callback thread identifier that registers the Home-button exit handler.
+        SceUID ExitCallbackThreadId;
 
     };
 }

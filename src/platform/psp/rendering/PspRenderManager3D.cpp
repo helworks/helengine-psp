@@ -778,6 +778,8 @@ namespace helengine::psp::rendering {
             std::to_string(reinterpret_cast<std::uintptr_t>(model)) +
             " cacheSize=" +
             std::to_string(CachedModels.size()));
+        model->Dispose();
+        delete model;
     }
 
     /// Releases one PSP runtime material after the final scene reference is removed.
@@ -791,6 +793,8 @@ namespace helengine::psp::rendering {
             material->get_Id() +
             " ptr=" +
             std::to_string(reinterpret_cast<std::uintptr_t>(material)));
+        material->Dispose();
+        delete material;
     }
 
     /// Wires the paired PSP 2D renderer used for per-camera UI submission.

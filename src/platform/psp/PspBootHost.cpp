@@ -15,6 +15,7 @@
 
 #include "Core.hpp"
 #include "CoreInitializationOptions.hpp"
+#include "IAudioBackend.hpp"
 #include "BepuPhysicsWorld3D.hpp"
 #include "BepuRuntimeComponentRegistration.hpp"
 #include "HostFileSystemContentStreamSource.hpp"
@@ -37,6 +38,7 @@
 #include "platform/psp/PspInputBackend.hpp"
 #include "platform/psp/PspPackagedAssetLoader.hpp"
 #include "platform/psp/PspRuntimeSceneCatalogFactory.hpp"
+#include "platform/psp/audio/PspAudioBackend.hpp"
 #include "platform/psp/rendering/PspRenderManager2D.hpp"
 #include "platform/psp/rendering/PspRenderManager3D.hpp"
 #include "runtime/native_exceptions.hpp"
@@ -49,7 +51,9 @@
 #endif
 
 PSP_MODULE_INFO("helengine_psp", 0, 1, 0);
-PSP_HEAP_SIZE_KB(16 * 1024);
+// Scene transitions can briefly overlap two large cooked PCM music assets, so the PSP app heap
+// needs headroom beyond the default 16 MB budget.
+PSP_HEAP_SIZE_KB(24 * 1024);
 PSP_MAIN_THREAD_STACK_SIZE_KB(512);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_VFPU | THREAD_ATTR_USER);
 
@@ -110,14 +114,19 @@ namespace helengine::psp {
           EngineRenderManager3D(nullptr),
           EngineRenderManager2D(nullptr),
           EngineInputBackend(nullptr),
+          EngineAudioBackend(nullptr),
           LastTracedLoadedSceneCount(-1),
-          LastTracedPrimarySceneId() {
+          LastTracedPrimarySceneId(),
+          ExitRequested(false),
+          ExitCallbackId(-1),
+          ExitCallbackThreadId(-1) {
     }
 
     /// Initializes the PSP runtime and presents frames until shutdown.
     int PspBootHost::Run() {
         try {
             PspBootTrace::WriteLine("Run begin");
+            RegisterExitCallback();
             EnterBootStage(GraphicsInitializationStageName);
             if (!InitializeGraphics()) {
                 PspBootTrace::WriteLine("InitializeGraphics returned false");
@@ -128,14 +137,20 @@ namespace helengine::psp {
 #if defined(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP) && HELENGINE_PSP_ENABLE_RUNTIME_STARTUP
             PspBootTrace::WriteLine("Checkpointed runtime startup enabled.");
             RunCheckpointedStartup();
+            PspBootTrace::WriteLine("Run exit requested. Calling sceKernelExitGame.");
+            sceKernelExitGame();
             return 0;
 #elif defined(HELENGINE_PSP_ISOLATED_BOOT) && HELENGINE_PSP_ISOLATED_BOOT
             PspBootTrace::WriteLine("Isolated boot enabled. Skipping generated-core runtime startup.");
             RunIsolatedFrameLoop();
+            PspBootTrace::WriteLine("Run exit requested. Calling sceKernelExitGame.");
+            sceKernelExitGame();
             return 0;
 #else
             PspBootTrace::WriteLine("No explicit runtime-startup mode was selected. Falling back to isolated boot.");
             RunIsolatedFrameLoop();
+            PspBootTrace::WriteLine("Run exit requested. Calling sceKernelExitGame.");
+            sceKernelExitGame();
             return 0;
 #endif
         } catch (const std::exception& exception) {
@@ -252,6 +267,7 @@ namespace helengine::psp {
         EngineRenderManager3D = pspRenderManager3D;
         EngineRenderManager2D = pspRenderManager2D;
         EngineInputBackend = new PspInputBackend();
+        EngineAudioBackend = new PspAudioBackend();
 
         EngineRenderManager3D->AddWindow(0, ScreenWidth, ScreenHeight);
         PlatformInfo* platformInfo = BuildRuntimePlatformInfo();
@@ -261,6 +277,7 @@ namespace helengine::psp {
             EngineInputBackend,
             platformInfo,
             EngineOptions);
+        EngineCore->SetAudioBackend(EngineAudioBackend);
         BepuPhysicsWorld3D* physicsWorld = BepuPhysicsWorld3D::CreateWithSolveSchedule(2, 1);
         BepuRuntimeComponentRegistration::AttachRuntimeWorld(EngineCore, physicsWorld);
         BepuRuntimeComponentRegistration::RegisterSceneBinding(EngineCore);
@@ -393,12 +410,81 @@ namespace helengine::psp {
         return loadedScenes->get_Count();
     }
 
+    /// Registers the PSP kernel exit callback so the Home button can request a clean shutdown.
+    void PspBootHost::RegisterExitCallback() {
+        if (ExitCallbackThreadId >= 0) {
+            return;
+        }
+
+        ExitCallbackThreadId = sceKernelCreateThread(
+            "helengine_exit_callback_thread",
+            &PspBootHost::ExitCallbackThreadEntry,
+            0x11,
+            0x1000,
+            PSP_THREAD_ATTR_USER,
+            nullptr);
+        if (ExitCallbackThreadId < 0) {
+            throw std::runtime_error("Failed to create the PSP exit callback thread.");
+        }
+
+        PspBootHost* host = this;
+        int startResult = sceKernelStartThread(ExitCallbackThreadId, sizeof(PspBootHost*), &host);
+        if (startResult < 0) {
+            sceKernelDeleteThread(ExitCallbackThreadId);
+            ExitCallbackThreadId = -1;
+            throw std::runtime_error("Failed to start the PSP exit callback thread.");
+        }
+    }
+
+    /// Returns whether the PSP Home button requested application shutdown.
+    bool PspBootHost::IsExitRequested() const {
+        return ExitRequested.load();
+    }
+
+    /// Handles the PSP kernel exit callback and records one shutdown request on the owning host.
+    int PspBootHost::HandleExitCallback(int argument1, int argument2, void* common) {
+        (void)argument1;
+        (void)argument2;
+
+        PspBootHost* host = static_cast<PspBootHost*>(common);
+        if (host != nullptr) {
+            host->ExitRequested.store(true);
+        }
+
+        PspBootTrace::WriteLine("Home button exit requested.");
+        return 0;
+    }
+
+    /// Owns the dedicated PSP callback thread that registers the Home-button exit callback.
+    int PspBootHost::ExitCallbackThreadEntry(SceSize argumentsSize, void* arguments) {
+        if (arguments == nullptr || argumentsSize != sizeof(PspBootHost*)) {
+            return 0;
+        }
+
+        PspBootHost* host = *reinterpret_cast<PspBootHost**>(arguments);
+        if (host == nullptr) {
+            return 0;
+        }
+
+        host->ExitCallbackId = sceKernelCreateCallback(
+            "helengine_exit_callback",
+            &PspBootHost::HandleExitCallback,
+            host);
+        if (host->ExitCallbackId < 0) {
+            return 0;
+        }
+
+        sceKernelRegisterExitCallback(host->ExitCallbackId);
+        sceKernelSleepThreadCB();
+        return 0;
+    }
+
     /// Runs the normal generated-core update and draw loop after startup succeeds.
     void PspBootHost::RunMainLoop() {
         EnterBootStage(RuntimeMainLoopStageName);
         CompleteBootStage();
 
-        while (true) {
+        while (!IsExitRequested()) {
             try {
                 EngineCore->Update();
             } catch (const std::bad_alloc&) {
@@ -438,6 +524,8 @@ namespace helengine::psp {
             EngineCore->Draw();
             PresentFrame();
         }
+
+        PspBootTrace::WriteLine("RunMainLoop observed exit request.");
     }
 
     /// Presents a stable blank frame continuously while generated-core runtime startup is isolated.
@@ -445,10 +533,12 @@ namespace helengine::psp {
         EnterBootStage(IsolatedFrameLoopStageName);
         CompleteBootStage();
 
-        while (true) {
+        while (!IsExitRequested()) {
             BeginFrame();
             PresentFrame();
         }
+
+        PspBootTrace::WriteLine("RunIsolatedFrameLoop observed exit request.");
     }
 
     /// Records the currently executing boot stage for trace and fatal diagnostics.

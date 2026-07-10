@@ -62,6 +62,8 @@ namespace helengine::psp::rendering {
 
         ClearGeometryCaches();
         TextureCache.ReleaseTexture(pspTexture);
+        pspTexture->Dispose();
+        delete pspTexture;
     }
 
     /// Releases one PSP font asset and its native-owned object graph.
@@ -75,8 +77,6 @@ namespace helengine::psp::rendering {
         RuntimeTexture* texture = font->get_Texture();
         if (texture != nullptr && !texture->get_IsDisposed()) {
             ReleaseTexture(texture);
-            texture->Dispose();
-            delete texture;
         }
 
         font->Dispose();
