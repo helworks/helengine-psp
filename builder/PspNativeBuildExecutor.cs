@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using helengine.baseplatform.Builders;
 
 namespace helengine.psp.builder;
 
@@ -17,13 +18,14 @@ public sealed class PspNativeBuildExecutor : IPspNativeBuildExecutor {
         }
 
         ProcessStartInfo startInfo = CreateStartInfo(workspace);
-        using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start the PSP native build.");
-        using CancellationTokenRegistration cancellationRegistration = cancellationToken.Register(() => TryKillProcess(process));
-
-        process.WaitForExit();
-        cancellationToken.ThrowIfCancellationRequested();
-        if (process.ExitCode != 0) {
-            throw new InvalidOperationException($"The PSP native build failed with exit code {process.ExitCode}.");
+        NativeProcessRunResult result = new NativeProcessRunner().Run(startInfo, cancellationToken);
+        if (result.ExitCode != 0) {
+            throw new InvalidOperationException(
+                $"The PSP native build failed with exit code {result.ExitCode}."
+                + Environment.NewLine
+                + result.StandardOutput
+                + Environment.NewLine
+                + result.StandardError);
         }
     }
 
@@ -79,22 +81,5 @@ public sealed class PspNativeBuildExecutor : IPspNativeBuildExecutor {
             "HELENGINE_PSP_ENABLE_RUNTIME_STARTUP=ON",
             "HELENGINE_PSP_ENABLE_BOOT_TRACE=ON"
         ];
-    }
-
-    /// <summary>
-    /// Attempts to stop one running native-build process when cancellation is requested.
-    /// </summary>
-    /// <param name="process">Running native-build process.</param>
-    static void TryKillProcess(Process process) {
-        if (process == null) {
-            return;
-        }
-
-        try {
-            if (!process.HasExited) {
-                process.Kill(entireProcessTree: true);
-            }
-        } catch {
-        }
     }
 }
