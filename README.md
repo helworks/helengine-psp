@@ -5,11 +5,16 @@ This repository contains the PSP platform host and builder integration for Helen
 ## Build
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ..\helengine\artifacts\build-platform.ps1 `
+dotnet run --project ..\helengine\tools\build-waiter\helengine.buildwaiter.csproj -- `
+  --output ..\helprojs\city\psp-build `
+  --require PSP/GAME/HELENGINE/EBOOT.PBP `
+  -- powershell -NoProfile -ExecutionPolicy Bypass -File ..\helengine\scripts\build-platform.ps1 `
   -Project ..\helprojs\city\project.heproj `
   -Platform psp `
   -Output ..\helprojs\city\psp-build
 ```
+
+The Build Waiter returns successfully only after `PSP/GAME/HELENGINE/EBOOT.PBP` is fresh and non-empty.
 
 ## Run In Emulator
 
