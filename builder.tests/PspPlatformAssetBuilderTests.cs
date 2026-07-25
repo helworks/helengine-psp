@@ -35,6 +35,9 @@ public sealed class PspPlatformAssetBuilderTests {
             profile.ProfileId == "homebrew-app"
             && profile.RuntimeSpecializationId == "psp-homebrew-app");
         Assert.Contains(builder.Definition.MediaProfiles, profile => profile.ProfileId == "psp-game-folder");
+        Assert.Equal(RuntimeMaterialResolutionMode.CookedPlatformOwned, builder.Definition.RuntimeGenerationContract.MaterialResolutionMode);
+        Assert.True(builder.Definition.RuntimeGenerationContract.SupportsRenderManager2DTextureReleaseFlush);
+        Assert.Equal(PackagedPathPolicy.ContentRelativeOnly, builder.Definition.RuntimeGenerationContract.PackagedPathPolicy);
         Assert.Contains(builder.Definition.ComponentSupportRules, supportRule =>
             supportRule.ComponentTypeId == "helengine.meshcomponent");
         Assert.Contains(builder.Definition.ComponentSupportRules, supportRule =>
@@ -105,7 +108,24 @@ public sealed class PspPlatformAssetBuilderTests {
     }
 
     /// <summary>
-    /// Verifies the PSP material schema mirrors the standard material contract used by the editor build graph.
+    /// Ensures the PSP codegen profile permanently disables runtime shader support because PSP materials use the platform fixed-function pipeline.
+    /// </summary>
+    [Fact]
+    public void Default_codegen_profile_forces_shader_runtime_feature_disabled() {
+        PspPlatformAssetBuilder builder = new();
+        PlatformCodegenProfileDefinition codegenProfile = Assert.Single(
+            builder.Definition.CodegenProfiles,
+            profile => profile.ProfileId == "default");
+
+        PlatformSettingDefinition disabledFeatureSetting = Assert.Single(
+            codegenProfile.Settings.Where(setting => setting.SettingId == PlatformCodegenSettingIds.ForcedDisabledFeatures));
+
+        Assert.Equal(PlatformSettingKind.Text, disabledFeatureSetting.SettingKind);
+        Assert.Equal("shaders", disabledFeatureSetting.DefaultValue);
+    }
+
+    /// <summary>
+    /// Verifies the PSP material schema exposes fixed-function material controls without shader authoring fields.
     /// </summary>
     [Fact]
     public void Descriptor_and_definition_expose_standard_material_fields() {
@@ -114,30 +134,6 @@ public sealed class PspPlatformAssetBuilderTests {
         PlatformMaterialSchemaDefinition schema = Assert.Single(builder.Definition.MaterialSchemas, materialSchema => materialSchema.SchemaId == "standard-shader");
 
         Assert.Collection(schema.Fields,
-            field => {
-                Assert.Equal("use-custom-shader", field.FieldId);
-                Assert.Equal(PlatformMaterialFieldKind.Boolean, field.FieldKind);
-                Assert.Equal("false", field.DefaultValue);
-                Assert.True(field.Required);
-            },
-            field => {
-                Assert.Equal("shader-asset-id", field.FieldId);
-                Assert.Equal(PlatformMaterialFieldKind.AssetReference, field.FieldKind);
-                Assert.Equal(string.Empty, field.DefaultValue);
-                Assert.True(field.Required);
-            },
-            field => {
-                Assert.Equal("vertex-program", field.FieldId);
-                Assert.Equal(PlatformMaterialFieldKind.Text, field.FieldKind);
-                Assert.Equal(string.Empty, field.DefaultValue);
-                Assert.True(field.Required);
-            },
-            field => {
-                Assert.Equal("pixel-program", field.FieldId);
-                Assert.Equal(PlatformMaterialFieldKind.Text, field.FieldKind);
-                Assert.Equal(string.Empty, field.DefaultValue);
-                Assert.True(field.Required);
-            },
             field => {
                 Assert.Equal("base-color", field.FieldId);
                 Assert.Equal(PlatformMaterialFieldKind.Color, field.FieldKind);
@@ -174,6 +170,10 @@ public sealed class PspPlatformAssetBuilderTests {
                 Assert.Equal("true", field.DefaultValue);
                 Assert.False(field.Required);
             });
+        Assert.DoesNotContain(schema.Fields, field => field.FieldId == "use-custom-shader");
+        Assert.DoesNotContain(schema.Fields, field => field.FieldId == "shader-asset-id");
+        Assert.DoesNotContain(schema.Fields, field => field.FieldId == "vertex-program");
+        Assert.DoesNotContain(schema.Fields, field => field.FieldId == "pixel-program");
     }
 
     /// <summary>
@@ -223,10 +223,10 @@ public sealed class PspPlatformAssetBuilderTests {
     }
 
     /// <summary>
-    /// Verifies the PSP material cook path preserves the standard material asset data required by the runtime resolver.
+    /// Verifies the PSP material cook path preserves fixed-function material data without creating a shader dependency.
     /// </summary>
     [Fact]
-    public void CookMaterial_preserves_diffuse_texture_and_shadow_fields() {
+    public void CookMaterial_preserves_diffuse_texture_and_shadow_fields_without_shader_dependency() {
         PspPlatformAssetBuilder builder = new();
 
         PlatformMaterialCookResult result = builder.CookMaterial(new PlatformMaterialCookRequest(
@@ -237,25 +237,20 @@ public sealed class PspPlatformAssetBuilderTests {
             "psp-forward",
             "standard-shader",
             new Dictionary<string, string> {
-                ["use-custom-shader"] = "false",
-                ["shader-asset-id"] = "engine:material:standard",
-                ["vertex-program"] = "ForwardStandard.vs",
-                ["pixel-program"] = "ForwardStandard.ps",
-                ["variant"] = "Mesh",
                 ["base-color"] = "#336699",
                 ["texture-id"] = "Textures/Checker",
                 ["casts-shadow"] = "false",
                 ["receives-shadow"] = "true"
             }));
 
-        ShaderMaterialAsset materialAsset = EditorAssetTestReader.ReadAsset<ShaderMaterialAsset>(result.CookedMaterialBytes);
-        Assert.Equal("engine:material:standard", materialAsset.ShaderAssetId);
-        Assert.Equal("Textures/Checker", materialAsset.DiffuseTextureAssetId);
-        Assert.False(materialAsset.CastsShadows);
-        Assert.True(materialAsset.ReceivesShadows);
-        MaterialConstantBufferAsset baseColorBuffer = Assert.Single(materialAsset.ConstantBuffers, buffer => buffer.Name == "BaseColorBuffer");
-        Assert.Equal(16, baseColorBuffer.Data.Length);
-        Assert.Equal(new[] { "engine:material:standard" }, result.ReferencedShaderAssetIds);
+        PlatformMaterialAsset materialAsset = EditorAssetTestReader.ReadAsset<PlatformMaterialAsset>(result.CookedMaterialBytes);
+        Assert.Equal("psp-forward", materialAsset.RendererFamilyId);
+        Assert.Equal("Textures/Checker", materialAsset.TextureRelativePath);
+        Assert.True(materialAsset.Lit);
+        Assert.Equal((byte)0x33, materialAsset.BaseColorR);
+        Assert.Equal((byte)0x66, materialAsset.BaseColorG);
+        Assert.Equal((byte)0x99, materialAsset.BaseColorB);
+        Assert.Empty(result.ReferencedShaderAssetIds);
     }
 
     /// <summary>
@@ -286,14 +281,8 @@ public sealed class PspPlatformAssetBuilderTests {
                 ["receives-shadow"] = "true"
             }));
 
-        ShaderMaterialAsset materialAsset = EditorAssetTestReader.ReadAsset<ShaderMaterialAsset>(result.CookedMaterialBytes);
-        MaterialConstantBufferAsset lightingBuffer = Assert.Single(materialAsset.ConstantBuffers, buffer => buffer.Name == "LightingConfigBuffer");
-
-        Assert.Equal(16, lightingBuffer.Data.Length);
-        Assert.Equal(0.0f, BitConverter.ToSingle(lightingBuffer.Data, 0));
-        Assert.Equal(0.0f, BitConverter.ToSingle(lightingBuffer.Data, 4));
-        Assert.Equal(0.0f, BitConverter.ToSingle(lightingBuffer.Data, 8));
-        Assert.Equal(0.0f, BitConverter.ToSingle(lightingBuffer.Data, 12));
+        PlatformMaterialAsset materialAsset = EditorAssetTestReader.ReadAsset<PlatformMaterialAsset>(result.CookedMaterialBytes);
+        Assert.False(materialAsset.Lit);
     }
 
     /// <summary>
@@ -322,13 +311,12 @@ public sealed class PspPlatformAssetBuilderTests {
                 ["receives-shadow"] = "true"
             }));
 
-        ShaderMaterialAsset materialAsset = EditorAssetTestReader.ReadAsset<ShaderMaterialAsset>(result.CookedMaterialBytes);
-        MaterialConstantBufferAsset baseColorBuffer = Assert.Single(materialAsset.ConstantBuffers, buffer => buffer.Name == "BaseColorBuffer");
+        PlatformMaterialAsset materialAsset = EditorAssetTestReader.ReadAsset<PlatformMaterialAsset>(result.CookedMaterialBytes);
 
-        Assert.Equal(1.0f, BitConverter.ToSingle(baseColorBuffer.Data, 0));
-        Assert.Equal(64.0f / 255.0f, BitConverter.ToSingle(baseColorBuffer.Data, 4), 5);
-        Assert.Equal(64.0f / 255.0f, BitConverter.ToSingle(baseColorBuffer.Data, 8), 5);
-        Assert.Equal(128.0f / 255.0f, BitConverter.ToSingle(baseColorBuffer.Data, 12), 5);
+        Assert.Equal(byte.MaxValue, materialAsset.BaseColorR);
+        Assert.Equal((byte)64, materialAsset.BaseColorG);
+        Assert.Equal((byte)64, materialAsset.BaseColorB);
+        Assert.Equal((byte)128, materialAsset.BaseColorA);
     }
 
     /// <summary>

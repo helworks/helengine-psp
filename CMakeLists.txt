@@ -50,6 +50,7 @@ set(HELENGINE_PSP_SOURCES
     src/platform/psp/PspAppRootPathResolver.cpp
     src/platform/psp/PspBootTrace.cpp
     src/platform/psp/PspInputBackend.cpp
+    src/platform/psp/PspMemoryCardContentStreamSource.cpp
     src/platform/psp/PspPackagedAssetLoader.cpp
     src/platform/psp/PspRuntimeSceneCatalogFactory.cpp
     src/platform/psp/audio/PspAudioBackend.cpp
@@ -104,6 +105,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     atomic
     pspdebug
     pspdisplay
+    pspfpu
     pspge
     pspgu
     pspgum

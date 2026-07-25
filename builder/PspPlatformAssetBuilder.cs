@@ -135,19 +135,15 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
     public PlatformDefinition Definition { get; }
 
     /// <summary>
-    /// Rejects material cook requests until the PSP runtime material payload is implemented.
+    /// Cooks one fixed-function PSP material payload without requiring or referencing a shader asset.
     /// </summary>
-    /// <param name="request">Material translation request to validate.</param>
-    /// <returns>Cooked material result when the runtime payload exists.</returns>
+    /// <param name="request">Material translation request to convert into the PSP runtime payload.</param>
+    /// <returns>Cooked material data and no shader dependencies.</returns>
     public PlatformMaterialCookResult CookMaterial(PlatformMaterialCookRequest request) {
         if (request == null) {
             throw new ArgumentNullException(nameof(request));
         }
 
-        string shaderAssetId = ReadRequiredField(request.FieldValues, "shader-asset-id");
-        string vertexProgram = ReadRequiredField(request.FieldValues, "vertex-program");
-        string pixelProgram = ReadRequiredField(request.FieldValues, "pixel-program");
-        string variant = ReadRequiredField(request.FieldValues, "variant");
         string baseColor = request.FieldValues.TryGetValue(BaseColorFieldId, out string authoredBaseColor) ? authoredBaseColor : "#ffffff";
         string lightingResponse = request.FieldValues.TryGetValue(LightingResponseFieldId, out string authoredLightingResponse) && !string.IsNullOrWhiteSpace(authoredLightingResponse)
             ? authoredLightingResponse
@@ -156,33 +152,21 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
             ? authoredTextureAssetId
             : string.Empty;
         bool receivesLighting = ReadOptionalBooleanField(request.FieldValues, ReceivesLightingFieldId, true);
-        bool castsShadows = ReadOptionalBooleanField(request.FieldValues, "casts-shadow", true);
-        bool receivesShadows = ReadOptionalBooleanField(request.FieldValues, "receives-shadow", true);
-        float lightingResponseCode = ParseLightingResponseCode(lightingResponse);
-
-        ShaderMaterialAsset materialAsset = new ShaderMaterialAsset {
+        float4 parsedBaseColor = ParseBaseColor(baseColor);
+        PlatformMaterialAsset materialAsset = new PlatformMaterialAsset {
             Id = request.MaterialAssetId,
-            ShaderAssetId = shaderAssetId,
-            VertexProgram = vertexProgram,
-            PixelProgram = pixelProgram,
-            Variant = variant,
-            DiffuseTextureAssetId = diffuseTextureAssetId,
-            CastsShadows = castsShadows,
-            ReceivesShadows = receivesShadows,
-            RenderState = new MaterialRenderState(),
-            ConstantBuffers = [
-                new MaterialConstantBufferAsset {
-                    Name = BaseColorBufferName,
-                    Data = CreateFloat4ConstantBufferData(ParseBaseColor(baseColor))
-                },
-                new MaterialConstantBufferAsset {
-                    Name = LightingConfigBufferName,
-                    Data = CreateLightingConfigConstantBufferData(receivesLighting, lightingResponseCode)
-                }
-            ]
+            RendererFamilyId = "psp-forward",
+            TextureRelativePath = diffuseTextureAssetId,
+            DoubleSided = false,
+            UseVertexColor = false,
+            Lit = receivesLighting && string.Equals(lightingResponse, "lit-directional", StringComparison.OrdinalIgnoreCase),
+            BaseColorR = ConvertNormalizedColorChannelToByte(parsedBaseColor.X),
+            BaseColorG = ConvertNormalizedColorChannelToByte(parsedBaseColor.Y),
+            BaseColorB = ConvertNormalizedColorChannelToByte(parsedBaseColor.Z),
+            BaseColorA = ConvertNormalizedColorChannelToByte(parsedBaseColor.W)
         };
 
-        return new PlatformMaterialCookResult(global::helengine.files.AssetSerializer.SerializeToBytes(materialAsset), [shaderAssetId]);
+        return new PlatformMaterialCookResult(global::helengine.files.AssetSerializer.SerializeToBytes(materialAsset), []);
     }
 
     /// <summary>
@@ -629,27 +613,6 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
     }
 
     /// <summary>
-    /// Reads one required material field from the builder-owned field map.
-    /// </summary>
-    /// <param name="fieldValues">Serialized material field values keyed by field id.</param>
-    /// <param name="fieldId">Field identifier to read.</param>
-    /// <returns>Resolved field value.</returns>
-    static string ReadRequiredField(IReadOnlyDictionary<string, string> fieldValues, string fieldId) {
-        if (fieldValues == null) {
-            throw new ArgumentNullException(nameof(fieldValues));
-        } else if (string.IsNullOrWhiteSpace(fieldId)) {
-            throw new ArgumentException("Field id must be provided.", nameof(fieldId));
-        }
-
-        string value;
-        if (!fieldValues.TryGetValue(fieldId, out value) || string.IsNullOrWhiteSpace(value)) {
-            throw new InvalidOperationException($"Missing required material field '{fieldId}'.");
-        }
-
-        return value;
-    }
-
-    /// <summary>
     /// Reads an optional boolean material field from the builder-owned field map.
     /// </summary>
     /// <param name="fieldValues">Serialized material field values keyed by field id.</param>
@@ -710,6 +673,16 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
         } catch (FormatException ex) {
             throw new InvalidOperationException("Base color must use #RRGGBB or #RRGGBBAA.", ex);
         }
+    }
+
+    /// <summary>
+    /// Converts one normalized material color channel into the byte representation stored by the fixed-function cooked material payload.
+    /// </summary>
+    /// <param name="channel">Normalized color channel to convert.</param>
+    /// <returns>Nearest byte representation of the supplied normalized color channel.</returns>
+    static byte ConvertNormalizedColorChannelToByte(float channel) {
+        double clampedChannel = Math.Clamp(channel, 0.0f, 1.0f);
+        return (byte)Math.Round(clampedChannel * 255.0, MidpointRounding.AwayFromZero);
     }
 
     /// <summary>

@@ -6,6 +6,7 @@
 
 #include "ICamera.hpp"
 #include "ClipRegionStackBuilder2D.hpp"
+#include "IContentStreamSource.hpp"
 #include "IDrawable2D.hpp"
 #include "IClipRegion2D.hpp"
 #include "IRenderVisitor2D.hpp"
@@ -28,6 +29,9 @@ namespace helengine::psp::rendering {
     public:
         /// Builds a PSP runtime texture from raw texture metadata.
         RuntimeTexture* BuildTextureFromRaw(TextureAsset* data) override;
+
+        /// Builds a PSP runtime texture from one cooked texture payload read through the configured content stream source.
+        RuntimeTexture* BuildTextureFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) override;
 
         /// Releases one PSP runtime texture previously created by this renderer.
         void ReleaseTexture(RuntimeTexture* texture) override;

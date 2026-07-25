@@ -217,10 +217,10 @@ namespace helengine.psp.builder.tests {
         }
 
         /// <summary>
-        /// Ensures the PSP 3D renderer and runtime material follow the shared shader-material contract expected by generated core.
+        /// Ensures the PSP 3D renderer and runtime material follow the shaderless fixed-function material contract expected by generated core.
         /// </summary>
         [Fact]
-        public void Source_RendererAndRuntimeMaterialUseShaderMaterialAssetContract() {
+        public void Source_RendererAndRuntimeMaterialUsePlatformMaterialAssetContract() {
             string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
             string renderManagerHeaderPath = Path.Combine(
                 repositoryRootPath,
@@ -248,22 +248,23 @@ namespace helengine.psp.builder.tests {
             string runtimeMaterialHeaderContents = File.ReadAllText(runtimeMaterialHeaderPath);
             string runtimeMaterialSourceContents = File.ReadAllText(runtimeMaterialSourcePath);
 
-            Assert.Contains("RuntimeMaterial* BuildMaterialFromRaw(ShaderMaterialAsset* materialAsset, ShaderAsset* shaderAsset) override;", renderManagerHeaderContents, StringComparison.Ordinal);
-            Assert.DoesNotContain("RuntimeMaterial* BuildMaterialFromRaw(MaterialAsset* materialAsset, ShaderAsset* shaderAsset) override;", renderManagerHeaderContents, StringComparison.Ordinal);
-            Assert.Contains("void LoadFromCooked(ShaderMaterialAsset* materialAsset);", runtimeMaterialHeaderContents, StringComparison.Ordinal);
-            Assert.Contains("void PspRuntimeMaterial::LoadFromCooked(ShaderMaterialAsset* materialAsset)", runtimeMaterialSourceContents, StringComparison.Ordinal);
+            Assert.Contains("RuntimeMaterial* BuildMaterialFromCooked(PlatformMaterialAsset* materialAsset) override;", renderManagerHeaderContents, StringComparison.Ordinal);
+            Assert.Contains("RuntimeMaterial* BuildMaterialFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) override;", renderManagerHeaderContents, StringComparison.Ordinal);
+            Assert.Contains("void LoadFromCooked(PlatformMaterialAsset* materialAsset);", runtimeMaterialHeaderContents, StringComparison.Ordinal);
+            Assert.Contains("void PspRuntimeMaterial::LoadFromCooked(PlatformMaterialAsset* materialAsset)", runtimeMaterialSourceContents, StringComparison.Ordinal);
             Assert.Contains("const PspRuntimeMaterial* GetParentPspRuntimeMaterial() const;", runtimeMaterialHeaderContents, StringComparison.Ordinal);
             Assert.Contains("if (HasAuthoredBaseColor) {", runtimeMaterialSourceContents, StringComparison.Ordinal);
             Assert.Contains("if (HasAuthoredLightingConfiguration) {", runtimeMaterialSourceContents, StringComparison.Ordinal);
             Assert.Contains("const PspRuntimeMaterial* parentMaterial = GetParentPspRuntimeMaterial();", runtimeMaterialSourceContents, StringComparison.Ordinal);
-            Assert.DoesNotContain("void LoadFromCooked(MaterialAsset* materialAsset);", runtimeMaterialHeaderContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("ShaderMaterialAsset", runtimeMaterialHeaderContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("ShaderRuntimeMaterial", runtimeMaterialHeaderContents, StringComparison.Ordinal);
         }
 
         /// <summary>
-        /// Ensures the PSP renderer implements the generated shader-material runtime interface expected by packaged material loading.
+        /// Ensures the PSP renderer excludes shader-runtime interfaces after fixed-function material cooking.
         /// </summary>
         [Fact]
-        public void Source_RendererImplementsShaderRuntimeInterface() {
+        public void Source_RendererExcludesShaderRuntimeInterface() {
             string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
             string renderManagerHeaderPath = Path.Combine(
                 repositoryRootPath,
@@ -283,19 +284,18 @@ namespace helengine.psp.builder.tests {
             string renderManagerHeaderContents = File.ReadAllText(renderManagerHeaderPath);
             string renderManagerSourceContents = File.ReadAllText(renderManagerSourcePath);
 
-            Assert.Contains("public IShaderRenderManager3D", renderManagerHeaderContents, StringComparison.Ordinal);
-            Assert.Contains("ShaderCompileTarget get_ShaderCompileTarget() override;", renderManagerHeaderContents, StringComparison.Ordinal);
-            Assert.Contains("void InvalidateShaderResources(std::string shaderAssetId, ShaderAsset* shaderAsset) override;", renderManagerHeaderContents, StringComparison.Ordinal);
-            Assert.Contains("ShaderCompileTarget PspRenderManager3D::get_ShaderCompileTarget()", renderManagerSourceContents, StringComparison.Ordinal);
-            Assert.Contains("return ShaderCompileTarget::DirectX11;", renderManagerSourceContents, StringComparison.Ordinal);
-            Assert.Contains("void PspRenderManager3D::InvalidateShaderResources(std::string shaderAssetId, ShaderAsset* shaderAsset)", renderManagerSourceContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("IShaderRenderManager3D", renderManagerHeaderContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("ShaderCompileTarget", renderManagerHeaderContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("ShaderAsset", renderManagerHeaderContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("ShaderRuntimeMaterialLoader", renderManagerSourceContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("MaterialLayoutBuilder", renderManagerSourceContents, StringComparison.Ordinal);
         }
 
         /// <summary>
-        /// Ensures the PSP runtime material stays shader-backed so it can use the shared layout and property-block helpers.
+        /// Ensures the PSP runtime material uses the generic fixed-function runtime-material contract.
         /// </summary>
         [Fact]
-        public void Source_RuntimeMaterialInheritsShaderRuntimeMaterialContract() {
+        public void Source_RuntimeMaterialInheritsFixedFunctionRuntimeMaterialContract() {
             string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
             string runtimeMaterialHeaderPath = Path.Combine(
                 repositoryRootPath,
@@ -307,15 +307,15 @@ namespace helengine.psp.builder.tests {
 
             string runtimeMaterialHeaderContents = File.ReadAllText(runtimeMaterialHeaderPath);
 
-            Assert.Contains("class PspRuntimeMaterial final : public ShaderRuntimeMaterial", runtimeMaterialHeaderContents, StringComparison.Ordinal);
-            Assert.DoesNotContain("class PspRuntimeMaterial final : public RuntimeMaterial", runtimeMaterialHeaderContents, StringComparison.Ordinal);
+            Assert.Contains("class PspRuntimeMaterial final : public RuntimeMaterial", runtimeMaterialHeaderContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("class PspRuntimeMaterial final : public ShaderRuntimeMaterial", runtimeMaterialHeaderContents, StringComparison.Ordinal);
         }
 
         /// <summary>
-        /// Ensures the PSP renderer overrides the packaged raw-material entrypoint used by runtime scene loading.
+        /// Ensures the PSP renderer overrides the packaged cooked-material entrypoint used by runtime scene loading.
         /// </summary>
         [Fact]
-        public void Source_RendererOverridesBuildMaterialFromRawAssetForPackagedSceneLoading() {
+        public void Source_RendererOverridesBuildMaterialFromCookedForPackagedSceneLoading() {
             string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
             string renderManagerHeaderPath = Path.Combine(
                 repositoryRootPath,
@@ -335,8 +335,9 @@ namespace helengine.psp.builder.tests {
             string renderManagerHeaderContents = File.ReadAllText(renderManagerHeaderPath);
             string renderManagerSourceContents = File.ReadAllText(renderManagerSourcePath);
 
-            Assert.Contains("RuntimeMaterial* BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string materialAssetPath) override;", renderManagerHeaderContents, StringComparison.Ordinal);
-            Assert.Contains("ShaderRuntimeMaterialLoader::BuildMaterialFromRawAsset(this, assetContentManager, materialAssetPath);", renderManagerSourceContents, StringComparison.Ordinal);
+            Assert.Contains("RuntimeMaterial* BuildMaterialFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) override;", renderManagerHeaderContents, StringComparison.Ordinal);
+            Assert.Contains("Stream* stream = contentStreamSource->OpenRead(cookedAssetPath);", renderManagerSourceContents, StringComparison.Ordinal);
+            Assert.Contains("AssetSerializer::Deserialize(stream)", renderManagerSourceContents, StringComparison.Ordinal);
         }
     }
 }

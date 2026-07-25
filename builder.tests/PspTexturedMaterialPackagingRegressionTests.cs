@@ -37,7 +37,6 @@ public sealed class PspTexturedMaterialPackagingRegressionTests {
             }
 
             WriteSceneAssetWithSceneLevelMaterialReferences(projectRootPath, SceneId, expectedTextureAssetIdsByMaterialPath.Keys.ToArray());
-            SeedBuiltInStandardShaderAsset(ShaderCompileTarget.DirectX11);
 
             PspPlatformAssetBuilder builder = new(
                 new FakePspNativeBuildExecutor(),
@@ -67,8 +66,8 @@ public sealed class PspTexturedMaterialPackagingRegressionTests {
             foreach ((string materialRelativePath, string expectedTextureAssetId) in expectedTextureAssetIdsByMaterialPath) {
                 string cookedMaterialPath = Path.Combine(buildRootPath, "cooked", materialRelativePath.Replace('/', Path.DirectorySeparatorChar));
                 using FileStream stream = new FileStream(cookedMaterialPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                ShaderMaterialAsset cookedMaterialAsset = Assert.IsType<ShaderMaterialAsset>(global::helengine.editor.AssetSerializer.Deserialize(stream));
-                Assert.Equal(expectedTextureAssetId, cookedMaterialAsset.DiffuseTextureAssetId);
+                PlatformMaterialAsset cookedMaterialAsset = Assert.IsType<PlatformMaterialAsset>(global::helengine.editor.AssetSerializer.Deserialize(stream));
+                Assert.Equal(expectedTextureAssetId, cookedMaterialAsset.TextureRelativePath);
             }
         } finally {
             try {

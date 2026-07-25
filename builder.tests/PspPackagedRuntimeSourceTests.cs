@@ -5,6 +5,83 @@ namespace helengine.psp.builder.tests;
 /// </summary>
 public sealed class PspPackagedRuntimeSourceTests {
     /// <summary>
+    /// Ensures the PSP homebrew runtime reads packaged content through its explicit memory-card stream source instead of the pruned host file system runtime feature.
+    /// </summary>
+    [Fact]
+    public void PspBootHost_uses_memory_card_content_stream_source() {
+        string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+        string bootHostPath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "PspBootHost.cpp");
+        string contentStreamSourceHeaderPath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "PspMemoryCardContentStreamSource.hpp");
+        string contentStreamSourcePath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "PspMemoryCardContentStreamSource.cpp");
+        string cmakePath = Path.Combine(repositoryRootPath, "CMakeLists.txt");
+
+        string bootHostSource = File.ReadAllText(bootHostPath);
+        string contentStreamSourceHeader = File.ReadAllText(contentStreamSourceHeaderPath);
+        string contentStreamSource = File.ReadAllText(contentStreamSourcePath);
+        string cmakeSource = File.ReadAllText(cmakePath);
+
+        Assert.Contains("#include \"platform/psp/PspMemoryCardContentStreamSource.hpp\"", bootHostSource, StringComparison.Ordinal);
+        Assert.Contains("new PspMemoryCardContentStreamSource(appRootPath)", bootHostSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("HostFileSystemContentStreamSource", bootHostSource, StringComparison.Ordinal);
+        Assert.Contains("class PspMemoryCardContentStreamSource final : public ::IContentStreamSource", contentStreamSourceHeader, StringComparison.Ordinal);
+        Assert.Contains("::Stream* OpenRead(std::string assetPath) override;", contentStreamSourceHeader, StringComparison.Ordinal);
+        Assert.Contains("new FileStream(ResolvePhysicalPath(assetPath), FileMode::Open, FileAccess::Read, FileShare::Read)", contentStreamSource, StringComparison.Ordinal);
+        Assert.Contains("src/platform/psp/PspMemoryCardContentStreamSource.cpp", cmakeSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the PSP fixed-function 3D renderer consumes platform-owned cooked materials without retaining shader runtime interfaces.
+    /// </summary>
+    [Fact]
+    public void PspRenderManager3D_uses_cooked_fixed_function_materials_without_shader_interfaces() {
+        string sourcePath = Path.Combine(PspRepositoryPathResolver.ResolveRepositoryRootPath(), "src", "platform", "psp", "rendering", "PspRenderManager3D.hpp");
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.DoesNotContain("IShaderRenderManager3D", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShaderAsset.hpp", source, StringComparison.Ordinal);
+        Assert.Contains("BuildMaterialFromCooked(PlatformMaterialAsset* materialAsset) override", source, StringComparison.Ordinal);
+        Assert.Contains("BuildMaterialFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) override", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the PSP 3D renderer materializes platform-owned cooked model payloads through the runtime content stream source.
+    /// </summary>
+    [Fact]
+    public void PspRenderManager3D_builds_cooked_models_from_content_streams() {
+        string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+        string headerPath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRenderManager3D.hpp");
+        string sourcePath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRenderManager3D.cpp");
+
+        string header = File.ReadAllText(headerPath);
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("BuildModelFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) override", header, StringComparison.Ordinal);
+        Assert.Contains("Stream* stream = contentStreamSource->OpenRead(cookedAssetPath);", source, StringComparison.Ordinal);
+        Assert.Contains("AssetSerializer::Deserialize(stream)", source, StringComparison.Ordinal);
+        Assert.Contains("dynamic_cast<ModelAsset*>(asset)", source, StringComparison.Ordinal);
+        Assert.Contains("BuildModelFromRaw(modelAsset)", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the PSP 2D renderer materializes cooked texture payloads through the runtime content stream source.
+    /// </summary>
+    [Fact]
+    public void PspRenderManager2D_builds_cooked_textures_from_content_streams() {
+        string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+        string headerPath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRenderManager2D.hpp");
+        string sourcePath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRenderManager2D.cpp");
+
+        string header = File.ReadAllText(headerPath);
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("BuildTextureFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) override", header, StringComparison.Ordinal);
+        Assert.Contains("Stream* stream = contentStreamSource->OpenRead(cookedAssetPath);", source, StringComparison.Ordinal);
+        Assert.Contains("AssetSerializer::Deserialize(stream)", source, StringComparison.Ordinal);
+        Assert.Contains("dynamic_cast<TextureAsset*>(asset)", source, StringComparison.Ordinal);
+        Assert.Contains("TextureCache.BuildTextureFromRaw(textureAsset)", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures the PSP CMake entrypoint accepts both the legacy amalgamated file and the current unity file names.
     /// </summary>
     [Fact]
@@ -170,6 +247,25 @@ public sealed class PspPackagedRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures the PSP runtime masks hardware floating-point exceptions so managed IEEE arithmetic can produce infinities and NaNs without terminating the process.
+    /// </summary>
+    [Fact]
+    public void PspBootHost_masks_hardware_floating_point_exceptions() {
+        string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+        string bootHostPath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "PspBootHost.cpp");
+        string cmakePath = Path.Combine(repositoryRootPath, "CMakeLists.txt");
+
+        string bootHostSource = File.ReadAllText(bootHostPath);
+        string cmakeSource = File.ReadAllText(cmakePath);
+
+        Assert.Contains("#include <pspfpu.h>", bootHostSource, StringComparison.Ordinal);
+        Assert.Contains("pspFpuSetEnable(0);", bootHostSource, StringComparison.Ordinal);
+        Assert.Contains("ConfigureFloatingPointEnvironment();", bootHostSource, StringComparison.Ordinal);
+        Assert.Contains("MaximumPhysicsStageRecordCount = 0", bootHostSource, StringComparison.Ordinal);
+        Assert.Contains("pspfpu", cmakeSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures the PSP boot host applies the generated standard-platform input manifest to core initialization.
     /// </summary>
     [Fact]
@@ -227,6 +323,44 @@ public sealed class PspPackagedRuntimeSourceTests {
         Assert.Contains("BepuPhysicsWorld3D::CreateWithSolveSchedule(2, 1)", source, StringComparison.Ordinal);
         Assert.Contains("BepuRuntimeComponentRegistration::AttachRuntimeWorld(EngineCore, physicsWorld);", source, StringComparison.Ordinal);
         Assert.Contains("BepuRuntimeComponentRegistration::RegisterSceneBinding(EngineCore);", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the PSP boot log receives each generated BEPU scene-binding diagnostic so hardware crashes can be localized to one body registration boundary.
+    /// </summary>
+    [Fact]
+    public void PspBootHost_forwards_bepu_scene_binding_diagnostics_to_boot_trace() {
+        string sourcePath = Path.Combine(
+            PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+            "src",
+            "platform",
+            "psp",
+            "PspBootHost.cpp");
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("physicsWorld->set_SceneBindingDiagnosticSink(", source, StringComparison.Ordinal);
+        Assert.Contains("new Action<std::string>([](std::string message) {", source, StringComparison.Ordinal);
+        Assert.Contains("PspBootTrace::WriteLine(std::string(\"PhysicsBinding \") + message);", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the PSP boot host records the initial BEPU update-stage transitions so hard hardware crashes can be located after scene binding completes.
+    /// </summary>
+    [Fact]
+    public void PspBootHost_records_initial_bepu_update_stage_diagnostics() {
+        string sourcePath = Path.Combine(
+            PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+            "src",
+            "platform",
+            "psp",
+            "PspBootHost.cpp");
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("class PspPhysicsUpdateStageDiagnosticsProvider final", source, StringComparison.Ordinal);
+        Assert.Contains("public ::IRuntimeUpdateStageDiagnosticsProvider", source, StringComparison.Ordinal);
+        Assert.Contains("PspBootTrace::WriteLine(std::string(\"PhysicsUpdateStage \") + stage);", source, StringComparison.Ordinal);
+        Assert.Contains("MaximumPhysicsStageRecordCount = 512", source, StringComparison.Ordinal);
+        Assert.Contains("EngineOptions->set_RuntimeDiagnosticsProvider(new PspPhysicsUpdateStageDiagnosticsProvider());", source, StringComparison.Ordinal);
     }
 
     /// <summary>

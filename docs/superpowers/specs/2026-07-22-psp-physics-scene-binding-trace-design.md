@@ -17,24 +17,24 @@ The real-device boot trace reaches construction of `PhysicsDemoGround`, the shar
    This would expose the desired binding sequence but violates the repository rule against editing generated output.
 
 3. Emit maintained runtime binding callbacks from `helengine.bepu`, then have the PSP host forward those callbacks to `PspBootTrace`.
-   This keeps diagnostics at the owned source layer, identifies each entity and binding phase, and avoids changing runtime behavior. This is the selected approach.
+   This keeps diagnostics at the owned source layer, identifies each deterministic binding index and binding phase, and avoids changing runtime behavior. This is the selected approach.
 
 ## Design
 
 The BEPU runtime registration source will expose a temporary, optional diagnostic callback that reports these ordered boundaries:
 
 - scene binding begins;
-- an entity with a supported rigid-body/collider pair is about to bind;
-- that entity has bound successfully; and
+- a supported rigid-body/collider pair is about to bind at its deterministic binding index;
+- that body has bound successfully; and
 - scene binding completes.
 
-The PSP host will register a callback that writes each message through `PspBootTrace`. The callback remains absent on other platforms, preserving existing behavior. Entity names will be included when available, along with the body and collider types.
+The PSP host will register a callback that writes each message through `PspBootTrace`. The callback remains absent on other platforms, preserving existing behavior. Because runtime entities do not retain authored display names, records include the deterministic binding index plus body and collider types.
 
 The callback is observational only: it must not allocate a default world, change attachment policy, catch failures, or suppress exceptions.
 
 ## Validation
 
-1. Add source-level tests proving that the callback receives ordered begin/entity/success/end events for a static and dynamic box scene.
+1. Add source-level tests proving that the callback receives ordered begin/before/after/end events for a static and dynamic box scene.
 2. Run those tests red before implementation and green afterward.
 3. Build the PSP artifact and reproduce on Adrenaline.
 4. Inspect `helengine_psp_boot.log`; the final event determines the failing bind operation for the follow-up root-cause fix.

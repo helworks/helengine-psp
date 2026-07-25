@@ -130,37 +130,9 @@ public static class PspPlatformDefinitionFactory {
             [
                 new PlatformMaterialSchemaDefinition(
                     "standard-shader",
-                    "Standard Shader",
+                    "Standard Fixed-Function",
                     ["psp-forward"],
                     [
-                        new PlatformMaterialFieldDefinition(
-                            "use-custom-shader",
-                            "Use Custom Shader",
-                            PlatformMaterialFieldKind.Boolean,
-                            "false",
-                            true,
-                            []),
-                        new PlatformMaterialFieldDefinition(
-                            "shader-asset-id",
-                            "Shader Asset",
-                            PlatformMaterialFieldKind.AssetReference,
-                            string.Empty,
-                            true,
-                            []),
-                        new PlatformMaterialFieldDefinition(
-                            "vertex-program",
-                            "Vertex Program",
-                            PlatformMaterialFieldKind.Text,
-                            string.Empty,
-                            true,
-                            []),
-                        new PlatformMaterialFieldDefinition(
-                            "pixel-program",
-                            "Pixel Program",
-                            PlatformMaterialFieldKind.Text,
-                            string.Empty,
-                            true,
-                            []),
                         new PlatformMaterialFieldDefinition(
                             "base-color",
                             "Base Color",
@@ -241,6 +213,13 @@ public static class PspPlatformDefinitionFactory {
                     PlatformSerializationEndianness.LittleEndian,
                     [
                         new PlatformSettingDefinition(
+                            PlatformCodegenSettingIds.ForcedDisabledFeatures,
+                            "Forced Disabled Features",
+                            PlatformSettingKind.Text,
+                            "shaders",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
                             "write-conversion-report",
                             "Write Conversion Report",
                             PlatformSettingKind.Boolean,
@@ -300,6 +279,10 @@ public static class PspPlatformDefinitionFactory {
                     allowPhysicalDuplication: false,
                     preferLocalityOverDeduplication: true)
             ],
+            new RuntimeGenerationContract(
+                RuntimeMaterialResolutionMode.CookedPlatformOwned,
+                true,
+                PackagedPathPolicy.ContentRelativeOnly),
             assetCookCapabilities: [
                 new PlatformAssetCookCapabilityDefinition(
                     "texture",

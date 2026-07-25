@@ -9,6 +9,7 @@
 
 #include <pspdisplay.h>
 #include <pspdebug.h>
+#include <pspfpu.h>
 #include <pspgu.h>
 #include <pspgum.h>
 #include <pspuser.h>
@@ -16,9 +17,10 @@
 #include "Core.hpp"
 #include "CoreInitializationOptions.hpp"
 #include "IAudioBackend.hpp"
+#include "IRuntimeDiagnosticsProvider.hpp"
+#include "IRuntimeUpdateStageDiagnosticsProvider.hpp"
 #include "BepuPhysicsWorld3D.hpp"
 #include "BepuRuntimeComponentRegistration.hpp"
-#include "HostFileSystemContentStreamSource.hpp"
 #include "InputControlId.hpp"
 #include "InputControlKind.hpp"
 #include "InputDeviceKind.hpp"
@@ -28,6 +30,7 @@
 #include "RenderManager2D.hpp"
 #include "RenderManager3D.hpp"
 #include "RuntimeSceneLoadService.hpp"
+#include "RuntimeMemoryDiagnosticsSnapshot.hpp"
 #include "SceneManager.hpp"
 #include "SceneAsset.hpp"
 #include "StandardPlatformAction.hpp"
@@ -36,6 +39,7 @@
 #include "platform/psp/PspAppRootPathResolver.hpp"
 #include "platform/psp/PspBootTrace.hpp"
 #include "platform/psp/PspInputBackend.hpp"
+#include "platform/psp/PspMemoryCardContentStreamSource.hpp"
 #include "platform/psp/PspPackagedAssetLoader.hpp"
 #include "platform/psp/PspRuntimeSceneCatalogFactory.hpp"
 #include "platform/psp/audio/PspAudioBackend.hpp"
@@ -74,6 +78,46 @@ namespace helengine::psp {
         constexpr const char* RuntimeMainLoopStageName = "RuntimeMainLoop";
 
         alignas(64) unsigned int DisplayListStorage[DisplayListByteCount / sizeof(unsigned int)];
+
+        /// Configures the PSP main-thread FPU to retain IEEE exceptional results as flags instead of taking hardware exceptions.
+        void ConfigureFloatingPointEnvironment() {
+            const uint32_t fcr31Before = pspFpuGetFCR31();
+            pspFpuSetEnable(0);
+            pspFpuClearFlags(PSP_FPU_EXCEPTION_ALL);
+            pspFpuClearCause(PSP_FPU_EXCEPTION_ALL);
+            const uint32_t fcr31After = pspFpuGetFCR31();
+            PspBootTrace::WriteLine(
+                std::string("PspFloatingPoint FCR31Before=") + std::to_string(fcr31Before)
+                + " FCR31After=" + std::to_string(fcr31After)
+                + " ExceptionEnables=" + std::to_string(pspFpuGetEnable()));
+        }
+
+        /// Writes the first BEPU-specific core update stages to the PSP boot log so a hard crash can be localized before the host update loop returns.
+        class PspPhysicsUpdateStageDiagnosticsProvider final
+            : public ::IRuntimeDiagnosticsProvider
+            , public ::IRuntimeUpdateStageDiagnosticsProvider {
+        public:
+            /// Creates an empty platform memory snapshot because the diagnostic provider is only used to trace core update stages.
+            ::RuntimeMemoryDiagnosticsSnapshot* CaptureSnapshot() override {
+                return new ::RuntimeMemoryDiagnosticsSnapshot();
+            }
+
+            /// Records an initial BEPU update-stage transition without adding per-frame memory-card writes after the diagnostic limit.
+            void ReportUpdateStage(std::string stage) override {
+                constexpr int32_t MaximumPhysicsStageRecordCount = 0;
+                if (RecordedPhysicsStageCount >= MaximumPhysicsStageRecordCount
+                    || stage.find("Bepu") == std::string::npos) {
+                    return;
+                }
+
+                PspBootTrace::WriteLine(std::string("PhysicsUpdateStage ") + stage);
+                RecordedPhysicsStageCount++;
+            }
+
+        private:
+            /// Stores the number of physics update-stage records already persisted for this runtime session.
+            int32_t RecordedPhysicsStageCount = 0;
+        };
 
         /// Builds one runtime standard-platform input configuration from the generated manifest entries.
         ::StandardPlatformInputConfiguration* BuildStandardPlatformInputConfiguration() {
@@ -126,6 +170,7 @@ namespace helengine::psp {
     int PspBootHost::Run() {
         try {
             PspBootTrace::WriteLine("Run begin");
+            ConfigureFloatingPointEnvironment();
             RegisterExitCallback();
             EnterBootStage(GraphicsInitializationStageName);
             if (!InitializeGraphics()) {
@@ -249,7 +294,7 @@ namespace helengine::psp {
 
         EngineCore = new Core();
         EngineOptions = EngineCore->get_InitializationOptions();
-        EngineOptions->set_ContentStreamSource(new HostFileSystemContentStreamSource(appRootPath));
+        EngineOptions->set_ContentStreamSource(new PspMemoryCardContentStreamSource(appRootPath));
         EngineOptions->set_UpdateOrderLayers(4);
         EngineOptions->set_RenderOrderLayers3D(4);
         EngineOptions->set_UpdateListInitialCapacity(64);
@@ -257,6 +302,7 @@ namespace helengine::psp {
         EngineOptions->set_RenderList3DInitialCapacity(64);
         EngineOptions->set_PhysicsFixedStepSeconds(1.0 / 30.0);
         EngineOptions->set_PhysicsMaxStepsPerUpdate(2);
+        EngineOptions->set_RuntimeDiagnosticsProvider(new PspPhysicsUpdateStageDiagnosticsProvider());
         EngineOptions->set_StandardPlatformInputConfiguration(BuildStandardPlatformInputConfiguration());
         PspRuntimeSceneCatalogFactory runtimeSceneCatalogFactory;
         EngineOptions->set_SceneCatalog(runtimeSceneCatalogFactory.Build());
@@ -279,6 +325,10 @@ namespace helengine::psp {
             EngineOptions);
         EngineCore->SetAudioBackend(EngineAudioBackend);
         BepuPhysicsWorld3D* physicsWorld = BepuPhysicsWorld3D::CreateWithSolveSchedule(2, 1);
+        physicsWorld->set_SceneBindingDiagnosticSink(
+            new Action<std::string>([](std::string message) {
+                PspBootTrace::WriteLine(std::string("PhysicsBinding ") + message);
+            }));
         BepuRuntimeComponentRegistration::AttachRuntimeWorld(EngineCore, physicsWorld);
         BepuRuntimeComponentRegistration::RegisterSceneBinding(EngineCore);
 

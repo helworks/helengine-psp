@@ -11,6 +11,8 @@
 #include <pspgu.h>
 #include <pspkernel.h>
 
+#include "Asset.hpp"
+#include "AssetSerializer.hpp"
 #include "Entity.hpp"
 #include "FontAsset.hpp"
 #include "FontChar.hpp"
@@ -44,6 +46,48 @@ namespace helengine::psp::rendering {
     /// Builds a PSP runtime texture from raw texture metadata and reuses cached instances by asset id.
     RuntimeTexture* PspRenderManager2D::BuildTextureFromRaw(TextureAsset* data) {
         return TextureCache.BuildTextureFromRaw(data);
+    }
+
+    /// Builds a PSP runtime texture from one cooked texture payload read through the configured content stream source.
+    RuntimeTexture* PspRenderManager2D::BuildTextureFromCooked(
+        std::string cookedAssetPath,
+        IContentStreamSource* contentStreamSource) {
+        if (cookedAssetPath.empty()) {
+            throw std::invalid_argument("PSP cooked texture path is required.");
+        }
+        if (contentStreamSource == nullptr) {
+            throw std::invalid_argument("PSP cooked texture content source is required.");
+        }
+
+        Stream* stream = contentStreamSource->OpenRead(cookedAssetPath);
+        if (stream == nullptr) {
+            throw std::runtime_error("PSP cooked texture content source returned a null stream.");
+        }
+
+        Asset* asset = nullptr;
+        try {
+            asset = AssetSerializer::Deserialize(stream);
+        } catch (...) {
+            delete stream;
+            throw;
+        }
+        delete stream;
+
+        TextureAsset* textureAsset = dynamic_cast<TextureAsset*>(asset);
+        if (textureAsset == nullptr) {
+            delete asset;
+            throw std::invalid_argument("PSP cooked texture payload did not deserialize as TextureAsset.");
+        }
+
+        RuntimeTexture* runtimeTexture = nullptr;
+        try {
+            runtimeTexture = TextureCache.BuildTextureFromRaw(textureAsset);
+        } catch (...) {
+            delete textureAsset;
+            throw;
+        }
+        delete textureAsset;
+        return runtimeTexture;
     }
 
     /// Releases one PSP runtime texture previously created by this renderer.

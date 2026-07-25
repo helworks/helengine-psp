@@ -14,12 +14,14 @@
 #include <pspkernel.h>
 
 #include "Core.hpp"
+#include "Asset.hpp"
+#include "AssetSerializer.hpp"
 #include "DirectionalLightComponent.hpp"
 #include "Entity.hpp"
+#include "IContentStreamSource.hpp"
 #include "IRenderQueue3D.hpp"
-#include "MaterialLayoutBuilder.hpp"
 #include "ModelAsset.hpp"
-#include "ShaderRuntimeMaterialLoader.hpp"
+#include "PlatformMaterialAsset.hpp"
 #include "float2.hpp"
 #include "ObjectManager.hpp"
 #include "platform/psp/PspBootTrace.hpp"
@@ -723,21 +725,55 @@ namespace helengine::psp::rendering {
         return runtimeModel;
     }
 
-    /// Builds one shader-backed runtime material from the packaged material asset path used by scene loading.
-    RuntimeMaterial* PspRenderManager3D::BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string materialAssetPath) {
-        return ShaderRuntimeMaterialLoader::BuildMaterialFromRawAsset(this, assetContentManager, materialAssetPath);
+    /// Loads one cooked PSP model from packaged content and converts it into fixed-function vertex streams.
+    RuntimeModel* PspRenderManager3D::BuildModelFromCooked(
+        std::string cookedAssetPath,
+        IContentStreamSource* contentStreamSource) {
+        if (cookedAssetPath.empty()) {
+            throw std::invalid_argument("PSP cooked model path is required.");
+        }
+        if (contentStreamSource == nullptr) {
+            throw std::invalid_argument("PSP cooked model content source is required.");
+        }
+
+        Stream* stream = contentStreamSource->OpenRead(cookedAssetPath);
+        if (stream == nullptr) {
+            throw std::runtime_error("PSP cooked model content source returned a null stream.");
+        }
+
+        Asset* asset = nullptr;
+        try {
+            asset = AssetSerializer::Deserialize(stream);
+        } catch (...) {
+            delete stream;
+            throw;
+        }
+        delete stream;
+
+        ModelAsset* modelAsset = dynamic_cast<ModelAsset*>(asset);
+        if (modelAsset == nullptr) {
+            delete asset;
+            throw std::invalid_argument("PSP cooked model payload did not deserialize as ModelAsset.");
+        }
+
+        try {
+            RuntimeModel* runtimeModel = BuildModelFromRaw(modelAsset);
+            delete modelAsset;
+            return runtimeModel;
+        } catch (...) {
+            delete modelAsset;
+            throw;
+        }
     }
 
-    /// Builds a runtime material placeholder and captures the authored base color.
-    RuntimeMaterial* PspRenderManager3D::BuildMaterialFromRaw(ShaderMaterialAsset* materialAsset, ShaderAsset* shaderAsset) {
-        PspRuntimeMaterial* runtimeMaterial = new PspRuntimeMaterial();
-        if (materialAsset != nullptr) {
-            runtimeMaterial->LoadFromCooked(materialAsset);
-            runtimeMaterial->SetLayout(MaterialLayoutBuilder::Build(materialAsset, shaderAsset));
-            runtimeMaterial->SetRenderState(materialAsset->RenderState);
-        } else if (shaderAsset != nullptr) {
-            runtimeMaterial->set_Id(shaderAsset->get_Id());
+    /// Builds one fixed-function PSP runtime material from its cooked platform payload.
+    RuntimeMaterial* PspRenderManager3D::BuildMaterialFromCooked(PlatformMaterialAsset* materialAsset) {
+        if (materialAsset == nullptr) {
+            throw std::invalid_argument("PSP cooked platform material asset is required.");
         }
+
+        PspRuntimeMaterial* runtimeMaterial = new PspRuntimeMaterial();
+        runtimeMaterial->LoadFromCooked(materialAsset);
 
         PspBootTrace::WriteLine(
             std::string("PspRuntimeMaterialBuild id=") +
@@ -747,15 +783,40 @@ namespace helengine::psp::rendering {
         return runtimeMaterial;
     }
 
-    /// Reports the shader target used to resolve packaged shader assets for PSP materials.
-    ShaderCompileTarget PspRenderManager3D::get_ShaderCompileTarget() {
-        return ShaderCompileTarget::DirectX11;
-    }
+    /// Loads and builds one fixed-function PSP runtime material from its cooked content-relative path.
+    RuntimeMaterial* PspRenderManager3D::BuildMaterialFromCooked(
+        std::string cookedAssetPath,
+        IContentStreamSource* contentStreamSource) {
+        if (cookedAssetPath.empty()) {
+            throw std::invalid_argument("PSP cooked material path is required.");
+        }
+        if (contentStreamSource == nullptr) {
+            throw std::invalid_argument("PSP cooked material content source is required.");
+        }
 
-    /// Invalidates shader-backed runtime resources when authored shader assets change.
-    void PspRenderManager3D::InvalidateShaderResources(std::string shaderAssetId, ShaderAsset* shaderAsset) {
-        (void)shaderAssetId;
-        (void)shaderAsset;
+        Stream* stream = contentStreamSource->OpenRead(cookedAssetPath);
+        if (stream == nullptr) {
+            throw std::runtime_error("PSP cooked material content source returned a null stream.");
+        }
+
+        Asset* asset = nullptr;
+        try {
+            asset = AssetSerializer::Deserialize(stream);
+        } catch (...) {
+            delete stream;
+            throw;
+        }
+        delete stream;
+
+        PlatformMaterialAsset* materialAsset = dynamic_cast<PlatformMaterialAsset*>(asset);
+        if (materialAsset == nullptr) {
+            delete asset;
+            throw std::invalid_argument("PSP cooked material payload did not deserialize as PlatformMaterialAsset.");
+        }
+
+        RuntimeMaterial* runtimeMaterial = BuildMaterialFromCooked(materialAsset);
+        delete materialAsset;
+        return runtimeMaterial;
     }
 
     /// Releases one PSP runtime model after the final scene reference is removed.

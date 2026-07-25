@@ -1,19 +1,8 @@
 #include "platform/psp/rendering/PspRuntimeMaterial.hpp"
 
-#include <cstring>
 #include <stdexcept>
 
-#include "MaterialConstantBufferAsset.hpp"
-
 namespace helengine::psp::rendering {
-    namespace {
-        /// Constant-buffer name used for the authored base color payload.
-        constexpr const char* BaseColorBufferName = "BaseColorBuffer";
-
-        /// Constant-buffer name used for the PSP lighting configuration payload.
-        constexpr const char* LightingConfigBufferName = "LightingConfigBuffer";
-    }
-
     /// Creates one PSP runtime material with lit-directional defaults.
     PspRuntimeMaterial::PspRuntimeMaterial()
         : BaseColor(1.0f, 1.0f, 1.0f, 1.0f),
@@ -67,7 +56,7 @@ namespace helengine::psp::rendering {
 
     /// Resolves the first bound PSP runtime texture when the material exposes one.
     bool PspRuntimeMaterial::TryResolveTexture(PspRuntimeTexture*& texture) {
-        RuntimeTexture* resolvedTexture = ResolveTexture();
+        RuntimeTexture* resolvedTexture = ResolvePrimaryTexture();
         if (resolvedTexture == nullptr) {
             texture = nullptr;
             return false;
@@ -82,42 +71,25 @@ namespace helengine::psp::rendering {
     }
 
     /// Loads PSP material state from one cooked material asset.
-    void PspRuntimeMaterial::LoadFromCooked(ShaderMaterialAsset* materialAsset) {
+    void PspRuntimeMaterial::LoadFromCooked(PlatformMaterialAsset* materialAsset) {
         if (materialAsset == nullptr) {
             throw std::invalid_argument("PSP cooked material data is required.");
         }
 
         this->set_Id(materialAsset->get_Id());
-        BaseColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
-        HasAuthoredBaseColor = false;
-        ReceivesLighting = true;
-        HasAuthoredLightingConfiguration = false;
-        LightingResponse = PspMaterialLightingResponse::LitDirectional;
-        if (materialAsset->ConstantBuffers == nullptr) {
-            return;
-        }
-
-        for (int32_t index = 0; index < materialAsset->ConstantBuffers->Length; index++) {
-            MaterialConstantBufferAsset* constantBuffer = (*materialAsset->ConstantBuffers)[index];
-            if (constantBuffer == nullptr || constantBuffer->Data == nullptr) {
-                continue;
-            }
-
-            if (constantBuffer->get_Name() == BaseColorBufferName && constantBuffer->Data->Length >= 16) {
-                float components[4] {};
-                std::memcpy(components, constantBuffer->Data->Data, sizeof(components));
-                BaseColor = float4(components[0], components[1], components[2], components[3]);
-                HasAuthoredBaseColor = true;
-            } else if (constantBuffer->get_Name() == LightingConfigBufferName && constantBuffer->Data->Length >= 8) {
-                float configuration[2] {};
-                std::memcpy(configuration, constantBuffer->Data->Data, sizeof(configuration));
-                ReceivesLighting = configuration[0] >= 0.5f;
-                LightingResponse = configuration[1] < 0.5f
-                    ? PspMaterialLightingResponse::Unlit
-                    : PspMaterialLightingResponse::LitDirectional;
-                HasAuthoredLightingConfiguration = true;
-            }
-        }
+        BaseColor = float4(
+            static_cast<float>(materialAsset->BaseColorR) / 255.0f,
+            static_cast<float>(materialAsset->BaseColorG) / 255.0f,
+            static_cast<float>(materialAsset->BaseColorB) / 255.0f,
+            static_cast<float>(materialAsset->BaseColorA) / 255.0f);
+        HasAuthoredBaseColor = true;
+        ReceivesLighting = materialAsset->Lit;
+        HasAuthoredLightingConfiguration = true;
+        LightingResponse = ReceivesLighting
+            ? PspMaterialLightingResponse::LitDirectional
+            : PspMaterialLightingResponse::Unlit;
+        this->set_CastsShadows(ReceivesLighting);
+        this->set_ReceivesShadows(ReceivesLighting);
     }
 
     /// Resolves the parent PSP runtime material when this material inherits PSP-specific authored state.
