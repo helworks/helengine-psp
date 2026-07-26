@@ -9,7 +9,8 @@ namespace helengine::psp::rendering {
           HasAuthoredBaseColor(false),
           ReceivesLighting(true),
           HasAuthoredLightingConfiguration(false),
-          LightingResponse(PspMaterialLightingResponse::LitDirectional) {
+          LightingResponse(PspMaterialLightingResponse::LitDirectional),
+          OwnedTexture(nullptr) {
     }
 
     /// Gets the authored base color used by the PSP renderer.
@@ -68,6 +69,17 @@ namespace helengine::psp::rendering {
         }
 
         return true;
+    }
+
+    /// Assigns the texture loaded specifically for this cooked PSP material and exposes it to the fixed-function renderer.
+    void PspRuntimeMaterial::SetPrimaryTexture(RuntimeTexture* texture) {
+        OwnedTexture = texture;
+        RuntimeMaterial::SetPrimaryTexture(texture);
+    }
+
+    /// Gets the texture owned by this material's cooked texture reference, when one was authored.
+    RuntimeTexture* PspRuntimeMaterial::GetOwnedTexture() const {
+        return OwnedTexture;
     }
 
     /// Loads PSP material state from one cooked material asset.

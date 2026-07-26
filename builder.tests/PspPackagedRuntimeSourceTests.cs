@@ -82,6 +82,36 @@ public sealed class PspPackagedRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures the PSP fixed-function material path loads, binds, and later releases a texture referenced by its cooked material payload.
+    /// </summary>
+    [Fact]
+    public void PspRenderManager3D_loads_and_binds_the_cooked_material_texture() {
+        string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+        string renderManagerSourcePath = Path.Combine(
+            repositoryRootPath,
+            "src",
+            "platform",
+            "psp",
+            "rendering",
+            "PspRenderManager3D.cpp");
+        string runtimeMaterialHeaderPath = Path.Combine(
+            repositoryRootPath,
+            "src",
+            "platform",
+            "psp",
+            "rendering",
+            "PspRuntimeMaterial.hpp");
+        string renderManagerSource = File.ReadAllText(renderManagerSourcePath);
+        string runtimeMaterialHeader = File.ReadAllText(runtimeMaterialHeaderPath);
+
+        Assert.Contains("std::string(\"cooked/imported/\") + materialAsset->TextureRelativePath", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("RenderManager2D->BuildTextureFromCooked(texturePath, contentStreamSource)", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("pspMaterial->SetPrimaryTexture(texture)", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("RuntimeTexture* GetOwnedTexture() const;", runtimeMaterialHeader, StringComparison.Ordinal);
+        Assert.Contains("RenderManager2D->ReleaseTexture(pspMaterial->GetOwnedTexture())", renderManagerSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures the PSP CMake entrypoint accepts both the legacy amalgamated file and the current unity file names.
     /// </summary>
     [Fact]
@@ -344,10 +374,10 @@ public sealed class PspPackagedRuntimeSourceTests {
     }
 
     /// <summary>
-    /// Ensures the PSP boot host records the initial BEPU update-stage transitions so hard hardware crashes can be located after scene binding completes.
+    /// Ensures the PSP boot host arms a bounded all-stage trace exactly when scene physics binding completes.
     /// </summary>
     [Fact]
-    public void PspBootHost_records_initial_bepu_update_stage_diagnostics() {
+    public void PspBootHost_records_post_scene_binding_update_stage_diagnostics() {
         string sourcePath = Path.Combine(
             PspRepositoryPathResolver.ResolveRepositoryRootPath(),
             "src",
@@ -360,7 +390,58 @@ public sealed class PspPackagedRuntimeSourceTests {
         Assert.Contains("public ::IRuntimeUpdateStageDiagnosticsProvider", source, StringComparison.Ordinal);
         Assert.Contains("PspBootTrace::WriteLine(std::string(\"PhysicsUpdateStage \") + stage);", source, StringComparison.Ordinal);
         Assert.Contains("MaximumPhysicsStageRecordCount = 512", source, StringComparison.Ordinal);
-        Assert.Contains("EngineOptions->set_RuntimeDiagnosticsProvider(new PspPhysicsUpdateStageDiagnosticsProvider());", source, StringComparison.Ordinal);
+        Assert.Contains("void BeginPostSceneBindingTrace()", source, StringComparison.Ordinal);
+        Assert.Contains("PostSceneBindingTraceDiagnosticsProvider->BeginPostSceneBindingTrace();", source, StringComparison.Ordinal);
+        Assert.Contains("rendering::PspRenderManager3D::BeginPostPhysicsBindingDrawTrace();", source, StringComparison.Ordinal);
+        Assert.Contains("EngineOptions->set_RuntimeDiagnosticsProvider(PostSceneBindingTraceDiagnosticsProvider);", source, StringComparison.Ordinal);
+        Assert.Contains("new Action<std::string>([](std::string message) {", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures scaled fixed-function vertices are retained in normal heap memory instead of consuming the GU display-list allocator.
+    /// </summary>
+    [Fact]
+    public void PspRenderManager3D_uses_heap_buffers_for_scaled_fixed_function_vertices() {
+        string sourcePath = Path.Combine(
+            PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+            "src",
+            "platform",
+            "psp",
+            "rendering",
+            "PspRenderManager3D.cpp");
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("new PspRuntimeModel::FixedFunctionVertex[static_cast<std::size_t>(vertexCount)]", source, StringComparison.Ordinal);
+        Assert.Contains("FrameScaledFixedFunctionVertexBuffers.push_back(vertices);", source, StringComparison.Ordinal);
+        Assert.Contains("ReleaseFrameScaledFixedFunctionVertexBuffers();", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures textured fixed-function Course meshes retain their transient vertex streams in heap memory instead of exhausting the GU display-list allocator.
+    /// </summary>
+    [Fact]
+    public void PspRenderManager3D_uses_heap_buffers_for_transient_textured_fixed_function_vertices() {
+        string sourcePath = Path.Combine(
+            PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+            "src",
+            "platform",
+            "psp",
+            "rendering",
+            "PspRenderManager3D.cpp");
+        string headerPath = Path.Combine(
+            PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+            "src",
+            "platform",
+            "psp",
+            "rendering",
+            "PspRenderManager3D.hpp");
+        string source = File.ReadAllText(sourcePath);
+        string header = File.ReadAllText(headerPath);
+
+        Assert.Contains("new PspRuntimeModel::FixedFunctionTexturedVertex[static_cast<std::size_t>(vertexCount)]", source, StringComparison.Ordinal);
+        Assert.Contains("FrameTransientFixedFunctionTexturedVertexBuffers.push_back(vertices);", source, StringComparison.Ordinal);
+        Assert.Contains("ReleaseFrameTransientFixedFunctionTexturedVertexBuffers();", source, StringComparison.Ordinal);
+        Assert.Contains("std::vector<PspRuntimeModel::FixedFunctionTexturedVertex*> FrameTransientFixedFunctionTexturedVertexBuffers;", header, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -25,11 +25,14 @@
 #include "float2.hpp"
 #include "ObjectManager.hpp"
 #include "platform/psp/PspBootTrace.hpp"
+#include "platform/psp/rendering/PspRenderManager2D.hpp"
 #include "platform/psp/rendering/PspRuntimeMaterial.hpp"
 #include "platform/psp/rendering/PspRuntimeModel.hpp"
 #include "platform/psp/rendering/PspRuntimeTexture.hpp"
 
 namespace helengine::psp::rendering {
+    int32_t PspRenderManager3D::PostPhysicsBindingTraceFramesRemaining = 0;
+
     namespace {
         /// Stores one GU vertex with per-vertex color and position.
         struct PspLitVertex {
@@ -310,71 +313,6 @@ namespace helengine::psp::rendering {
                 && material->GetLightingResponse() == PspMaterialLightingResponse::LitDirectional;
         }
 
-        /// Builds one transient fixed-function vertex stream with object-space positions pre-scaled for non-uniform GPU lighting.
-        PspRuntimeModel::FixedFunctionVertex* CreateScaledFixedFunctionVertices(
-            const PspRuntimeModel* runtimeModel,
-            const float3& scale) {
-            if (runtimeModel == nullptr || !runtimeModel->HasFixedFunctionVertices()) {
-                return nullptr;
-            }
-
-            int32_t vertexCount = runtimeModel->GetFixedFunctionVertexCount();
-            if (vertexCount < 1) {
-                return nullptr;
-            }
-
-            const PspRuntimeModel::FixedFunctionVertex* sourceVertices = runtimeModel->GetFixedFunctionVertices();
-            PspRuntimeModel::FixedFunctionVertex* vertices = static_cast<PspRuntimeModel::FixedFunctionVertex*>(
-                sceGuGetMemory(sizeof(PspRuntimeModel::FixedFunctionVertex) * static_cast<std::size_t>(vertexCount)));
-            for (int32_t index = 0; index < vertexCount; index++) {
-                const PspRuntimeModel::FixedFunctionVertex& sourceVertex = sourceVertices[index];
-                vertices[index] = PspRuntimeModel::FixedFunctionVertex {
-                    sourceVertex.NX,
-                    sourceVertex.NY,
-                    sourceVertex.NZ,
-                    sourceVertex.X * scale.X,
-                    sourceVertex.Y * scale.Y,
-                    sourceVertex.Z * scale.Z
-                };
-            }
-
-            return vertices;
-        }
-
-        /// Builds one transient textured fixed-function vertex stream with normalized UVs and optional object-space position scaling.
-        PspRuntimeModel::FixedFunctionTexturedVertex* CreateTransientFixedFunctionTexturedVertices(
-            const PspRuntimeModel* runtimeModel,
-            PspRuntimeTexture* texture,
-            const float3* scale) {
-            if (runtimeModel == nullptr || !runtimeModel->HasFixedFunctionTexturedVertices()) {
-                return nullptr;
-            }
-
-            int32_t vertexCount = runtimeModel->GetFixedFunctionTexturedVertexCount();
-            if (vertexCount < 1) {
-                return nullptr;
-            }
-
-            const PspRuntimeModel::FixedFunctionTexturedVertex* sourceVertices = runtimeModel->GetFixedFunctionTexturedVertices();
-            PspRuntimeModel::FixedFunctionTexturedVertex* vertices = static_cast<PspRuntimeModel::FixedFunctionTexturedVertex*>(
-                sceGuGetMemory(sizeof(PspRuntimeModel::FixedFunctionTexturedVertex) * static_cast<std::size_t>(vertexCount)));
-            for (int32_t index = 0; index < vertexCount; index++) {
-                const PspRuntimeModel::FixedFunctionTexturedVertex& sourceVertex = sourceVertices[index];
-                vertices[index] = PspRuntimeModel::FixedFunctionTexturedVertex {
-                    sourceVertex.U,
-                    sourceVertex.V,
-                    sourceVertex.NX,
-                    sourceVertex.NY,
-                    sourceVertex.NZ,
-                    scale != nullptr ? sourceVertex.X * scale->X : sourceVertex.X,
-                    scale != nullptr ? sourceVertex.Y * scale->Y : sourceVertex.Y,
-                    scale != nullptr ? sourceVertex.Z * scale->Z : sourceVertex.Z
-                };
-            }
-
-            return vertices;
-        }
-
         /// Evaluates the current CPU Lambert response for one vertex.
         float4 EvaluateCpuLitColor(
             const float4& baseColor,
@@ -457,6 +395,97 @@ namespace helengine::psp::rendering {
           CachedLightingEnabledState(false),
           HasCachedLight0EnabledState(false),
           CachedLight0EnabledState(false) {
+    }
+
+    /// Releases renderer-owned transient vertex buffers after the final PSP frame has completed.
+    PspRenderManager3D::~PspRenderManager3D() {
+        ReleaseFrameScaledFixedFunctionVertexBuffers();
+        ReleaseFrameTransientFixedFunctionTexturedVertexBuffers();
+    }
+
+    /// Releases the scaled fixed-function vertex streams retained until the preceding GU frame is synchronized.
+    void PspRenderManager3D::ReleaseFrameScaledFixedFunctionVertexBuffers() {
+        for (PspRuntimeModel::FixedFunctionVertex* vertices : FrameScaledFixedFunctionVertexBuffers) {
+            delete[] vertices;
+        }
+
+        FrameScaledFixedFunctionVertexBuffers.clear();
+    }
+
+    /// Releases textured fixed-function vertex streams retained until the preceding GU frame is synchronized.
+    void PspRenderManager3D::ReleaseFrameTransientFixedFunctionTexturedVertexBuffers() {
+        for (PspRuntimeModel::FixedFunctionTexturedVertex* vertices : FrameTransientFixedFunctionTexturedVertexBuffers) {
+            delete[] vertices;
+        }
+
+        FrameTransientFixedFunctionTexturedVertexBuffers.clear();
+    }
+
+    /// Builds and retains one heap-backed fixed-function vertex stream with positions scaled for non-uniform GPU lighting.
+    PspRuntimeModel::FixedFunctionVertex* PspRenderManager3D::CreateScaledFixedFunctionVertices(
+        const PspRuntimeModel* runtimeModel,
+        const float3& scale) {
+        if (runtimeModel == nullptr || !runtimeModel->HasFixedFunctionVertices()) {
+            return nullptr;
+        }
+
+        int32_t vertexCount = runtimeModel->GetFixedFunctionVertexCount();
+        if (vertexCount < 1) {
+            return nullptr;
+        }
+
+        const PspRuntimeModel::FixedFunctionVertex* sourceVertices = runtimeModel->GetFixedFunctionVertices();
+        PspRuntimeModel::FixedFunctionVertex* vertices = new PspRuntimeModel::FixedFunctionVertex[static_cast<std::size_t>(vertexCount)];
+        for (int32_t index = 0; index < vertexCount; index++) {
+            const PspRuntimeModel::FixedFunctionVertex& sourceVertex = sourceVertices[index];
+            vertices[index] = PspRuntimeModel::FixedFunctionVertex {
+                sourceVertex.NX,
+                sourceVertex.NY,
+                sourceVertex.NZ,
+                sourceVertex.X * scale.X,
+                sourceVertex.Y * scale.Y,
+                sourceVertex.Z * scale.Z
+            };
+        }
+
+        FrameScaledFixedFunctionVertexBuffers.push_back(vertices);
+        return vertices;
+    }
+
+    /// Builds and retains one heap-backed textured vertex stream until the PSP has consumed the active GU display list.
+    PspRuntimeModel::FixedFunctionTexturedVertex* PspRenderManager3D::CreateTransientFixedFunctionTexturedVertices(
+        const PspRuntimeModel* runtimeModel,
+        PspRuntimeTexture* texture,
+        const float3* scale) {
+        if (runtimeModel == nullptr || !runtimeModel->HasFixedFunctionTexturedVertices()) {
+            return nullptr;
+        } else if (texture == nullptr) {
+            throw std::invalid_argument("PSP transient textured vertices require a runtime texture.");
+        }
+
+        int32_t vertexCount = runtimeModel->GetFixedFunctionTexturedVertexCount();
+        if (vertexCount < 1) {
+            return nullptr;
+        }
+
+        const PspRuntimeModel::FixedFunctionTexturedVertex* sourceVertices = runtimeModel->GetFixedFunctionTexturedVertices();
+        PspRuntimeModel::FixedFunctionTexturedVertex* vertices = new PspRuntimeModel::FixedFunctionTexturedVertex[static_cast<std::size_t>(vertexCount)];
+        for (int32_t index = 0; index < vertexCount; index++) {
+            const PspRuntimeModel::FixedFunctionTexturedVertex& sourceVertex = sourceVertices[index];
+            vertices[index] = PspRuntimeModel::FixedFunctionTexturedVertex {
+                sourceVertex.U,
+                sourceVertex.V,
+                sourceVertex.NX,
+                sourceVertex.NY,
+                sourceVertex.NZ,
+                scale != nullptr ? sourceVertex.X * scale->X : sourceVertex.X,
+                scale != nullptr ? sourceVertex.Y * scale->Y : sourceVertex.Y,
+                scale != nullptr ? sourceVertex.Z * scale->Z : sourceVertex.Z
+            };
+        }
+
+        FrameTransientFixedFunctionTexturedVertexBuffers.push_back(vertices);
+        return vertices;
     }
 
     /// Resets the renderer-owned GU state cache before one camera pass begins.
@@ -814,7 +843,31 @@ namespace helengine::psp::rendering {
             throw std::invalid_argument("PSP cooked material payload did not deserialize as PlatformMaterialAsset.");
         }
 
-        RuntimeMaterial* runtimeMaterial = BuildMaterialFromCooked(materialAsset);
+        RuntimeMaterial* runtimeMaterial = nullptr;
+        try {
+            runtimeMaterial = BuildMaterialFromCooked(materialAsset);
+            PspRuntimeMaterial* pspMaterial = dynamic_cast<PspRuntimeMaterial*>(runtimeMaterial);
+            if (pspMaterial == nullptr) {
+                throw std::runtime_error("PSP cooked materials must produce PspRuntimeMaterial instances.");
+            }
+
+            if (!materialAsset->TextureRelativePath.empty()) {
+                if (RenderManager2D == nullptr) {
+                    throw std::runtime_error("PSP cooked textured materials require a paired 2D render manager.");
+                }
+
+                const std::string texturePath = std::string("cooked/imported/") + materialAsset->TextureRelativePath;
+                RuntimeTexture* texture = RenderManager2D->BuildTextureFromCooked(texturePath, contentStreamSource);
+                pspMaterial->SetPrimaryTexture(texture);
+            }
+        } catch (...) {
+            if (runtimeMaterial != nullptr) {
+                ReleaseMaterial(runtimeMaterial);
+            }
+            delete materialAsset;
+            throw;
+        }
+
         delete materialAsset;
         return runtimeMaterial;
     }
@@ -849,11 +902,23 @@ namespace helengine::psp::rendering {
             throw std::invalid_argument("PSP runtime-material release requires one runtime material instance.");
         }
 
+        PspRuntimeMaterial* pspMaterial = dynamic_cast<PspRuntimeMaterial*>(material);
+        if (pspMaterial == nullptr) {
+            throw std::runtime_error("PSP runtime-material release requires PspRuntimeMaterial instances.");
+        }
+
         PspBootTrace::WriteLine(
             std::string("PspRuntimeMaterialRelease id=") +
             material->get_Id() +
             " ptr=" +
             std::to_string(reinterpret_cast<std::uintptr_t>(material)));
+        if (pspMaterial->GetOwnedTexture() != nullptr) {
+            if (RenderManager2D == nullptr) {
+                throw std::runtime_error("PSP textured material release requires a paired 2D render manager.");
+            }
+
+            RenderManager2D->ReleaseTexture(pspMaterial->GetOwnedTexture());
+        }
         material->Dispose();
         delete material;
     }
@@ -863,10 +928,30 @@ namespace helengine::psp::rendering {
         RenderManager2D = renderManager2D;
     }
 
+    /// Arms a bounded renderer trace for the first frames that follow completed physics scene binding.
+    void PspRenderManager3D::BeginPostPhysicsBindingDrawTrace() {
+        PostPhysicsBindingTraceFramesRemaining = 3;
+        PspBootTrace::WriteLine("Psp3DTrace armed frames=3");
+    }
+
+    /// Writes one renderer trace record while the bounded post-physics-binding trace remains active.
+    void PspRenderManager3D::WritePostPhysicsBindingDrawTrace(const std::string& stage) {
+        if (PostPhysicsBindingTraceFramesRemaining <= 0) {
+            return;
+        }
+
+        PspBootTrace::WriteLine(std::string("Psp3DTrace ") + stage);
+    }
+
     /// Draws every visible authored camera to the current PSP back buffer.
     void PspRenderManager3D::Draw() {
+        ReleaseFrameScaledFixedFunctionVertexBuffers();
+        ReleaseFrameTransientFixedFunctionTexturedVertexBuffers();
+        WritePostPhysicsBindingDrawTrace("Draw begin");
         PspRenderProfiler::BeginFrame();
+        WritePostPhysicsBindingDrawTrace("Draw after profiler begin");
         RenderManager3D::Draw();
+        WritePostPhysicsBindingDrawTrace("Draw after base draw");
         if (Core::get_Instance() == nullptr || Core::get_Instance()->get_ObjectManager() == nullptr) {
             PspRenderProfiler::EndFrame();
             return;
@@ -878,6 +963,8 @@ namespace helengine::psp::rendering {
             return;
         }
 
+        WritePostPhysicsBindingDrawTrace(std::string("Draw cameras=") + std::to_string(cameras->Count()));
+
         for (int32_t index = 0; index < cameras->Count(); index++) {
             ICamera* camera = (*cameras)[index];
             if (camera == nullptr || camera->get_Parent() == nullptr || !camera->get_Parent()->get_IsHierarchyEnabled()) {
@@ -887,14 +974,19 @@ namespace helengine::psp::rendering {
                 continue;
             }
 
+            WritePostPhysicsBindingDrawTrace(std::string("Draw before camera index=") + std::to_string(index));
             RenderCamera(camera);
+            WritePostPhysicsBindingDrawTrace(std::string("Draw after camera index=") + std::to_string(index));
         }
         PspRenderProfiler::EndFrame();
+        WritePostPhysicsBindingDrawTrace("Draw end");
+        PostPhysicsBindingTraceFramesRemaining--;
     }
 
     /// Draws one queued mesh for the active camera.
     void PspRenderManager3D::Visit(IDrawable3D* drawable) {
         const std::uint64_t visitStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+        WritePostPhysicsBindingDrawTrace("Visit begin");
         if (drawable == nullptr || drawable->get_Parent() == nullptr || !drawable->get_Parent()->get_IsHierarchyEnabled()) {
             return;
         }
@@ -910,6 +1002,10 @@ namespace helengine::psp::rendering {
             return;
         }
 
+        WritePostPhysicsBindingDrawTrace(
+            std::string("Visit vertices=")
+            + std::to_string(pspRuntimeModelData->GetFixedFunctionVertexCount()));
+
         Array<RuntimeMaterial*>* runtimeMaterials = drawable->get_Materials();
         RuntimeMaterial* runtimeMaterial = runtimeMaterials != nullptr && runtimeMaterials->Length > 0
             ? (*runtimeMaterials)[0]
@@ -920,6 +1016,7 @@ namespace helengine::psp::rendering {
         if (rootMaterial == nullptr) {
             return;
         }
+        WritePostPhysicsBindingDrawTrace("Visit after material resolve");
         
         PspRuntimeMaterial* pspRuntimeMaterial = static_cast<PspRuntimeMaterial*>(runtimeMaterial);
         const float4& baseColor = pspRuntimeMaterial->GetBaseColor();
@@ -930,6 +1027,11 @@ namespace helengine::psp::rendering {
         const bool useScaledGpuVertices = LightingSettings.Pipeline == PspLightingPipeline::FixedFunctionLambert
             && useLighting
             && HasNonUniformScale(worldScale);
+        WritePostPhysicsBindingDrawTrace(
+            std::string("Visit material=")
+            + std::to_string(reinterpret_cast<std::uintptr_t>(pspRuntimeMaterial))
+            + " textured=" + (hasTexture ? "1" : "0")
+            + " lighting=" + (useLighting ? "1" : "0"));
 
         const std::uint64_t worldMatrixBuildStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         float4x4 world = useScaledGpuVertices
@@ -942,9 +1044,11 @@ namespace helengine::psp::rendering {
         sceGumMatrixMode(GU_MODEL);
         sceGumLoadMatrix(reinterpret_cast<ScePspFMatrix4*>(&worldMatrix));
         PspRenderProfiler::Record3DModelMatrixLoad(PspRenderProfiler::GetTimestampMicroseconds() - modelMatrixLoadStartMicroseconds);
+        WritePostPhysicsBindingDrawTrace("Visit after model matrix load");
 
         if (LightingSettings.Pipeline == PspLightingPipeline::FixedFunctionLambert) {
             if (hasTexture) {
+                WritePostPhysicsBindingDrawTrace("Visit before fixed-function textured submit");
                 SubmitFixedFunctionTexturedDrawable(
                     pspRuntimeModelData,
                     baseColor,
@@ -952,15 +1056,18 @@ namespace helengine::psp::rendering {
                     texture,
                     useScaledGpuVertices ? &worldScale : nullptr);
                 PspRenderProfiler::Record3DVisit(PspRenderProfiler::GetTimestampMicroseconds() - visitStartMicroseconds);
+                WritePostPhysicsBindingDrawTrace("Visit after fixed-function textured submit");
                 return;
             }
 
+            WritePostPhysicsBindingDrawTrace("Visit before fixed-function untextured submit");
             SubmitFixedFunctionDrawable(
                 pspRuntimeModelData,
                 baseColor,
                 useLighting,
                 useScaledGpuVertices ? &worldScale : nullptr);
             PspRenderProfiler::Record3DVisit(PspRenderProfiler::GetTimestampMicroseconds() - visitStartMicroseconds);
+            WritePostPhysicsBindingDrawTrace("Visit after fixed-function untextured submit");
             return;
         }
 
@@ -1037,6 +1144,7 @@ namespace helengine::psp::rendering {
     /// Renders the currently active 3D queue for one camera.
     void PspRenderManager3D::RenderCamera(ICamera* camera) {
         const std::uint64_t renderStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+        WritePostPhysicsBindingDrawTrace("RenderCamera begin");
         Entity* cameraParent = camera->get_Parent();
         float3 cameraPosition = cameraParent->get_Position();
         float4 cameraOrientation = cameraParent->get_Orientation();
@@ -1073,6 +1181,7 @@ namespace helengine::psp::rendering {
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadMatrix(reinterpret_cast<ScePspFMatrix4*>(&viewMatrix));
         PspRenderProfiler::Record3DCameraSetup(PspRenderProfiler::GetTimestampMicroseconds() - renderStartMicroseconds);
+        WritePostPhysicsBindingDrawTrace("RenderCamera after setup");
 
         IRenderQueue3D* renderQueue = camera->get_RenderQueue3D();
         int32_t drawableCount = 0;
@@ -1088,7 +1197,9 @@ namespace helengine::psp::rendering {
                 SetLightingEnabled(false);
             }
             const std::uint64_t queueVisitStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
+            WritePostPhysicsBindingDrawTrace(std::string("RenderCamera before queue visit drawables=") + std::to_string(drawableCount));
             renderQueue->VisitOrdered(this);
+            WritePostPhysicsBindingDrawTrace("RenderCamera after queue visit");
             PspRenderProfiler::Record3DQueueVisit(PspRenderProfiler::GetTimestampMicroseconds() - queueVisitStartMicroseconds);
         }
 

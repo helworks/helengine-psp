@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "ICamera.hpp"
 #include "IDrawable3D.hpp"
 #include "IContentStreamSource.hpp"
@@ -13,6 +15,7 @@
 #include "platform/psp/rendering/PspLightingSettings.hpp"
 #include "platform/psp/rendering/PspRenderManager2D.hpp"
 #include "platform/psp/rendering/PspRenderProfiler.hpp"
+#include "platform/psp/rendering/PspRuntimeModel.hpp"
 #include "platform/psp/rendering/PspSceneLightingSnapshot.hpp"
 
 namespace helengine::psp::rendering {
@@ -21,6 +24,9 @@ namespace helengine::psp::rendering {
     public:
         /// Creates the PSP 3D render manager.
         PspRenderManager3D();
+
+        /// Releases renderer-owned transient vertex buffers after the final PSP frame has completed.
+        ~PspRenderManager3D() override;
 
         /// Builds a CPU-side runtime model payload from the raw mesh asset.
         RuntimeModel* BuildModelFromRaw(ModelAsset* data) override;
@@ -43,6 +49,9 @@ namespace helengine::psp::rendering {
         /// Wires the paired PSP 2D renderer used for per-camera UI submission.
         void SetRenderManager2D(PspRenderManager2D* renderManager2D);
 
+        /// Arms a bounded renderer trace for the first frames submitted after physics scene binding completes.
+        static void BeginPostPhysicsBindingDrawTrace();
+
         /// Draws every visible authored camera to the current PSP back buffer.
         void Draw() override;
 
@@ -50,6 +59,26 @@ namespace helengine::psp::rendering {
         void Visit(IDrawable3D* drawable) override;
 
     private:
+        /// Releases the scaled fixed-function vertex streams retained until the preceding GU frame is synchronized.
+        void ReleaseFrameScaledFixedFunctionVertexBuffers();
+
+        /// Builds and retains one heap-backed fixed-function vertex stream with positions scaled for non-uniform GPU lighting.
+        PspRuntimeModel::FixedFunctionVertex* CreateScaledFixedFunctionVertices(
+            const PspRuntimeModel* runtimeModel,
+            const float3& scale);
+
+        /// Builds and retains one heap-backed textured vertex stream until the PSP has consumed the active GU display list.
+        PspRuntimeModel::FixedFunctionTexturedVertex* CreateTransientFixedFunctionTexturedVertices(
+            const PspRuntimeModel* runtimeModel,
+            PspRuntimeTexture* texture,
+            const float3* scale);
+
+        /// Releases textured fixed-function vertex streams retained until the preceding GU frame is synchronized.
+        void ReleaseFrameTransientFixedFunctionTexturedVertexBuffers();
+
+        /// Writes one renderer trace record while a post-physics-binding trace is active.
+        static void WritePostPhysicsBindingDrawTrace(const std::string& stage);
+
         /// Resets the renderer-owned GU state cache before one camera pass begins.
         void ResetCachedGuState();
 
@@ -130,5 +159,14 @@ namespace helengine::psp::rendering {
 
         /// Tracks the active GU directional-light state for the current camera pass.
         bool CachedLight0EnabledState;
+
+        /// Stores the number of fully rendered frames that should continue emitting post-physics-binding trace records.
+        static int32_t PostPhysicsBindingTraceFramesRemaining;
+
+        /// Stores heap-backed scaled vertex streams until the PSP has consumed the active GU display list.
+        std::vector<PspRuntimeModel::FixedFunctionVertex*> FrameScaledFixedFunctionVertexBuffers;
+
+        /// Stores heap-backed textured vertex streams until the PSP has consumed the active GU display list.
+        std::vector<PspRuntimeModel::FixedFunctionTexturedVertex*> FrameTransientFixedFunctionTexturedVertexBuffers;
     };
 }

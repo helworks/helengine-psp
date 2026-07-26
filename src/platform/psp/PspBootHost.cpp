@@ -16,6 +16,7 @@
 
 #include "Core.hpp"
 #include "CoreInitializationOptions.hpp"
+#include "Entity.hpp"
 #include "IAudioBackend.hpp"
 #include "IRuntimeDiagnosticsProvider.hpp"
 #include "IRuntimeUpdateStageDiagnosticsProvider.hpp"
@@ -31,6 +32,7 @@
 #include "RenderManager3D.hpp"
 #include "RuntimeSceneLoadService.hpp"
 #include "RuntimeMemoryDiagnosticsSnapshot.hpp"
+#include "SceneEntityRuntimeIdComponent.hpp"
 #include "SceneManager.hpp"
 #include "SceneAsset.hpp"
 #include "StandardPlatformAction.hpp"
@@ -46,9 +48,9 @@
 #include "platform/psp/rendering/PspRenderManager2D.hpp"
 #include "platform/psp/rendering/PspRenderManager3D.hpp"
 #include "runtime/native_exceptions.hpp"
+#include "runtime/native_list.hpp"
 
 #if defined(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP) && HELENGINE_PSP_ENABLE_RUNTIME_STARTUP
-#include "runtime/native_list.hpp"
 #include "runtime/runtime_scene_catalog_manifest.hpp"
 #include "runtime/runtime_startup_manifest.hpp"
 #include "runtime/runtime_standard_platform_input_manifest.hpp"
@@ -92,7 +94,7 @@ namespace helengine::psp {
                 + " ExceptionEnables=" + std::to_string(pspFpuGetEnable()));
         }
 
-        /// Writes the first BEPU-specific core update stages to the PSP boot log so a hard crash can be localized before the host update loop returns.
+        /// Writes a bounded sequence of core update stages after scene physics binding so a hard crash can be localized without continuous memory-card logging.
         class PspPhysicsUpdateStageDiagnosticsProvider final
             : public ::IRuntimeDiagnosticsProvider
             , public ::IRuntimeUpdateStageDiagnosticsProvider {
@@ -102,11 +104,21 @@ namespace helengine::psp {
                 return new ::RuntimeMemoryDiagnosticsSnapshot();
             }
 
-            /// Records an initial BEPU update-stage transition without adding per-frame memory-card writes after the diagnostic limit.
+            /// Begins recording the first core update transitions that follow completed scene physics binding.
+            void BeginPostSceneBindingTrace() {
+                if (IsPostSceneBindingTraceActive) {
+                    return;
+                }
+
+                IsPostSceneBindingTraceActive = true;
+                RecordedPhysicsStageCount = 0;
+                PspBootTrace::WriteLine("PhysicsUpdateStage post-scene-binding trace enabled.");
+            }
+
+            /// Records one core update-stage transition after physics binding without adding per-frame memory-card writes after the diagnostic limit.
             void ReportUpdateStage(std::string stage) override {
-                constexpr int32_t MaximumPhysicsStageRecordCount = 0;
-                if (RecordedPhysicsStageCount >= MaximumPhysicsStageRecordCount
-                    || stage.find("Bepu") == std::string::npos) {
+                constexpr int32_t MaximumPhysicsStageRecordCount = 512;
+                if (!IsPostSceneBindingTraceActive || RecordedPhysicsStageCount >= MaximumPhysicsStageRecordCount) {
                     return;
                 }
 
@@ -115,9 +127,72 @@ namespace helengine::psp {
             }
 
         private:
+            /// Stores whether the trace has been armed by the synchronous scene physics-binding completion event.
+            bool IsPostSceneBindingTraceActive = false;
             /// Stores the number of physics update-stage records already persisted for this runtime session.
             int32_t RecordedPhysicsStageCount = 0;
         };
+
+        /// Stores the one diagnostics provider owned by the active PSP core so the non-capturing scene-binding callback can arm its post-binding trace.
+        PspPhysicsUpdateStageDiagnosticsProvider* PostSceneBindingTraceDiagnosticsProvider = nullptr;
+
+        /// Writes a bounded snapshot of runtime scene entity identifiers after a fatal error so unresolved scene references can be traced without per-frame logging.
+        void WriteSceneReferenceDiagnostics(::Core* engineCore) {
+            constexpr int32_t MaximumSceneReferenceRecordCount = 512;
+            if (engineCore == nullptr || engineCore->get_ObjectManager() == nullptr) {
+                PspBootTrace::WriteLine("SceneReferenceDump unavailable: object manager is not initialized.");
+                return;
+            }
+
+            ::List<::Entity*>* entities = engineCore->get_ObjectManager()->get_Entities();
+            if (entities == nullptr) {
+                PspBootTrace::WriteLine("SceneReferenceDump unavailable: entity collection is not initialized.");
+                return;
+            }
+
+            int32_t runtimeIdComponentCount = 0;
+            int32_t targetEntityRecordCount = 0;
+            PspBootTrace::WriteLine(
+                std::string("SceneReferenceDump begin entityCount=")
+                + std::to_string(entities->get_Count()));
+
+            for (int32_t entityIndex = 0; entityIndex < entities->get_Count(); entityIndex++) {
+                ::Entity* entity = entities->get_Item(entityIndex);
+                if (entity == nullptr || entity->get_Components() == nullptr) {
+                    continue;
+                }
+
+                ::List<::Component*>* components = entity->get_Components();
+                for (int32_t componentIndex = 0; componentIndex < components->get_Count(); componentIndex++) {
+                    ::SceneEntityRuntimeIdComponent* runtimeIdComponent = dynamic_cast<::SceneEntityRuntimeIdComponent*>(components->get_Item(componentIndex));
+                    if (runtimeIdComponent == nullptr) {
+                        continue;
+                    }
+
+                    runtimeIdComponentCount++;
+                    if (runtimeIdComponent->get_SceneEntityId() == 39u) {
+                        targetEntityRecordCount++;
+                    }
+
+                    if (runtimeIdComponentCount > MaximumSceneReferenceRecordCount) {
+                        continue;
+                    }
+
+                    PspBootTrace::WriteLine(
+                        std::string("SceneReferenceId entityIndex=")
+                        + std::to_string(entityIndex)
+                        + " componentIndex=" + std::to_string(componentIndex)
+                        + " id=" + std::to_string(runtimeIdComponent->get_SceneEntityId())
+                        + " componentCount=" + std::to_string(components->get_Count()));
+                }
+            }
+
+            PspBootTrace::WriteLine(
+                std::string("SceneReferenceDump end runtimeIdCount=")
+                + std::to_string(runtimeIdComponentCount)
+                + " targetId39Count=" + std::to_string(targetEntityRecordCount)
+                + " recordLimit=" + std::to_string(MaximumSceneReferenceRecordCount));
+        }
 
         /// Builds one runtime standard-platform input configuration from the generated manifest entries.
         ::StandardPlatformInputConfiguration* BuildStandardPlatformInputConfiguration() {
@@ -302,7 +377,8 @@ namespace helengine::psp {
         EngineOptions->set_RenderList3DInitialCapacity(64);
         EngineOptions->set_PhysicsFixedStepSeconds(1.0 / 30.0);
         EngineOptions->set_PhysicsMaxStepsPerUpdate(2);
-        EngineOptions->set_RuntimeDiagnosticsProvider(new PspPhysicsUpdateStageDiagnosticsProvider());
+        PostSceneBindingTraceDiagnosticsProvider = new PspPhysicsUpdateStageDiagnosticsProvider();
+        EngineOptions->set_RuntimeDiagnosticsProvider(PostSceneBindingTraceDiagnosticsProvider);
         EngineOptions->set_StandardPlatformInputConfiguration(BuildStandardPlatformInputConfiguration());
         PspRuntimeSceneCatalogFactory runtimeSceneCatalogFactory;
         EngineOptions->set_SceneCatalog(runtimeSceneCatalogFactory.Build());
@@ -328,6 +404,10 @@ namespace helengine::psp {
         physicsWorld->set_SceneBindingDiagnosticSink(
             new Action<std::string>([](std::string message) {
                 PspBootTrace::WriteLine(std::string("PhysicsBinding ") + message);
+                if (message.find("PhysicsBind end bodies=") == 0 && PostSceneBindingTraceDiagnosticsProvider != nullptr) {
+                    PostSceneBindingTraceDiagnosticsProvider->BeginPostSceneBindingTrace();
+                    rendering::PspRenderManager3D::BeginPostPhysicsBindingDrawTrace();
+                }
             }));
         BepuRuntimeComponentRegistration::AttachRuntimeWorld(EngineCore, physicsWorld);
         BepuRuntimeComponentRegistration::RegisterSceneBinding(EngineCore);
@@ -605,6 +685,7 @@ namespace helengine::psp {
     /// Shows one fatal diagnostic message on the PSP screen and keeps the app alive for inspection.
     void PspBootHost::ShowFatalErrorAndHalt(const std::string& message) {
         PspBootTrace::WriteLine(std::string("FatalError stage=") + CurrentBootStage + " message=" + message);
+        WriteSceneReferenceDiagnostics(EngineCore);
         pspDebugScreenInit();
         pspDebugScreenSetXY(0, 0);
         pspDebugScreenPrintf("helengine-psp fatal error\n\n");

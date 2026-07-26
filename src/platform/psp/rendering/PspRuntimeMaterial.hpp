@@ -27,6 +27,12 @@ namespace helengine::psp::rendering {
         /// Resolves the first bound PSP runtime texture when the material exposes one.
         bool TryResolveTexture(PspRuntimeTexture*& texture);
 
+        /// Assigns the texture loaded specifically for this cooked PSP material and exposes it to the fixed-function renderer.
+        void SetPrimaryTexture(RuntimeTexture* texture) override;
+
+        /// Gets the texture owned by this material's cooked texture reference, when one was authored.
+        RuntimeTexture* GetOwnedTexture() const;
+
         /// Loads PSP material state from one cooked material asset.
         void LoadFromCooked(PlatformMaterialAsset* materialAsset);
 
@@ -48,5 +54,8 @@ namespace helengine::psp::rendering {
 
         /// Stores the PSP lighting-response mode.
         PspMaterialLightingResponse LightingResponse;
+
+        /// Stores the PSP texture loaded from this material's cooked texture reference for later renderer-managed release.
+        RuntimeTexture* OwnedTexture;
     };
 }
