@@ -260,6 +260,33 @@ public sealed class PspPackagedRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures the PSP fixed-function text path submits the shared shadow, cardinal-outline, and fill sequence with per-pass colors.
+    /// </summary>
+    [Fact]
+    public void PspRenderManager2D_draws_text_shadow_and_outline_effect_passes() {
+        string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+        string headerPath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRenderManager2D.hpp");
+        string sourcePath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRenderManager2D.cpp");
+        string header = File.ReadAllText(headerPath);
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("DrawTextEffectPasses(text, cacheEntry)", source, StringComparison.Ordinal);
+        Assert.Contains("text->get_ShadowOffset()", source, StringComparison.Ordinal);
+        Assert.Contains("text->get_OutlineScale()", source, StringComparison.Ordinal);
+        Assert.Contains("text->get_ShadowColor()", source, StringComparison.Ordinal);
+        Assert.Contains("text->get_OutlineColor()", source, StringComparison.Ordinal);
+        Assert.Contains("text->get_Color()", source, StringComparison.Ordinal);
+        Assert.Contains("float2(-outlineScale, 0.0f)", source, StringComparison.Ordinal);
+        Assert.Contains("float2(outlineScale, 0.0f)", source, StringComparison.Ordinal);
+        Assert.Contains("float2(0.0f, -outlineScale)", source, StringComparison.Ordinal);
+        Assert.Contains("float2(0.0f, outlineScale)", source, StringComparison.Ordinal);
+        Assert.Contains("const byte4* colorOverride", header, StringComparison.Ordinal);
+        Assert.Contains("drawVertices[index].Color = ConvertColorToAbgr(*colorOverride)", source, StringComparison.Ordinal);
+        Assert.Contains("atlasPixels[(sampleY * atlasWidth) + sampleX]", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("cacheEntry.Color);\n                        BlendAbgrPixel", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures the PSP boot host supports a local startup-scene override file for packaged runtime diagnostics.
     /// </summary>
     [Fact]

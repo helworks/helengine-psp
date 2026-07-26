@@ -276,20 +276,7 @@ namespace helengine::psp::rendering {
         }
 
         TextGeometryCacheEntry& cacheEntry = GetOrBuildTextGeometryCacheEntry(text);
-        if (cacheEntry.UsesStaticSurface && cacheEntry.StaticSurfaceTexture != nullptr) {
-            DrawTexturedQuad(
-                cacheEntry.StaticSurfaceTexture,
-                text->get_Parent()->get_Position(),
-                cacheEntry.StaticSurfaceSize,
-                cacheEntry.StaticSurfaceSourceRect,
-                byte4(255, 255, 255, 255));
-        } else if (!cacheEntry.Vertices.empty()) {
-            DrawTexturedTrianglesTranslated(
-                cacheEntry.Vertices.data(),
-                cacheEntry.Vertices.size(),
-                cacheEntry.Texture,
-                text->get_Parent()->get_Position());
-        }
+        DrawTextEffectPasses(text, cacheEntry);
 
         PspRenderProfiler::Record2DText(
             cacheEntry.GlyphCount,
@@ -1038,11 +1025,8 @@ namespace helengine::psp::rendering {
                             sourceLeft + sourceSampleOffsetX,
                             0,
                             static_cast<int32_t>(atlasWidth - 1));
-                        std::uint32_t tintedPixel = MultiplyAbgrColor(
-                            atlasPixels[(sampleY * atlasWidth) + sampleX],
-                            cacheEntry.Color);
                         BlendAbgrPixel(
-                            tintedPixel,
+                            atlasPixels[(sampleY * atlasWidth) + sampleX],
                             surfacePixels[(targetY * textureWidth) + targetX]);
                     }
                 }
@@ -1260,7 +1244,7 @@ namespace helengine::psp::rendering {
     }
 
     /// Draws one textured 2D triangle list after applying one world-space offset to cached local vertices.
-    void PspRenderManager2D::DrawTexturedTrianglesTranslated(const Psp2DVertex* vertices, std::size_t vertexCount, RuntimeTexture* texture, const float3& positionOffset) {
+    void PspRenderManager2D::DrawTexturedTrianglesTranslated(const Psp2DVertex* vertices, std::size_t vertexCount, RuntimeTexture* texture, const float3& positionOffset, const byte4* colorOverride) {
         const std::uint64_t drawStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         if (vertices == nullptr || vertexCount < 3 || texture == nullptr) {
             return;
@@ -1283,6 +1267,9 @@ namespace helengine::psp::rendering {
             drawVertices[index].X += positionOffset.X;
             drawVertices[index].Y += positionOffset.Y;
             drawVertices[index].Z += positionOffset.Z;
+            if (colorOverride != nullptr) {
+                drawVertices[index].Color = ConvertColorToAbgr(*colorOverride);
+            }
         }
 
         const std::uint64_t drawArrayStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
@@ -1298,6 +1285,49 @@ namespace helengine::psp::rendering {
             vertexCount,
             PspRenderProfiler::GetTimestampMicroseconds() - drawStartMicroseconds,
             drawArrayMicroseconds);
+    }
+
+    /// Draws the shared shadow, cardinal-outline, and main-glyph pass sequence for one text drawable.
+    void PspRenderManager2D::DrawTextEffectPasses(ITextDrawable2D* text, const TextGeometryCacheEntry& cacheEntry) {
+        const float3 textPosition = text->get_Parent()->get_Position();
+        const float2 shadowOffset = text->get_ShadowOffset();
+        if (shadowOffset.X != 0.0f || shadowOffset.Y != 0.0f) {
+            DrawTextEffectPass(cacheEntry, textPosition, shadowOffset, text->get_ShadowColor());
+        }
+
+        const float outlineScale = text->get_OutlineScale();
+        if (outlineScale > 0.0f) {
+            const byte4 outlineColor = text->get_OutlineColor();
+            DrawTextEffectPass(cacheEntry, textPosition, float2(-outlineScale, 0.0f), outlineColor);
+            DrawTextEffectPass(cacheEntry, textPosition, float2(outlineScale, 0.0f), outlineColor);
+            DrawTextEffectPass(cacheEntry, textPosition, float2(0.0f, -outlineScale), outlineColor);
+            DrawTextEffectPass(cacheEntry, textPosition, float2(0.0f, outlineScale), outlineColor);
+        }
+
+        DrawTextEffectPass(cacheEntry, textPosition, float2(0.0f, 0.0f), text->get_Color());
+    }
+
+    /// Draws one text effect pass with its authored offset and color through the PSP fixed-function textured path.
+    void PspRenderManager2D::DrawTextEffectPass(const TextGeometryCacheEntry& cacheEntry, const float3& textPosition, const float2& effectOffset, const byte4& color) {
+        const float3 effectPosition(
+            textPosition.X + effectOffset.X,
+            textPosition.Y + effectOffset.Y,
+            textPosition.Z);
+        if (cacheEntry.UsesStaticSurface && cacheEntry.StaticSurfaceTexture != nullptr) {
+            DrawTexturedQuad(
+                cacheEntry.StaticSurfaceTexture,
+                effectPosition,
+                cacheEntry.StaticSurfaceSize,
+                cacheEntry.StaticSurfaceSourceRect,
+                color);
+        } else if (!cacheEntry.Vertices.empty()) {
+            DrawTexturedTrianglesTranslated(
+                cacheEntry.Vertices.data(),
+                cacheEntry.Vertices.size(),
+                cacheEntry.Texture,
+                effectPosition,
+                &color);
+        }
     }
 
     /// Resolves one drawable's nested clip regions into one effective rectangle in screen coordinates.

@@ -273,7 +273,14 @@ namespace helengine::psp::rendering {
         void DrawTexturedTriangles(const Psp2DVertex* vertices, std::size_t vertexCount, RuntimeTexture* texture);
 
         /// Draws one textured 2D triangle list using the PSP GU textured vertex path after applying one world-space offset.
-        void DrawTexturedTrianglesTranslated(const Psp2DVertex* vertices, std::size_t vertexCount, RuntimeTexture* texture, const float3& positionOffset);
+        /// <param name="colorOverride">Optional packed color applied to every submitted vertex instead of its cached color.</param>
+        void DrawTexturedTrianglesTranslated(const Psp2DVertex* vertices, std::size_t vertexCount, RuntimeTexture* texture, const float3& positionOffset, const byte4* colorOverride);
+
+        /// Draws the shared shadow, cardinal-outline, and main-glyph pass sequence for one text drawable.
+        void DrawTextEffectPasses(ITextDrawable2D* text, const TextGeometryCacheEntry& cacheEntry);
+
+        /// Draws one text effect pass with its authored offset and color through the PSP fixed-function textured path.
+        void DrawTextEffectPass(const TextGeometryCacheEntry& cacheEntry, const float3& textPosition, const float2& effectOffset, const byte4& color);
 
         /// Resolves the authored clip-region stack for one drawable into one effective screen-space clip rectangle.
         bool TryResolveClipRect(IDrawable2D* drawable, float4& clipRect);
