@@ -217,6 +217,26 @@ namespace helengine.psp.builder.tests {
             Assert.Contains("sceGuScissor(0, 0, mainWindowSize.X, mainWindowSize.Y);", sourceContents, StringComparison.Ordinal);
         }
 
+        /// <summary>
+        /// Ensures PSP 3D applies cooked material double-sidedness instead of disabling back-face culling for every mesh.
+        /// </summary>
+        [Fact]
+        public void Source_AppliesCookedMaterialDoubleSidednessToGuCulling() {
+            string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+            string renderSourcePath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRenderManager3D.cpp");
+            string materialHeaderPath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRuntimeMaterial.hpp");
+            string materialSourcePath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRuntimeMaterial.cpp");
+            string renderSource = File.ReadAllText(renderSourcePath);
+            string materialHeader = File.ReadAllText(materialHeaderPath);
+            string materialSource = File.ReadAllText(materialSourcePath);
+
+            Assert.Contains("bool IsDoubleSided() const;", materialHeader, StringComparison.Ordinal);
+            Assert.Contains("DoubleSided = materialAsset->DoubleSided;", materialSource, StringComparison.Ordinal);
+            Assert.Contains("sceGuEnable(GU_CULL_FACE);", renderSource, StringComparison.Ordinal);
+            Assert.Contains("sceGuDisable(GU_CULL_FACE);", renderSource, StringComparison.Ordinal);
+            Assert.Contains("pspRuntimeMaterial->IsDoubleSided()", renderSource, StringComparison.Ordinal);
+        }
+
         /// Ensures PSP GU matrix uploads preserve the generated row-major field order in the native upload buffer.
         /// </summary>
         [Fact]

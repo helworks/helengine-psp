@@ -23,5 +23,22 @@ namespace helengine.psp.builder.tests {
             Assert.DoesNotContain("Array<InputGamepadState>* gamepads = new Array<InputGamepadState>(1);", sourceContents, StringComparison.Ordinal);
             Assert.Contains("ActiveGamepadBufferIndex = (ActiveGamepadBufferIndex + 1) % 2;", sourceContents, StringComparison.Ordinal);
         }
+
+        /// <summary>
+        /// Ensures PSP shoulder inputs retain their physical engine shoulder identities for platform-specific camera handling.
+        /// </summary>
+        [Fact]
+        public void Source_CaptureFrame_preservesLeftAndRightShoulderActions() {
+            string sourcePath = Path.Combine(
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+                "src",
+                "platform",
+                "psp",
+                "PspInputBackend.cpp");
+            string sourceContents = File.ReadAllText(sourcePath);
+
+            Assert.Contains("InputGamepadButton::LeftShoulder, (padData.Buttons & PSP_CTRL_LTRIGGER)", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("InputGamepadButton::RightShoulder, (padData.Buttons & PSP_CTRL_RTRIGGER)", sourceContents, StringComparison.Ordinal);
+        }
     }
 }

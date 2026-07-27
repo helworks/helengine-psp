@@ -21,6 +21,9 @@ namespace helengine::psp::rendering {
         /// Gets whether the material receives scene lighting.
         bool GetReceivesLighting() const;
 
+        /// Gets whether the material should render both triangle winding directions.
+        bool IsDoubleSided() const;
+
         /// Gets the PSP lighting-response mode.
         PspMaterialLightingResponse GetLightingResponse() const;
 
@@ -48,6 +51,12 @@ namespace helengine::psp::rendering {
 
         /// Stores whether the material receives scene lighting.
         bool ReceivesLighting;
+
+        /// Stores whether one cooked material explicitly authored double-sided rendering.
+        bool DoubleSided;
+
+        /// Stores whether one cooked material explicitly authored the double-sided setting.
+        bool HasAuthoredDoubleSided;
 
         /// Stores whether one cooked lighting buffer explicitly authored the local lighting configuration.
         bool HasAuthoredLightingConfiguration;

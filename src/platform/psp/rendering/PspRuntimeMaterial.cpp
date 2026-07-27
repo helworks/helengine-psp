@@ -8,6 +8,8 @@ namespace helengine::psp::rendering {
         : BaseColor(1.0f, 1.0f, 1.0f, 1.0f),
           HasAuthoredBaseColor(false),
           ReceivesLighting(true),
+          DoubleSided(false),
+          HasAuthoredDoubleSided(false),
           HasAuthoredLightingConfiguration(false),
           LightingResponse(PspMaterialLightingResponse::LitDirectional),
           OwnedTexture(nullptr) {
@@ -39,6 +41,20 @@ namespace helengine::psp::rendering {
         }
 
         return ReceivesLighting;
+    }
+
+    /// Gets whether the material should render both triangle winding directions.
+    bool PspRuntimeMaterial::IsDoubleSided() const {
+        if (HasAuthoredDoubleSided) {
+            return DoubleSided;
+        }
+
+        const PspRuntimeMaterial* parentMaterial = GetParentPspRuntimeMaterial();
+        if (parentMaterial != nullptr) {
+            return parentMaterial->IsDoubleSided();
+        }
+
+        return DoubleSided;
     }
 
     /// Gets the PSP lighting-response mode.
@@ -96,6 +112,8 @@ namespace helengine::psp::rendering {
             static_cast<float>(materialAsset->BaseColorA) / 255.0f);
         HasAuthoredBaseColor = true;
         ReceivesLighting = materialAsset->Lit;
+        DoubleSided = materialAsset->DoubleSided;
+        HasAuthoredDoubleSided = true;
         HasAuthoredLightingConfiguration = true;
         LightingResponse = ReceivesLighting
             ? PspMaterialLightingResponse::LitDirectional

@@ -394,13 +394,29 @@ public sealed class PspPackagedRuntimeSourceTests {
             "PspBootHost.cpp");
         string source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("EngineOptions->set_PhysicsFixedStepSeconds(1.0 / 20.0);", source, StringComparison.Ordinal);
+        Assert.Contains("EngineOptions->set_PhysicsFixedStepSeconds(1.0 / 12.0);", source, StringComparison.Ordinal);
         Assert.Contains("EngineOptions->set_PhysicsMaxStepsPerUpdate(1);", source, StringComparison.Ordinal);
         Assert.Contains("#include \"BepuPhysicsWorld3D.hpp\"", source, StringComparison.Ordinal);
         Assert.Contains("#include \"BepuRuntimeComponentRegistration.hpp\"", source, StringComparison.Ordinal);
-        Assert.Contains("BepuPhysicsWorld3D::CreateWithSolveSchedule(2, 1)", source, StringComparison.Ordinal);
+        Assert.Contains("BepuPhysicsWorld3D::CreateWithSolveSchedule(1, 1)", source, StringComparison.Ordinal);
         Assert.Contains("BepuRuntimeComponentRegistration::AttachRuntimeWorld(EngineCore, physicsWorld);", source, StringComparison.Ordinal);
         Assert.Contains("BepuRuntimeComponentRegistration::RegisterSceneBinding(EngineCore);", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the PSP runtime uses one BEPU velocity iteration and skips static or sleeping body synchronization work.
+    /// </summary>
+    [Fact]
+    public void PspPhysics_uses_one_velocity_iteration_and_skips_unnecessary_sync() {
+        string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+        string bootSourcePath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "PspBootHost.cpp");
+        string worldSourcePath = Path.Combine(repositoryRootPath, "..", "helengine", "engine", "helengine.bepu", "BepuPhysicsWorld3D.cs");
+        string bootSource = File.ReadAllText(bootSourcePath);
+        string worldSource = File.ReadAllText(worldSourcePath);
+
+        Assert.Contains("BepuPhysicsWorld3D::CreateWithSolveSchedule(1, 1)", bootSource, StringComparison.Ordinal);
+        Assert.Contains("if (!handle.HasBodyHandle || handle.IsStatic)", worldSource, StringComparison.Ordinal);
+        Assert.Contains("if (handle.IsDynamic && !bodyReference.Awake)", worldSource, StringComparison.Ordinal);
     }
 
     /// <summary>

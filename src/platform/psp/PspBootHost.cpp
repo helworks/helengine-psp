@@ -427,7 +427,7 @@ namespace helengine::psp {
         EngineOptions->set_UpdateListInitialCapacity(64);
         EngineOptions->set_RenderList2DInitialCapacity(8);
         EngineOptions->set_RenderList3DInitialCapacity(64);
-        EngineOptions->set_PhysicsFixedStepSeconds(1.0 / 20.0);
+        EngineOptions->set_PhysicsFixedStepSeconds(1.0 / 12.0);
         EngineOptions->set_PhysicsMaxStepsPerUpdate(1);
 #if defined(HELENGINE_PSP_ENABLE_BOOT_TRACE) && HELENGINE_PSP_ENABLE_BOOT_TRACE
         PostSceneBindingTraceDiagnosticsProvider = new PspPhysicsUpdateStageDiagnosticsProvider();
@@ -454,7 +454,7 @@ namespace helengine::psp {
             platformInfo,
             EngineOptions);
         EngineCore->SetAudioBackend(EngineAudioBackend);
-        BepuPhysicsWorld3D* physicsWorld = BepuPhysicsWorld3D::CreateWithSolveSchedule(2, 1);
+        BepuPhysicsWorld3D* physicsWorld = BepuPhysicsWorld3D::CreateWithSolveSchedule(1, 1);
         physicsWorld->set_SceneBindingDiagnosticSink(
             new Action<std::string>([](std::string message) {
                 PspBootTrace::WriteLine(std::string("PhysicsBinding ") + message);

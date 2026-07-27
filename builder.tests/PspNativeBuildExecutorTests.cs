@@ -76,6 +76,6 @@ public sealed class PspNativeBuildExecutorTests {
 
         IReadOnlyList<string> arguments = PspNativeBuildExecutor.CreateBuildArguments(workspace);
 
-        Assert.Contains("HELENGINE_PSP_ENABLE_BOOT_TRACE=ON", arguments);
+        Assert.Contains("HELENGINE_PSP_ENABLE_BOOT_TRACE=OFF", arguments);
     }
 }

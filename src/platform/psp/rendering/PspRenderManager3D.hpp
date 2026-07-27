@@ -84,6 +84,9 @@ namespace helengine::psp::rendering {
         /// Configures the per-draw fixed-function material state for one PSP runtime material.
         void ConfigureFixedFunctionMaterial(const float4& baseColor, bool useLighting);
 
+        /// Applies PSP triangle culling for one cooked material, preserving explicitly double-sided materials.
+        void ConfigureCullMode(bool doubleSided);
+
         /// Submits one drawable through the current fixed-function untextured lighting path.
         void SubmitFixedFunctionDrawable(
             const class PspRuntimeModel* runtimeModel,

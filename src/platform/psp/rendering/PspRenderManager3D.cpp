@@ -562,6 +562,17 @@ namespace helengine::psp::rendering {
         SetLight0Enabled(CurrentLighting.HasDirectionalLight);
     }
 
+    /// Applies PSP triangle culling for one cooked material, preserving explicitly double-sided materials.
+    void PspRenderManager3D::ConfigureCullMode(bool doubleSided) {
+        if (doubleSided) {
+            sceGuDisable(GU_CULL_FACE);
+            return;
+        }
+
+        sceGuFrontFace(GU_CCW);
+        sceGuEnable(GU_CULL_FACE);
+    }
+
     /// Submits one drawable through the current fixed-function untextured lighting path.
     void PspRenderManager3D::SubmitFixedFunctionDrawable(
         const PspRuntimeModel* runtimeModel,
@@ -939,6 +950,7 @@ namespace helengine::psp::rendering {
         const bool useLighting = UsesDirectionalLighting(pspRuntimeMaterial);
         PspRuntimeTexture* texture = nullptr;
         const bool hasTexture = pspRuntimeMaterial->TryResolveTexture(texture);
+        ConfigureCullMode(pspRuntimeMaterial->IsDoubleSided());
         Component* drawableComponent = dynamic_cast<Component*>(drawable);
         const bool usesBakedScale = drawableComponent != nullptr
             && drawableComponent->GetSyntheticBooleanMemberOrDefault("MeshBakeScale", false);
