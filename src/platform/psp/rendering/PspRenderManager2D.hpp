@@ -282,6 +282,12 @@ namespace helengine::psp::rendering {
         /// Draws one text effect pass with its authored offset and color through the PSP fixed-function textured path.
         void DrawTextEffectPass(const TextGeometryCacheEntry& cacheEntry, const float3& textPosition, const float2& effectOffset, const byte4& color);
 
+        /// Snaps a text origin or effect position to the physical PSP pixel grid while preserving its draw order depth.
+        static float3 SnapTextCoordinateToPixel(const float3& coordinate);
+
+        /// Converts one positive authored outline size into a visible integral PSP pixel displacement.
+        static float SnapOutlineOffsetToPixelGrid(float offset);
+
         /// Resolves the authored clip-region stack for one drawable into one effective screen-space clip rectangle.
         bool TryResolveClipRect(IDrawable2D* drawable, float4& clipRect);
 

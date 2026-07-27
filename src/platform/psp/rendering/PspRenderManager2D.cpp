@@ -1289,7 +1289,7 @@ namespace helengine::psp::rendering {
 
     /// Draws the shared shadow, cardinal-outline, and main-glyph pass sequence for one text drawable.
     void PspRenderManager2D::DrawTextEffectPasses(ITextDrawable2D* text, const TextGeometryCacheEntry& cacheEntry) {
-        const float3 textPosition = text->get_Parent()->get_Position();
+        const float3 textPosition = SnapTextCoordinateToPixel(text->get_Parent()->get_Position());
         const float2 shadowOffset = text->get_ShadowOffset();
         if (shadowOffset.X != 0.0f || shadowOffset.Y != 0.0f) {
             DrawTextEffectPass(cacheEntry, textPosition, shadowOffset, text->get_ShadowColor());
@@ -1298,10 +1298,11 @@ namespace helengine::psp::rendering {
         const float outlineScale = text->get_OutlineScale();
         if (outlineScale > 0.0f) {
             const byte4 outlineColor = text->get_OutlineColor();
-            DrawTextEffectPass(cacheEntry, textPosition, float2(-outlineScale, 0.0f), outlineColor);
-            DrawTextEffectPass(cacheEntry, textPosition, float2(outlineScale, 0.0f), outlineColor);
-            DrawTextEffectPass(cacheEntry, textPosition, float2(0.0f, -outlineScale), outlineColor);
-            DrawTextEffectPass(cacheEntry, textPosition, float2(0.0f, outlineScale), outlineColor);
+            const float outlineOffset = SnapOutlineOffsetToPixelGrid(outlineScale);
+            DrawTextEffectPass(cacheEntry, textPosition, float2(-outlineOffset, 0.0f), outlineColor);
+            DrawTextEffectPass(cacheEntry, textPosition, float2(outlineOffset, 0.0f), outlineColor);
+            DrawTextEffectPass(cacheEntry, textPosition, float2(0.0f, -outlineOffset), outlineColor);
+            DrawTextEffectPass(cacheEntry, textPosition, float2(0.0f, outlineOffset), outlineColor);
         }
 
         DrawTextEffectPass(cacheEntry, textPosition, float2(0.0f, 0.0f), text->get_Color());
@@ -1309,10 +1310,10 @@ namespace helengine::psp::rendering {
 
     /// Draws one text effect pass with its authored offset and color through the PSP fixed-function textured path.
     void PspRenderManager2D::DrawTextEffectPass(const TextGeometryCacheEntry& cacheEntry, const float3& textPosition, const float2& effectOffset, const byte4& color) {
-        const float3 effectPosition(
+        const float3 effectPosition = SnapTextCoordinateToPixel(float3(
             textPosition.X + effectOffset.X,
             textPosition.Y + effectOffset.Y,
-            textPosition.Z);
+            textPosition.Z));
         if (cacheEntry.UsesStaticSurface && cacheEntry.StaticSurfaceTexture != nullptr) {
             DrawTexturedQuad(
                 cacheEntry.StaticSurfaceTexture,
@@ -1328,6 +1329,23 @@ namespace helengine::psp::rendering {
                 effectPosition,
                 &color);
         }
+    }
+
+    /// Snaps a text origin or effect position to the physical PSP pixel grid while preserving its draw order depth.
+    float3 PspRenderManager2D::SnapTextCoordinateToPixel(const float3& coordinate) {
+        return float3(
+            static_cast<float>(std::round(coordinate.X)),
+            static_cast<float>(std::round(coordinate.Y)),
+            coordinate.Z);
+    }
+
+    /// Converts one positive authored outline size into a visible integral PSP pixel displacement.
+    float PspRenderManager2D::SnapOutlineOffsetToPixelGrid(float offset) {
+        if (offset <= 0.0f) {
+            return 0.0f;
+        }
+
+        return std::max(1.0f, std::round(std::abs(offset)));
     }
 
     /// Resolves one drawable's nested clip regions into one effective rectangle in screen coordinates.

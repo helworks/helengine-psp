@@ -287,6 +287,27 @@ public sealed class PspPackagedRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures the fixed-function PSP text path keeps glyphs and all effect passes on the same integral pixel grid.
+    /// </summary>
+    [Fact]
+    public void PspRenderManager2D_snaps_text_effect_passes_to_the_pixel_grid() {
+        string sourcePath = Path.Combine(
+            PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+            "src",
+            "platform",
+            "psp",
+            "rendering",
+            "PspRenderManager2D.cpp");
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("SnapTextCoordinateToPixel(text->get_Parent()->get_Position())", source, StringComparison.Ordinal);
+        Assert.Contains("SnapOutlineOffsetToPixelGrid(outlineScale)", source, StringComparison.Ordinal);
+        Assert.Contains("float2(-outlineOffset, 0.0f)", source, StringComparison.Ordinal);
+        Assert.Contains("float2(outlineOffset, 0.0f)", source, StringComparison.Ordinal);
+        Assert.Contains("std::max(1.0f, std::round(std::abs(offset)))", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures the PSP boot host supports a local startup-scene override file for packaged runtime diagnostics.
     /// </summary>
     [Fact]
