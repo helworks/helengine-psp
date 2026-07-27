@@ -79,7 +79,8 @@ public sealed class PspNativeBuildExecutor : IPspNativeBuildExecutor {
             "HELENGINE_CORE_CPP_ROOT=/generated-core",
             "HELENGINE_PSP_ISOLATED_BOOT=ON",
             "HELENGINE_PSP_ENABLE_RUNTIME_STARTUP=ON",
-            "HELENGINE_PSP_ENABLE_BOOT_TRACE=ON"
+            "HELENGINE_PSP_ENABLE_BOOT_TRACE=ON",
+            "HELENGINE_PSP_ENABLE_RENDER_PROFILER=ON"
         ];
     }
 }

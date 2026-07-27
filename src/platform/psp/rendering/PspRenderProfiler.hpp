@@ -63,6 +63,9 @@ namespace helengine::psp::rendering {
         /// Records one fixed-function GU draw submission inside one 3D drawable visit.
         static void Record3DFixedFunctionDraw(std::uint64_t totalMicroseconds);
 
+        /// Records CPU-side fixed-function vertex preparation before one GU draw.
+        static void Record3DFixedFunctionVertexPreparation(int32_t vertexCount, std::uint64_t totalMicroseconds);
+
         /// Records one complete 3D drawable visit.
         static void Record3DVisit(std::uint64_t totalMicroseconds);
 
@@ -165,6 +168,12 @@ namespace helengine::psp::rendering {
 
         /// Records one fixed-function GU draw submission inside one 3D drawable visit.
         static void Record3DFixedFunctionDraw(std::uint64_t totalMicroseconds) {
+            (void)totalMicroseconds;
+        }
+
+        /// Records CPU-side fixed-function vertex preparation before one GU draw.
+        static void Record3DFixedFunctionVertexPreparation(int32_t vertexCount, std::uint64_t totalMicroseconds) {
+            (void)vertexCount;
             (void)totalMicroseconds;
         }
 

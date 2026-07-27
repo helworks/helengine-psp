@@ -46,6 +46,7 @@ namespace helengine::psp::rendering {
             MetricStat ThreeDModelMatrixLoad;
             MetricStat ThreeDFixedFunctionMaterialSetup;
             MetricStat ThreeDFixedFunctionDraw;
+            MetricStat ThreeDFixedFunctionVertexPreparation;
             MetricStat ThreeDVisit;
             MetricStat ThreeDCamera;
             MetricStat ThreeDCameraUi;
@@ -58,6 +59,7 @@ namespace helengine::psp::rendering {
             int32_t TwoDTextContentLength = 0;
             int32_t TwoDDrawableCount = 0;
             int32_t ThreeDDrawableCount = 0;
+            int32_t ThreeDFixedFunctionVertexCount = 0;
             std::uintptr_t Last2DTexturePointer = 0;
             std::uintptr_t Last3DTexturePointer = 0;
             std::vector<std::string> DetailedLines;
@@ -91,6 +93,7 @@ namespace helengine::psp::rendering {
             ResetMetric(CurrentFrame.ThreeDModelMatrixLoad);
             ResetMetric(CurrentFrame.ThreeDFixedFunctionMaterialSetup);
             ResetMetric(CurrentFrame.ThreeDFixedFunctionDraw);
+            ResetMetric(CurrentFrame.ThreeDFixedFunctionVertexPreparation);
             ResetMetric(CurrentFrame.ThreeDVisit);
             ResetMetric(CurrentFrame.ThreeDCamera);
             ResetMetric(CurrentFrame.ThreeDCameraUi);
@@ -102,6 +105,7 @@ namespace helengine::psp::rendering {
             CurrentFrame.TwoDTextContentLength = 0;
             CurrentFrame.TwoDDrawableCount = 0;
             CurrentFrame.ThreeDDrawableCount = 0;
+            CurrentFrame.ThreeDFixedFunctionVertexCount = 0;
             CurrentFrame.Last2DTexturePointer = 0;
             CurrentFrame.Last3DTexturePointer = 0;
             CurrentFrame.DetailedLines.clear();
@@ -211,6 +215,8 @@ namespace helengine::psp::rendering {
                 + " " + DescribeMetric("world", CurrentFrame.ThreeDWorldMatrixBuild)
                 + " " + DescribeMetric("modelLoad", CurrentFrame.ThreeDModelMatrixLoad)
                 + " " + DescribeMetric("ffMaterial", CurrentFrame.ThreeDFixedFunctionMaterialSetup)
+                + " " + DescribeMetric("ffVertices", CurrentFrame.ThreeDFixedFunctionVertexPreparation)
+                + " ffVertexCount=" + std::to_string(CurrentFrame.ThreeDFixedFunctionVertexCount)
                 + " " + DescribeMetric("ffDraw", CurrentFrame.ThreeDFixedFunctionDraw)
                 + " " + DescribeMetric("visit", CurrentFrame.ThreeDVisit)
                 + " " + DescribeMetric("camera", CurrentFrame.ThreeDCamera)
@@ -415,6 +421,16 @@ namespace helengine::psp::rendering {
         }
 
         RecordMetric(CurrentFrame.ThreeDFixedFunctionDraw, totalMicroseconds);
+    }
+
+    /// Records CPU-side fixed-function vertex preparation before one GU draw.
+    void PspRenderProfiler::Record3DFixedFunctionVertexPreparation(int32_t vertexCount, std::uint64_t totalMicroseconds) {
+        if (!CurrentFrame.FrameActive) {
+            return;
+        }
+
+        RecordMetric(CurrentFrame.ThreeDFixedFunctionVertexPreparation, totalMicroseconds);
+        CurrentFrame.ThreeDFixedFunctionVertexCount += vertexCount;
     }
 
     /// Records one complete 3D drawable visit.

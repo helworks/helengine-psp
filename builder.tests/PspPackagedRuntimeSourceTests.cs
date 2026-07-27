@@ -394,8 +394,8 @@ public sealed class PspPackagedRuntimeSourceTests {
             "PspBootHost.cpp");
         string source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("EngineOptions->set_PhysicsFixedStepSeconds(1.0 / 30.0);", source, StringComparison.Ordinal);
-        Assert.Contains("EngineOptions->set_PhysicsMaxStepsPerUpdate(2);", source, StringComparison.Ordinal);
+        Assert.Contains("EngineOptions->set_PhysicsFixedStepSeconds(1.0 / 20.0);", source, StringComparison.Ordinal);
+        Assert.Contains("EngineOptions->set_PhysicsMaxStepsPerUpdate(1);", source, StringComparison.Ordinal);
         Assert.Contains("#include \"BepuPhysicsWorld3D.hpp\"", source, StringComparison.Ordinal);
         Assert.Contains("#include \"BepuRuntimeComponentRegistration.hpp\"", source, StringComparison.Ordinal);
         Assert.Contains("BepuPhysicsWorld3D::CreateWithSolveSchedule(2, 1)", source, StringComparison.Ordinal);

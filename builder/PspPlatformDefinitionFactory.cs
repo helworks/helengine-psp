@@ -299,6 +299,38 @@ public static class PspPlatformDefinitionFactory {
                     CreateDefaultSerializedFontAtlasTextureCookSettings(),
                     CreateTextureFormatCapabilities(),
                     ".ps2tex")
+            ],
+            componentMemberDefinitions: [
+                new PlatformComponentMemberDefinition(
+                    "helengine.MeshComponent",
+                    "MeshTessellate",
+                    "Tessellate",
+                    PlatformComponentMemberValueKind.Boolean,
+                    "false"),
+                new PlatformComponentMemberDefinition(
+                    "helengine.MeshComponent",
+                    "MeshTessellationMaxEdgeLength",
+                    "Tessellation Maximum Edge Length",
+                    PlatformComponentMemberValueKind.Single,
+                    "1"),
+                new PlatformComponentMemberDefinition(
+                    "helengine.MeshComponent",
+                    "MeshBakeScale",
+                    "Bake Scale",
+                    PlatformComponentMemberValueKind.Boolean,
+                    "false"),
+                new PlatformComponentMemberDefinition(
+                    "helengine.MeshComponent",
+                    "MeshTessellateAtCookTime",
+                    "Tessellate At Cook Time",
+                    PlatformComponentMemberValueKind.Boolean,
+                    "true"),
+                new PlatformComponentMemberDefinition(
+                    "helengine.MeshComponent",
+                    "MeshBakeScaleAtCookTime",
+                    "Bake Scale At Cook Time",
+                    PlatformComponentMemberValueKind.Boolean,
+                    "true")
             ]);
     }
 

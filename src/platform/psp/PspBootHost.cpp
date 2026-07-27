@@ -112,18 +112,59 @@ namespace helengine::psp {
 
                 IsPostSceneBindingTraceActive = true;
                 RecordedPhysicsStageCount = 0;
-                PspBootTrace::WriteLine("PhysicsUpdateStage post-scene-binding trace enabled.");
+                ObjectUpdateMicroseconds = 0;
+                PhysicsMicroseconds = 0;
+                BepuTimestepMicroseconds = 0;
+                BepuSynchronizationMicroseconds = 0;
+                AudioMicroseconds = 0;
+                FrameCount = 0;
+                PspBootTrace::WriteLine("PspPhysicsProfiler post-scene-binding capture enabled.");
             }
 
             /// Records one core update-stage transition after physics binding without adding per-frame memory-card writes after the diagnostic limit.
             void ReportUpdateStage(std::string stage) override {
-                constexpr int32_t MaximumPhysicsStageRecordCount = 512;
-                if (!IsPostSceneBindingTraceActive || RecordedPhysicsStageCount >= MaximumPhysicsStageRecordCount) {
+                if (!IsPostSceneBindingTraceActive) {
                     return;
                 }
 
-                PspBootTrace::WriteLine(std::string("PhysicsUpdateStage ") + stage);
-                RecordedPhysicsStageCount++;
+                const std::uint64_t nowMicroseconds = static_cast<std::uint64_t>(sceKernelGetSystemTimeWide());
+                if (stage == "BeforeObjectManagerUpdate") {
+                    ObjectUpdateStartMicroseconds = nowMicroseconds;
+                } else if (stage == "AfterObjectManagerUpdate") {
+                    ObjectUpdateMicroseconds += nowMicroseconds - ObjectUpdateStartMicroseconds;
+                } else if (stage == "BeforeUpdatePhysics") {
+                    PhysicsStartMicroseconds = nowMicroseconds;
+                } else if (stage == "AfterUpdatePhysics") {
+                    PhysicsMicroseconds += nowMicroseconds - PhysicsStartMicroseconds;
+                } else if (stage == "BeforeBepuTimestep") {
+                    BepuTimestepStartMicroseconds = nowMicroseconds;
+                } else if (stage == "AfterBepuTimestepBeforeSync") {
+                    BepuTimestepMicroseconds += nowMicroseconds - BepuTimestepStartMicroseconds;
+                } else if (stage == "BeforeBepuSynchronizeBodies") {
+                    BepuSynchronizationStartMicroseconds = nowMicroseconds;
+                } else if (stage == "AfterBepuSync") {
+                    BepuSynchronizationMicroseconds += nowMicroseconds - BepuSynchronizationStartMicroseconds;
+                } else if (stage == "BeforeAudioManagerUpdate") {
+                    AudioStartMicroseconds = nowMicroseconds;
+                } else if (stage == "AfterAudioManagerUpdate") {
+                    AudioMicroseconds += nowMicroseconds - AudioStartMicroseconds;
+                } else if (stage == "BeforeInputEarlyUpdate") {
+                    FrameCount++;
+                    if ((FrameCount % 30) == 0) {
+                        PspBootTrace::WriteLine(
+                            std::string("PspPhysicsProfiler frames=") + std::to_string(FrameCount)
+                            + " objectUpdateUs=" + std::to_string(ObjectUpdateMicroseconds / 30)
+                            + " physicsUs=" + std::to_string(PhysicsMicroseconds / 30)
+                            + " bepuTimestepUs=" + std::to_string(BepuTimestepMicroseconds / 30)
+                            + " bepuSyncUs=" + std::to_string(BepuSynchronizationMicroseconds / 30)
+                            + " audioUs=" + std::to_string(AudioMicroseconds / 30));
+                        ObjectUpdateMicroseconds = 0;
+                        PhysicsMicroseconds = 0;
+                        BepuTimestepMicroseconds = 0;
+                        BepuSynchronizationMicroseconds = 0;
+                        AudioMicroseconds = 0;
+                    }
+                }
             }
 
         private:
@@ -131,6 +172,17 @@ namespace helengine::psp {
             bool IsPostSceneBindingTraceActive = false;
             /// Stores the number of physics update-stage records already persisted for this runtime session.
             int32_t RecordedPhysicsStageCount = 0;
+            std::uint64_t ObjectUpdateStartMicroseconds = 0;
+            std::uint64_t PhysicsStartMicroseconds = 0;
+            std::uint64_t BepuTimestepStartMicroseconds = 0;
+            std::uint64_t BepuSynchronizationStartMicroseconds = 0;
+            std::uint64_t AudioStartMicroseconds = 0;
+            std::uint64_t ObjectUpdateMicroseconds = 0;
+            std::uint64_t PhysicsMicroseconds = 0;
+            std::uint64_t BepuTimestepMicroseconds = 0;
+            std::uint64_t BepuSynchronizationMicroseconds = 0;
+            std::uint64_t AudioMicroseconds = 0;
+            int32_t FrameCount = 0;
         };
 
         /// Stores the one diagnostics provider owned by the active PSP core so the non-capturing scene-binding callback can arm its post-binding trace.
@@ -375,10 +427,12 @@ namespace helengine::psp {
         EngineOptions->set_UpdateListInitialCapacity(64);
         EngineOptions->set_RenderList2DInitialCapacity(8);
         EngineOptions->set_RenderList3DInitialCapacity(64);
-        EngineOptions->set_PhysicsFixedStepSeconds(1.0 / 30.0);
-        EngineOptions->set_PhysicsMaxStepsPerUpdate(2);
+        EngineOptions->set_PhysicsFixedStepSeconds(1.0 / 20.0);
+        EngineOptions->set_PhysicsMaxStepsPerUpdate(1);
+#if defined(HELENGINE_PSP_ENABLE_BOOT_TRACE) && HELENGINE_PSP_ENABLE_BOOT_TRACE
         PostSceneBindingTraceDiagnosticsProvider = new PspPhysicsUpdateStageDiagnosticsProvider();
         EngineOptions->set_RuntimeDiagnosticsProvider(PostSceneBindingTraceDiagnosticsProvider);
+#endif
         EngineOptions->set_StandardPlatformInputConfiguration(BuildStandardPlatformInputConfiguration());
         PspRuntimeSceneCatalogFactory runtimeSceneCatalogFactory;
         EngineOptions->set_SceneCatalog(runtimeSceneCatalogFactory.Build());

@@ -123,6 +123,26 @@ namespace helengine.psp.builder.tests {
         }
 
         /// <summary>
+        /// Ensures PSP baked mesh variants omit entity scale at render time while retaining the normal fixed-function path for other meshes.
+        /// </summary>
+        [Fact]
+        public void Source_BakedMeshScaleUsesSyntheticMarkerAndOmitsModelScale() {
+            string sourcePath = Path.Combine(
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRenderManager3D.cpp");
+            string sourceContents = File.ReadAllText(sourcePath);
+
+            Assert.Contains("GetSyntheticBooleanMemberOrDefault(\"MeshBakeScale\", false)", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("(usesBakedScale || useScaledGpuVertices)", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("? BuildWorldMatrixWithoutScale(drawableParent)", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("runtimeModel->SetRawModelAsset(modelAsset);", sourceContents, StringComparison.Ordinal);
+        }
+
+        /// <summary>
         /// Ensures PSP camera projections honor authored clip planes instead of applying one global far-plane distance.
         /// </summary>
         [Fact]
