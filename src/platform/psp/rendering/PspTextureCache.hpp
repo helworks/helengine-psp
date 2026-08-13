@@ -16,8 +16,8 @@ namespace helengine::psp::rendering {
         /// Builds one PSP runtime texture from the cooked texture asset, reusing a cached instance when possible.
         RuntimeTexture* BuildTextureFromRaw(TextureAsset* data);
 
-        /// Releases one PSP runtime texture and removes any matching cache entry.
-        void ReleaseTexture(PspRuntimeTexture* texture);
+        /// Releases one PSP runtime texture reference and returns whether the caller must dispose the final native object.
+        bool ReleaseTexture(PspRuntimeTexture* texture);
 
         /// Deletes any PSP runtime textures that were retired earlier in the frame after the renderer reaches a safe boundary.
         void FlushReleasedTextures();
@@ -40,6 +40,9 @@ namespace helengine::psp::rendering {
 
         /// Stores cached PSP runtime textures by deterministic runtime asset id.
         std::unordered_map<std::uint64_t, PspRuntimeTexture*> CachedTextures;
+
+        /// Stores the number of active runtime owners for each cached PSP texture.
+        std::unordered_map<std::uint64_t, std::uint32_t> CachedTextureReferenceCounts;
 
         /// Stores detached PSP pixel buffers that must stay alive until the renderer reaches a safe frame boundary.
         std::vector<std::vector<std::uint32_t>> ReleasedTexturePixelBuffers;

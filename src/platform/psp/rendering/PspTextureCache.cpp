@@ -88,9 +88,11 @@ namespace helengine::psp::rendering {
         if (cacheKey != 0u) {
             auto cachedTextureIterator = CachedTextures.find(cacheKey);
             if (cachedTextureIterator != CachedTextures.end()) {
+                CachedTextureReferenceCounts[cacheKey]++;
                 PspBootTrace::WriteLine(
                     std::string("PspTextureBuildCacheHit runtimeId=") + std::to_string(cacheKey)
                     + " ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(cachedTextureIterator->second))
+                    + " references=" + std::to_string(CachedTextureReferenceCounts[cacheKey])
                     + " freeMem=" + std::to_string(sceKernelTotalFreeMemSize()));
                 return cachedTextureIterator->second;
             }
@@ -99,6 +101,7 @@ namespace helengine::psp::rendering {
         PspRuntimeTexture* runtimeTexture = CreateTexture(data);
         if (cacheKey != 0u) {
             CachedTextures.emplace(cacheKey, runtimeTexture);
+            CachedTextureReferenceCounts.emplace(cacheKey, 1u);
         }
         PspBootTrace::WriteLine(
             std::string("PspTextureBuildEnd runtimeId=") + std::to_string(cacheKey)
@@ -108,8 +111,8 @@ namespace helengine::psp::rendering {
         return runtimeTexture;
     }
 
-    /// Releases one PSP runtime texture and removes any matching cache entry.
-    void PspTextureCache::ReleaseTexture(PspRuntimeTexture* texture) {
+    /// Releases one PSP runtime texture reference and reports whether its final owner must dispose the native object.
+    bool PspTextureCache::ReleaseTexture(PspRuntimeTexture* texture) {
         if (texture == nullptr) {
             throw std::invalid_argument("PSP runtime texture release requires one texture instance.");
         }
@@ -124,6 +127,24 @@ namespace helengine::psp::rendering {
         if (cacheKey != 0u) {
             auto cachedTextureIterator = CachedTextures.find(cacheKey);
             if (cachedTextureIterator != CachedTextures.end() && cachedTextureIterator->second == texture) {
+                auto cachedTextureReferenceCountIterator = CachedTextureReferenceCounts.find(cacheKey);
+                if (cachedTextureReferenceCountIterator == CachedTextureReferenceCounts.end()
+                    || cachedTextureReferenceCountIterator->second == 0u) {
+                    throw std::runtime_error("PSP cached texture release requires one active cache reference.");
+                }
+
+                const std::uint32_t cachedTextureReferenceCount = cachedTextureReferenceCountIterator->second;
+                if (cachedTextureReferenceCount > 1u) {
+                    CachedTextureReferenceCounts[cacheKey] = cachedTextureReferenceCount - 1u;
+                    PspBootTrace::WriteLine(
+                        std::string("PspTextureReleaseRetained runtimeId=") + std::to_string(cacheKey)
+                        + " ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(texture))
+                        + " references=" + std::to_string(CachedTextureReferenceCounts[cacheKey])
+                        + " freeMem=" + std::to_string(sceKernelTotalFreeMemSize()));
+                    return false;
+                }
+
+                CachedTextureReferenceCounts.erase(cacheKey);
                 CachedTextures.erase(cachedTextureIterator);
             }
         }
@@ -132,6 +153,8 @@ namespace helengine::psp::rendering {
         if (!releasedPixels.empty()) {
             ReleasedTexturePixelBuffers.push_back(std::move(releasedPixels));
         }
+
+        return true;
     }
 
     /// Deletes any PSP runtime textures that were retired earlier in the frame after the renderer reaches a safe boundary.

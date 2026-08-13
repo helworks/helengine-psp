@@ -105,7 +105,10 @@ namespace helengine::psp::rendering {
         }
 
         ClearGeometryCaches();
-        TextureCache.ReleaseTexture(pspTexture);
+        if (!TextureCache.ReleaseTexture(pspTexture)) {
+            return;
+        }
+
         pspTexture->Dispose();
         delete pspTexture;
     }

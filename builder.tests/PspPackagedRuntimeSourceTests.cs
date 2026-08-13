@@ -112,6 +112,38 @@ public sealed class PspPackagedRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures the PSP texture cache retains one reference for each cooked-material acquisition and only retires a shared texture after its final release.
+    /// </summary>
+    [Fact]
+    public void PspTextureCache_reference_counts_shared_cooked_material_textures() {
+        string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+        string headerPath = Path.Combine(
+            repositoryRootPath,
+            "src",
+            "platform",
+            "psp",
+            "rendering",
+            "PspTextureCache.hpp");
+        string sourcePath = Path.Combine(
+            repositoryRootPath,
+            "src",
+            "platform",
+            "psp",
+            "rendering",
+            "PspTextureCache.cpp");
+        string header = File.ReadAllText(headerPath);
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("std::unordered_map<std::uint64_t, std::uint32_t> CachedTextureReferenceCounts", header, StringComparison.Ordinal);
+        Assert.Contains("CachedTextureReferenceCounts[cacheKey]++", source, StringComparison.Ordinal);
+        Assert.Contains("cachedTextureReferenceCount > 1u", source, StringComparison.Ordinal);
+        Assert.Contains("CachedTextureReferenceCounts[cacheKey] = cachedTextureReferenceCount - 1u", source, StringComparison.Ordinal);
+        Assert.Contains("CachedTextureReferenceCounts.erase(cacheKey)", source, StringComparison.Ordinal);
+        Assert.Contains("bool ReleaseTexture(PspRuntimeTexture* texture);", header, StringComparison.Ordinal);
+        Assert.Contains("bool PspTextureCache::ReleaseTexture(PspRuntimeTexture* texture)", source, StringComparison.Ordinal);
+        Assert.Contains("return false;", source, StringComparison.Ordinal);
+    }
+    /// <summary>
     /// Ensures the PSP CMake entrypoint accepts both the legacy amalgamated file and the current unity file names.
     /// </summary>
     [Fact]
@@ -655,7 +687,7 @@ public sealed class PspPackagedRuntimeSourceTests {
     }
 
     /// <summary>
-    /// Ensures PSP 2D texture release owns the full runtime-texture lifetime instead of leaking scene-owned sprite textures between scene swaps.
+    /// Ensures PSP 2D texture release only disposes and deletes a cached texture after its final owner releases it.
     /// </summary>
     [Fact]
     public void PspRenderManager2D_release_texture_disposes_and_deletes_runtime_textures() {
@@ -668,7 +700,7 @@ public sealed class PspPackagedRuntimeSourceTests {
             "PspRenderManager2D.cpp");
         string source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("TextureCache.ReleaseTexture(pspTexture);", source, StringComparison.Ordinal);
+        Assert.Contains("if (!TextureCache.ReleaseTexture(pspTexture)) {", source, StringComparison.Ordinal);
         Assert.Contains("pspTexture->Dispose();", source, StringComparison.Ordinal);
         Assert.Contains("delete pspTexture;", source, StringComparison.Ordinal);
     }
