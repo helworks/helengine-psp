@@ -31,6 +31,12 @@ namespace helengine::psp::rendering {
         /// Assigns the GU-facing texture buffer width used as the native row stride.
         void SetTextureBufferWidth(std::uint16_t textureBufferWidth);
 
+        /// Gets the power-of-two GU image height while inherited Height remains the authored UV extent.
+        std::uint16_t GetTextureImageHeight() const;
+
+        /// Assigns the power-of-two GU image height used for texture upload and binding.
+        void SetTextureImageHeight(std::uint16_t textureImageHeight);
+
         /// Replaces the owned ABGR8888 pixel buffer.
         void SetPixelsAbgr8888(std::vector<std::uint32_t>&& pixels);
 
@@ -49,6 +55,9 @@ namespace helengine::psp::rendering {
 
         /// Stores the GU-facing texture buffer width used as the native row stride.
         std::uint16_t TextureBufferWidth = 0u;
+
+        /// Stores the GU-facing power-of-two image height while inherited Height remains the authored UV extent.
+        std::uint16_t TextureImageHeight = 0u;
 
         /// Stores the deterministic runtime asset id for cache reuse.
         std::uint64_t RuntimeAssetId = 0u;

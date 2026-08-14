@@ -47,6 +47,16 @@ namespace helengine::psp::rendering {
         TextureBufferWidth = textureBufferWidth;
     }
 
+    /// Gets the power-of-two GU image height while inherited Height remains the authored UV extent.
+    std::uint16_t PspRuntimeTexture::GetTextureImageHeight() const {
+        return TextureImageHeight;
+    }
+
+    /// Assigns the power-of-two GU image height used for texture upload and binding.
+    void PspRuntimeTexture::SetTextureImageHeight(std::uint16_t textureImageHeight) {
+        TextureImageHeight = textureImageHeight;
+    }
+
     /// Replaces the owned ABGR8888 pixel buffer.
     void PspRuntimeTexture::SetPixelsAbgr8888(std::vector<std::uint32_t>&& pixels) {
         PixelsAbgr8888 = std::move(pixels);

@@ -225,6 +225,29 @@ public sealed class PspPackagedRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures the PSP runtime keeps authored dimensions for UVs while allocating a full power-of-two GU texture image.
+    /// </summary>
+    [Fact]
+    public void PspTextureCache_pads_runtime_textures_to_power_of_two_gu_images() {
+        string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+        string runtimeTextureHeaderPath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRuntimeTexture.hpp");
+        string textureCacheSourcePath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspTextureCache.cpp");
+        string renderManager2DPath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRenderManager2D.cpp");
+        string renderManager3DPath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRenderManager3D.cpp");
+
+        string runtimeTextureHeader = File.ReadAllText(runtimeTextureHeaderPath);
+        string textureCacheSource = File.ReadAllText(textureCacheSourcePath);
+        string renderManager2DSource = File.ReadAllText(renderManager2DPath);
+        string renderManager3DSource = File.ReadAllText(renderManager3DPath);
+
+        Assert.Contains("std::uint16_t GetTextureImageHeight() const;", runtimeTextureHeader, StringComparison.Ordinal);
+        Assert.Contains("void SetTextureImageHeight(std::uint16_t textureImageHeight);", runtimeTextureHeader, StringComparison.Ordinal);
+        Assert.Contains("runtimeTexture->SetTextureImageHeight", textureCacheSource, StringComparison.Ordinal);
+        Assert.Contains("textureImageHeight", textureCacheSource, StringComparison.Ordinal);
+        Assert.Contains("texture->GetTextureImageHeight()", renderManager2DSource, StringComparison.Ordinal);
+        Assert.Contains("texture->GetTextureImageHeight()", renderManager3DSource, StringComparison.Ordinal);
+    }
+    /// <summary>
     /// Ensures the PSP 2D and 3D renderers bind GU textures using the padded buffer width instead of the authored NPOT asset width as the row stride.
     /// </summary>
     [Fact]

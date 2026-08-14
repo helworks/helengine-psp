@@ -167,7 +167,7 @@ namespace helengine::psp::rendering {
 
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-        sceGuTexImage(0, texture->get_Width(), texture->get_Height(), texture->GetTextureBufferWidth(), texture->GetPixelsAbgr8888());
+        sceGuTexImage(0, texture->GetTextureBufferWidth(), texture->GetTextureImageHeight(), texture->GetTextureBufferWidth(), texture->GetPixelsAbgr8888());
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
