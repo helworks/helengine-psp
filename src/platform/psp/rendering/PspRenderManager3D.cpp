@@ -243,7 +243,7 @@ namespace helengine::psp::rendering {
             float4x4::CreateScale__out3(scale.X, scale.Y, scale.Z, size);
 
             float4x4 rotationScale;
-            float4x4::Multiply__ref0_ref1_out2(rotation, size, rotationScale);
+            float4x4::Multiply__ref0_ref1_out2(size, rotation, rotationScale);
 
             float4x4 translation;
             float4x4::CreateTranslation__ref0_out1(position, translation);

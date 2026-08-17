@@ -143,6 +143,23 @@ namespace helengine.psp.builder.tests {
         }
 
         /// <summary>
+        /// Ensures unbaked PSP mesh transforms compose scale before rotation, matching the engine row-vector transform convention.
+        /// </summary>
+        [Fact]
+        public void Source_UnbakedWorldMatrixComposesScaleBeforeRotation() {
+            string sourcePath = Path.Combine(
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRenderManager3D.cpp");
+            string sourceContents = File.ReadAllText(sourcePath);
+
+            Assert.Contains("float4x4::Multiply__ref0_ref1_out2(size, rotation, rotationScale);", sourceContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("float4x4::Multiply__ref0_ref1_out2(rotation, size, rotationScale);", sourceContents, StringComparison.Ordinal);
+        }
+        /// <summary>
         /// Ensures PSP camera projections honor authored clip planes instead of applying one global far-plane distance.
         /// </summary>
         [Fact]
