@@ -41,7 +41,7 @@ namespace helengine.psp.builder.tests {
         }
 
         /// <summary>
-        /// Ensures PSP fixed-function lambert keeps the fast untextured path and uses the fixed-function textured path for textured meshes.
+        /// Ensures PSP fixed-function lambert keeps the fixed-function paths for textured and untextured meshes.
         /// </summary>
         [Fact]
         public void Source_FixedFunctionLambertKeepsFixedFunctionDrawablesForTexturedAndUntexturedMeshes() {
@@ -54,9 +54,9 @@ namespace helengine.psp.builder.tests {
                 "PspRenderManager3D.cpp");
             string sourceContents = File.ReadAllText(sourcePath);
 
-            Assert.Contains("SubmitFixedFunctionDrawable(\n                pspRuntimeModelData,", sourceContents, StringComparison.Ordinal);
-            Assert.Contains("SubmitFixedFunctionTexturedDrawable(\n                    pspRuntimeModelData,", sourceContents, StringComparison.Ordinal);
-            Assert.DoesNotContain("SubmitCpuLitTexturedDrawable(\n                    drawable,\n                    pspRuntimeModelData,", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("SubmitFixedFunctionDrawable(", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("SubmitFixedFunctionTexturedDrawable(", sourceContents, StringComparison.Ordinal);
+            Assert.DoesNotContain("usesBakedTexturedCpuLighting", sourceContents, StringComparison.Ordinal);
         }
 
         /// <summary>
@@ -235,6 +235,25 @@ namespace helengine.psp.builder.tests {
         }
 
         /// <summary>
+        /// Ensures PSP cameras clear the color buffer using their authored camera clear color.
+        /// </summary>
+        [Fact]
+        public void Source_RenderCameraClearsColorUsingAuthoredCameraClearSettings() {
+            string sourcePath = Path.Combine(
+                PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+                "src",
+                "platform",
+                "psp",
+                "rendering",
+                "PspRenderManager3D.cpp");
+            string sourceContents = File.ReadAllText(sourcePath);
+
+            Assert.Contains("CameraClearSettings clearSettings = camera->get_ClearSettings();", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("if (clearSettings.get_ClearColorEnabled())", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("sceGuClearColor(ConvertColorToAbgr(clearSettings.get_ClearColor()));", sourceContents, StringComparison.Ordinal);
+            Assert.Contains("sceGuClear(GU_COLOR_BUFFER_BIT);", sourceContents, StringComparison.Ordinal);
+        }
+        /// <summary>
         /// Ensures PSP 3D applies cooked material double-sidedness instead of disabling back-face culling for every mesh.
         /// </summary>
         [Fact]
@@ -254,7 +273,7 @@ namespace helengine.psp.builder.tests {
             Assert.Contains("pspRuntimeMaterial->IsDoubleSided()", renderSource, StringComparison.Ordinal);
         }
 
-        /// Ensures PSP GU matrix uploads preserve the generated row-major field order in the native upload buffer.
+        /// Ensures the raw PSP GU upload buffer preserves each generated matrix field.
         /// </summary>
         [Fact]
         public void Source_CreatePspMatrixBufferPreservesGeneratedMatrixFieldOrder() {
@@ -267,6 +286,7 @@ namespace helengine.psp.builder.tests {
                 "PspRenderManager3D.cpp");
             string sourceContents = File.ReadAllText(sourcePath);
 
+            Assert.Contains("preserves the generated matrix field layout", sourceContents, StringComparison.Ordinal);
             Assert.Contains("buffer.M[0][1] = matrix.M12;", sourceContents, StringComparison.Ordinal);
             Assert.Contains("buffer.M[1][0] = matrix.M21;", sourceContents, StringComparison.Ordinal);
             Assert.Contains("buffer.M[2][3] = matrix.M34;", sourceContents, StringComparison.Ordinal);

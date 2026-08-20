@@ -67,7 +67,7 @@ namespace helengine::psp::rendering {
                 && modelId != "00000000-0000-0000-0000-000000000000";
         }
 
-        /// Copies one generated matrix into the PSP upload buffer without reordering fields.
+        /// Copies one generated matrix into the raw PSP GU upload buffer and preserves the generated matrix field layout.
         PspMatrixBuffer CreatePspMatrixBuffer(const float4x4& matrix) {
             PspMatrixBuffer buffer {};
             buffer.M[0][0] = matrix.M11;
@@ -495,7 +495,7 @@ namespace helengine::psp::rendering {
             sceGuTexProjMapMode(GU_UV);
             sceGuTexScale(1.0f, 1.0f);
             sceGuTexOffset(0.0f, 0.0f);
-            sceGuTexImage(0, texture->get_Width(), texture->get_Height(), texture->GetTextureBufferWidth(), texture->GetPixelsAbgr8888());
+            sceGuTexImage(0, texture->GetTextureBufferWidth(), texture->GetTextureImageHeight(), texture->GetTextureBufferWidth(), texture->GetPixelsAbgr8888());
             sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
             sceGuTexFilter(GU_NEAREST, GU_NEAREST);
             sceGuTexWrap(GU_REPEAT, GU_REPEAT);
@@ -1114,6 +1114,13 @@ namespace helengine::psp::rendering {
         sceGuEnable(GU_DEPTH_TEST);
         sceGuEnable(GU_SCISSOR_TEST);
         sceGuScissor(0, 0, mainWindowSize.X, mainWindowSize.Y);
+
+        CameraClearSettings clearSettings = camera->get_ClearSettings();
+        if (clearSettings.get_ClearColorEnabled()) {
+            sceGuClearColor(ConvertColorToAbgr(clearSettings.get_ClearColor()));
+            sceGuClear(GU_COLOR_BUFFER_BIT);
+        }
+
         sceGuEnable(GU_CLIP_PLANES);
         sceGuDisable(GU_CULL_FACE);
 

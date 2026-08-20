@@ -5,6 +5,23 @@ namespace helengine.psp.builder.tests;
 /// </summary>
 public sealed class PspPackagedRuntimeSourceTests {
     /// <summary>
+    /// Ensures the PSP boot host matches the read-only loaded-scene collection returned by the generated engine API.
+    /// </summary>
+    [Fact]
+    public void PspBootHost_uses_the_generated_read_only_loaded_scene_collection_type() {
+        string sourcePath = Path.Combine(
+            PspRepositoryPathResolver.ResolveRepositoryRootPath(),
+            "src",
+            "platform",
+            "psp",
+            "PspBootHost.cpp");
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Equal(3, CountOccurrences(source, "IReadOnlyList<LoadedSceneRecord*>* loadedScenes"));
+        Assert.DoesNotContain("        List<LoadedSceneRecord*>* loadedScenes", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures the PSP homebrew runtime reads packaged content through its explicit memory-card stream source instead of the pruned host file system runtime feature.
     /// </summary>
     [Fact]
@@ -27,6 +44,17 @@ public sealed class PspPackagedRuntimeSourceTests {
         Assert.Contains("::Stream* OpenRead(std::string assetPath) override;", contentStreamSourceHeader, StringComparison.Ordinal);
         Assert.Contains("new FileStream(ResolvePhysicalPath(assetPath), FileMode::Open, FileAccess::Read, FileShare::Read)", contentStreamSource, StringComparison.Ordinal);
         Assert.Contains("src/platform/psp/PspMemoryCardContentStreamSource.cpp", cmakeSource, StringComparison.Ordinal);
+    }
+
+    static int CountOccurrences(string source, string value) {
+        int count = 0;
+        int offset = 0;
+        while ((offset = source.IndexOf(value, offset, StringComparison.Ordinal)) >= 0) {
+            count++;
+            offset += value.Length;
+        }
+
+        return count;
     }
 
     /// <summary>
@@ -224,6 +252,29 @@ public sealed class PspPackagedRuntimeSourceTests {
         Assert.Contains("CopyPixelsToPaddedBufferWidth", textureCacheSource, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ensures the PSP runtime keeps authored dimensions for UVs while allocating a full power-of-two GU texture image.
+    /// </summary>
+    [Fact]
+    public void PspTextureCache_pads_runtime_textures_to_power_of_two_gu_images() {
+        string repositoryRootPath = PspRepositoryPathResolver.ResolveRepositoryRootPath();
+        string runtimeTextureHeaderPath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRuntimeTexture.hpp");
+        string textureCacheSourcePath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspTextureCache.cpp");
+        string renderManager2DPath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRenderManager2D.cpp");
+        string renderManager3DPath = Path.Combine(repositoryRootPath, "src", "platform", "psp", "rendering", "PspRenderManager3D.cpp");
+
+        string runtimeTextureHeader = File.ReadAllText(runtimeTextureHeaderPath);
+        string textureCacheSource = File.ReadAllText(textureCacheSourcePath);
+        string renderManager2DSource = File.ReadAllText(renderManager2DPath);
+        string renderManager3DSource = File.ReadAllText(renderManager3DPath);
+
+        Assert.Contains("std::uint16_t GetTextureImageHeight() const;", runtimeTextureHeader, StringComparison.Ordinal);
+        Assert.Contains("void SetTextureImageHeight(std::uint16_t textureImageHeight);", runtimeTextureHeader, StringComparison.Ordinal);
+        Assert.Contains("runtimeTexture->SetTextureImageHeight", textureCacheSource, StringComparison.Ordinal);
+        Assert.Contains("textureImageHeight", textureCacheSource, StringComparison.Ordinal);
+        Assert.Contains("texture->GetTextureImageHeight()", renderManager2DSource, StringComparison.Ordinal);
+        Assert.Contains("texture->GetTextureImageHeight()", renderManager3DSource, StringComparison.Ordinal);
+    }
     /// <summary>
     /// Ensures the PSP 2D and 3D renderers bind GU textures using the padded buffer width instead of the authored NPOT asset width as the row stride.
     /// </summary>

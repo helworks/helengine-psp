@@ -40,24 +40,42 @@ namespace helengine::psp::rendering {
 
             return static_cast<std::uint16_t>(paddedWidth);
         }
+        /// Calculates the power-of-two GU image height required for one authored texture height.
+        std::uint16_t CalculatePaddedTextureImageHeight(int32_t height) {
+            if (height <= 0) {
+                throw std::runtime_error("PSP runtime texture height must be positive.");
+            }
 
-        /// Copies one authored pixel buffer into a padded GU row-stride buffer while preserving authored width and height for UV calculations.
-        std::vector<std::uint32_t> CopyPixelsToPaddedBufferWidth(std::vector<std::uint32_t>&& sourcePixels, int32_t width, int32_t height, std::uint16_t textureBufferWidth) {
+            std::uint32_t paddedHeight = 1u;
+            while (paddedHeight < static_cast<std::uint32_t>(height)) {
+                paddedHeight <<= 1u;
+            }
+
+            if (paddedHeight > 512u) {
+                throw std::runtime_error("PSP runtime texture height exceeded the GU maximum texture span.");
+            }
+
+            return static_cast<std::uint16_t>(paddedHeight);
+        }
+        /// Copies one authored pixel buffer into a power-of-two GU image while preserving authored width and height for UV calculations.
+        std::vector<std::uint32_t> CopyPixelsToPaddedBufferWidth(std::vector<std::uint32_t>&& sourcePixels, int32_t width, int32_t height, std::uint16_t textureBufferWidth, std::uint16_t textureImageHeight) {
             if (width <= 0 || height <= 0) {
                 throw std::runtime_error("PSP runtime texture dimensions must be positive.");
             } else if (textureBufferWidth < width) {
                 throw std::runtime_error("PSP runtime texture buffer width cannot be narrower than the authored texture width.");
+            } else if (textureImageHeight < height) {
+                throw std::runtime_error("PSP runtime texture image height cannot be shorter than the authored texture height.");
             }
 
             const std::size_t sourcePixelCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
             if (sourcePixels.size() != sourcePixelCount) {
                 throw std::runtime_error("PSP runtime texture source pixel count did not match the authored dimensions.");
-            } else if (textureBufferWidth == static_cast<std::uint16_t>(width)) {
+            } else if (textureBufferWidth == static_cast<std::uint16_t>(width) && textureImageHeight == static_cast<std::uint16_t>(height)) {
                 return std::move(sourcePixels);
             }
 
             std::vector<std::uint32_t> paddedPixels(
-                static_cast<std::size_t>(textureBufferWidth) * static_cast<std::size_t>(height),
+                static_cast<std::size_t>(textureBufferWidth) * static_cast<std::size_t>(textureImageHeight),
                 0u);
             for (int32_t rowIndex = 0; rowIndex < height; rowIndex++) {
                 const std::size_t sourceOffset = static_cast<std::size_t>(rowIndex) * static_cast<std::size_t>(width);
@@ -202,12 +220,14 @@ namespace helengine::psp::rendering {
         runtimeTexture->set_Width(data->Width);
         runtimeTexture->set_Height(data->Height);
         runtimeTexture->SetTextureBufferWidth(CalculatePaddedTextureBufferWidth(data->Width));
+        runtimeTexture->SetTextureImageHeight(CalculatePaddedTextureImageHeight(data->Height));
         std::vector<std::uint32_t> pixelsAbgr8888 = ConvertTextureToAbgr8888(data);
         runtimeTexture->SetPixelsAbgr8888(CopyPixelsToPaddedBufferWidth(
             std::move(pixelsAbgr8888),
             data->Width,
             data->Height,
-            runtimeTexture->GetTextureBufferWidth()));
+            runtimeTexture->GetTextureBufferWidth(),
+            runtimeTexture->GetTextureImageHeight()));
         PspBootTrace::WriteLine(
             std::string("PspTextureCreateReady ptr=")
             + std::to_string(reinterpret_cast<std::uintptr_t>(runtimeTexture))

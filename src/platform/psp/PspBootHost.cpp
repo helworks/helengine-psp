@@ -572,12 +572,12 @@ namespace helengine::psp {
             return std::string();
         }
 
-        List<LoadedSceneRecord*>* loadedScenes = EngineCore->get_SceneManager()->get_LoadedScenes();
-        if (loadedScenes == nullptr || loadedScenes->get_Count() <= 0 || (*loadedScenes)[0] == nullptr) {
+        IReadOnlyList<LoadedSceneRecord*>* loadedScenes = EngineCore->get_SceneManager()->get_LoadedScenes();
+        if (loadedScenes == nullptr || loadedScenes->get_Count() <= 0 || loadedScenes->get_Item(0) == nullptr) {
             return std::string();
         }
 
-        return (*loadedScenes)[0]->get_SceneId();
+        return loadedScenes->get_Item(0)->get_SceneId();
     }
 
     /// Returns the current runtime loaded-scene count.
@@ -586,7 +586,7 @@ namespace helengine::psp {
             return 0;
         }
 
-        List<LoadedSceneRecord*>* loadedScenes = EngineCore->get_SceneManager()->get_LoadedScenes();
+        IReadOnlyList<LoadedSceneRecord*>* loadedScenes = EngineCore->get_SceneManager()->get_LoadedScenes();
         if (loadedScenes == nullptr) {
             return 0;
         }
@@ -677,11 +677,11 @@ namespace helengine::psp {
 
             SceneManager* sceneManager = EngineCore->get_SceneManager();
             if (sceneManager != nullptr) {
-                List<LoadedSceneRecord*>* loadedScenes = sceneManager->get_LoadedScenes();
+                IReadOnlyList<LoadedSceneRecord*>* loadedScenes = sceneManager->get_LoadedScenes();
                 const int32_t loadedSceneCount = loadedScenes != nullptr ? loadedScenes->get_Count() : 0;
                 std::string primarySceneId;
-                if (loadedScenes != nullptr && loadedSceneCount > 0 && (*loadedScenes)[0] != nullptr) {
-                    primarySceneId = (*loadedScenes)[0]->get_SceneId();
+                if (loadedScenes != nullptr && loadedSceneCount > 0 && loadedScenes->get_Item(0) != nullptr) {
+                    primarySceneId = loadedScenes->get_Item(0)->get_SceneId();
                 }
                 const int32_t entityCount = EngineCore->get_ObjectManager() != nullptr && EngineCore->get_ObjectManager()->get_Entities() != nullptr
                     ? EngineCore->get_ObjectManager()->get_Entities()->get_Count()
