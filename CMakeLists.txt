@@ -113,11 +113,16 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     pspctrl
 )
 
+# Editor-authored EBOOT title; the default keeps the previous hardcoded value.
+if(NOT DEFINED HELENGINE_PSP_GAME_TITLE OR HELENGINE_PSP_GAME_TITLE STREQUAL "")
+    set(HELENGINE_PSP_GAME_TITLE "Helengine PSP")
+endif()
+
 create_pbp_file(
     TARGET ${PROJECT_NAME}
     ICON_PATH NULL
     BACKGROUND_PATH NULL
     PREVIEW_PATH NULL
-    TITLE "Helengine PSP"
+    TITLE "${HELENGINE_PSP_GAME_TITLE}"
     VERSION 01.00
 )

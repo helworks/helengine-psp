@@ -80,7 +80,8 @@ public sealed class PspNativeBuildExecutor : IPspNativeBuildExecutor {
             "HELENGINE_PSP_ISOLATED_BOOT=ON",
             "HELENGINE_PSP_ENABLE_RUNTIME_STARTUP=ON",
             "HELENGINE_PSP_ENABLE_BOOT_TRACE=OFF",
-            "HELENGINE_PSP_ENABLE_RENDER_PROFILER=ON"
+            "HELENGINE_PSP_ENABLE_RENDER_PROFILER=ON",
+            "HELENGINE_PSP_GAME_TITLE=" + (workspace.GameName ?? string.Empty)
         ];
     }
 }

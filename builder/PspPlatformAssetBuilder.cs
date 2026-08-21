@@ -208,6 +208,11 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
         if (diagnostics.Count == 0) {
             GeneratedCoreCompatibilityNormalizer.Normalize(request.GeneratedCoreCppRootPath);
             PspBuildWorkspace workspace = CreateWorkspace(request, stagingRootPath);
+            if (request.SelectedBuildOptionValues != null
+                && request.SelectedBuildOptionValues.TryGetValue("game-name", out string gameName)
+                && !string.IsNullOrWhiteSpace(gameName)) {
+                workspace.GameName = gameName.Replace("\"", string.Empty).Trim();
+            }
             NativeBuildExecutor.Build(workspace, cancellationToken);
             AppLayoutWriter.Write(workspace);
             VerifyPackagedOutputs(workspace);

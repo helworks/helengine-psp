@@ -48,6 +48,11 @@ public sealed class PspBuildWorkspace {
     public string RepositoryRootPath { get; }
 
     /// <summary>
+    /// Gets or sets the game title stamped into the packaged EBOOT PARAM.SFO; empty keeps the toolchain default.
+    /// </summary>
+    public string GameName { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets the temporary staging root that contains cooked artifacts.
     /// </summary>
     public string StagingRootPath { get; }
