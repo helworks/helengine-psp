@@ -250,7 +250,7 @@ public sealed class PspPlatformAssetBuilderTests {
         Assert.Equal((byte)0x33, materialAsset.BaseColorR);
         Assert.Equal((byte)0x66, materialAsset.BaseColorG);
         Assert.Equal((byte)0x99, materialAsset.BaseColorB);
-        Assert.Empty(result.ReferencedShaderAssetIds);
+        Assert.Empty(result.ReferencedShaderDependencies);
     }
 
     /// <summary>
