@@ -39,7 +39,9 @@ public sealed class PspRuntimeNativeManifestWriterTests {
                 ],
                 Array.Empty<PlatformBuildCodeModule>(),
                 Array.Empty<PlatformArtifactPlacement>(),
-                new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()));
+                new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()),
+                Array.Empty<PlatformCookWorkItem>(),
+                PlatformBuildRuntimeFeatureManifest.Empty);
 
             new PspRuntimeNativeManifestWriter().Write(generatedCoreRoot, manifest);
 

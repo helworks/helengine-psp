@@ -405,7 +405,9 @@ public sealed class PspPlatformAssetBuilderTests {
                 ],
                 Array.Empty<PlatformBuildCodeModule>(),
                 Array.Empty<PlatformArtifactPlacement>(),
-                new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()));
+                new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()),
+                Array.Empty<PlatformCookWorkItem>(),
+                PlatformBuildRuntimeFeatureManifest.Empty);
 
             PlatformBuildRequest request = new(
                 manifest,
@@ -536,7 +538,9 @@ public sealed class PspPlatformAssetBuilderTests {
                 ],
                 Array.Empty<PlatformBuildCodeModule>(),
                 Array.Empty<PlatformArtifactPlacement>(),
-                new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()));
+                new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()),
+                Array.Empty<PlatformCookWorkItem>(),
+                PlatformBuildRuntimeFeatureManifest.Empty);
 
             PlatformBuildRequest request = new(
                 manifest,
@@ -650,7 +654,9 @@ public sealed class PspPlatformAssetBuilderTests {
                 ],
                 Array.Empty<PlatformBuildCodeModule>(),
                 Array.Empty<PlatformArtifactPlacement>(),
-                new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()));
+                new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()),
+                Array.Empty<PlatformCookWorkItem>(),
+                PlatformBuildRuntimeFeatureManifest.Empty);
 
             PlatformBuildRequest request = new(
                 manifest,
@@ -753,7 +759,9 @@ public sealed class PspPlatformAssetBuilderTests {
                 ],
                 Array.Empty<PlatformBuildCodeModule>(),
                 Array.Empty<PlatformArtifactPlacement>(),
-                new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()));
+                new PlatformContainerWritePlan("psp-homebrew", Array.Empty<PlatformContainerArtifact>()),
+                Array.Empty<PlatformCookWorkItem>(),
+                PlatformBuildRuntimeFeatureManifest.Empty);
 
             PlatformBuildRequest request = new(
                 manifest,
@@ -884,7 +892,8 @@ public sealed class PspPlatformAssetBuilderTests {
                         [
                             new PlatformCookWorkItemMetadata("source-asset-id", "Textures/Checker")
                         ])
-                ]);
+                ],
+                PlatformBuildRuntimeFeatureManifest.Empty);
 
             PlatformBuildRequest request = CreateBuildRequest(workingRoot, outputRoot, generatedCoreRoot, manifest);
             TextureAsset expectedTextureAsset = new TextureAsset {
@@ -1012,7 +1021,8 @@ public sealed class PspPlatformAssetBuilderTests {
                         [
                             new PlatformCookWorkItemMetadata("source-asset-id", "fonts/default.hefont")
                         ])
-                ]);
+                ],
+                PlatformBuildRuntimeFeatureManifest.Empty);
 
             PlatformBuildRequest request = CreateBuildRequest(workingRoot, outputRoot, generatedCoreRoot, manifest);
             TextureAsset expectedTextureAsset = new TextureAsset {
