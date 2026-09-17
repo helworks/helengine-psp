@@ -274,6 +274,13 @@ public static class PspPlatformDefinitionFactory {
                             PlatformSettingKind.Boolean,
                             "true",
                             true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "codegen-use-exceptions",
+                            "Use C++ Exceptions",
+                            PlatformSettingKind.Boolean,
+                            "true",
+                            true,
                             [])
                     ])
             ],
