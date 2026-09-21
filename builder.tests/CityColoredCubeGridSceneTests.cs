@@ -21,12 +21,12 @@ public sealed class CityColoredCubeGridSceneTests {
     /// <summary>
     /// Stable serialized type id for the demo-disc return-to-menu runtime component.
     /// </summary>
-    const string ReturnToMenuComponentTypeId = "city.menu.DemoDiscReturnToMenuComponent, gameplay";
+    const string ReturnToMenuComponentTypeId = "DemoDisc.menu.DemoDiscReturnToMenuComponent, DemoDisc";
 
     /// <summary>
     /// Stable serialized type id for the authored axis-rotation gameplay component.
     /// </summary>
-    const string AxisRotationComponentTypeId = "gameplay.rendering.AxisRotationComponent, gameplay";
+    const string AxisRotationComponentTypeId = "DemoDisc.rendering.AxisRotationComponent, DemoDisc";
 
     /// <summary>
     /// Relative authored material path for the first colored cube material.
