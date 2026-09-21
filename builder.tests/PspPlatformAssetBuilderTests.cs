@@ -42,10 +42,9 @@ public sealed class PspPlatformAssetBuilderTests {
             supportRule.ComponentTypeId == "helengine.meshcomponent");
         Assert.Contains(builder.Definition.ComponentSupportRules, supportRule =>
             supportRule.ComponentTypeId == "helengine.cameracomponent");
-        Assert.Contains(builder.Definition.ComponentSupportRules, supportRule =>
-            supportRule.ComponentTypeId == "gameplay.rendering.directionalshadowtowerspincomponent, gameplay");
-        Assert.Contains(builder.Definition.ComponentSupportRules, supportRule =>
-            supportRule.ComponentTypeId == "city.menu.demodiscreturntomenucomponent, gameplay");
+        // Game script components go through the engine's generic reflected transform; the platform never names them.
+        Assert.DoesNotContain(builder.Definition.ComponentSupportRules, supportRule =>
+            !supportRule.ComponentTypeId.StartsWith("helengine.", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(builder.Definition.AssetCookCapabilities, capability =>
             capability.SourceAssetKind == "texture"
             && capability.TargetArtifactKind == "runtime-texture"
