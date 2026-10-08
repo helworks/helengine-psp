@@ -17,12 +17,14 @@ public sealed class PspBuildWorkspace {
     /// <param name="generatedCoreRootPath">Generated-core C++ root provided by the editor build graph.</param>
     /// <param name="outputRootPath">Requested builder output root.</param>
     /// <param name="nativePbpPath">Path where the native build emits the intermediate PBP.</param>
+    /// <param name="nativeObjectCacheRootPath">Persistent compiler and CMake cache root for this project and profile.</param>
     public PspBuildWorkspace(
         string repositoryRootPath,
         string stagingRootPath,
         string generatedCoreRootPath,
         string outputRootPath,
-        string nativePbpPath) {
+        string nativePbpPath,
+        string nativeObjectCacheRootPath = null) {
         if (string.IsNullOrWhiteSpace(repositoryRootPath)) {
             throw new ArgumentException("Repository root path is required.", nameof(repositoryRootPath));
         } else if (string.IsNullOrWhiteSpace(stagingRootPath)) {
@@ -40,6 +42,9 @@ public sealed class PspBuildWorkspace {
         GeneratedCoreRootPath = Path.GetFullPath(generatedCoreRootPath);
         OutputRootPath = Path.GetFullPath(outputRootPath);
         NativePbpPath = Path.GetFullPath(nativePbpPath);
+        NativeObjectCacheRootPath = string.IsNullOrWhiteSpace(nativeObjectCacheRootPath)
+            ? WorkingCacheRootFallback(repositoryRootPath)
+            : Path.GetFullPath(nativeObjectCacheRootPath);
     }
 
     /// <summary>
@@ -71,6 +76,25 @@ public sealed class PspBuildWorkspace {
     /// Gets the path where the native build emits the intermediate PBP.
     /// </summary>
     public string NativePbpPath { get; }
+
+    /// <summary>
+    /// Gets the stable directory mounted as the PSP native CMake and object cache.
+    /// </summary>
+    public string NativeObjectCacheRootPath { get; }
+
+    /// <summary>
+    /// Gets the fresh package directory that receives the PBP from the native build.
+    /// </summary>
+    public string NativePackageRootPath => Path.GetDirectoryName(NativePbpPath) ?? throw new InvalidOperationException("Native PBP package directory could not be resolved.");
+
+    /// <summary>
+    /// Uses a repository-local fallback for callers that do not provide the editor cache root.
+    /// </summary>
+    /// <param name="repositoryRootPath">PSP repository root.</param>
+    /// <returns>Absolute fallback cache root.</returns>
+    static string WorkingCacheRootFallback(string repositoryRootPath) {
+        return Path.Combine(repositoryRootPath, "cache", "build", "psp", "default");
+    }
 
     /// <summary>
     /// Gets the final PSP homebrew app root.

@@ -202,6 +202,8 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
 
         ResetDirectory(stagingRootPath);
         Directory.CreateDirectory(stagingRootPath);
+        string nativePackageRootPath = Path.Combine(request.WorkingRoot, "native-package");
+        ResetDirectory(nativePackageRootPath);
         StageCookedArtifacts(request, stagingRootPath, diagnostics, diagnosticReporter, progressReporter, cancellationToken);
         ExecutePlatformCookWorkItems(request, stagingRootPath, diagnostics, diagnosticReporter, progressReporter, cancellationToken);
 
@@ -536,13 +538,17 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
         }
 
         string repositoryRootPath = ResolveRepositoryRootPath();
-        string nativePbpPath = Path.Combine(repositoryRootPath, "build", "EBOOT.PBP");
+        string nativePbpPath = Path.Combine(request.WorkingRoot, "native-package", "EBOOT.PBP");
+        string nativeObjectCacheRootPath = string.IsNullOrWhiteSpace(request.NativeObjectCacheRoot)
+            ? Path.Combine(request.WorkingRoot, "native-object-cache")
+            : request.NativeObjectCacheRoot;
         return new PspBuildWorkspace(
             repositoryRootPath,
             stagingRootPath,
             request.GeneratedCoreCppRootPath,
             request.OutputRoot,
-            nativePbpPath);
+            nativePbpPath,
+            nativeObjectCacheRootPath);
     }
 
     /// <summary>

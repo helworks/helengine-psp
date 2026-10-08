@@ -25,13 +25,15 @@ public sealed class PspNativeBuildExecutorTests {
         Assert.Contains("helengine-psp", arguments);
         Assert.Contains("make", arguments);
         Assert.Contains("HELENGINE_CORE_CPP_ROOT=/generated-core", arguments);
+        Assert.Contains(workspace.NativeObjectCacheRootPath + ":/native-cache", arguments);
+        Assert.Contains(workspace.NativePackageRootPath + ":/package-output", arguments);
     }
 
     /// <summary>
     /// Ensures the native-build executor invokes a clean rebuild so the packaged EBOOT cannot reuse stale native artifacts.
     /// </summary>
     [Fact]
-    public void CreateBuildArguments_whenWorkspaceIsProvided_runs_clean_rebuild() {
+    public void CreateBuildArguments_whenWorkspaceIsProvided_reusesNativeCache() {
         PspBuildWorkspace workspace = new(
             "/repo",
             "/repo/tmp/psp-staging",
@@ -41,8 +43,12 @@ public sealed class PspNativeBuildExecutorTests {
 
         IReadOnlyList<string> arguments = PspNativeBuildExecutor.CreateBuildArguments(workspace);
 
-        Assert.Contains("clean", arguments);
+        Assert.DoesNotContain("clean", arguments);
         Assert.Contains("all", arguments);
+        Assert.Contains("NATIVE_OBJECT_CACHE_ROOT=/native-cache", arguments);
+        Assert.Contains("BUILD_DIR=/native-cache", arguments);
+        Assert.Contains("PACKAGE_DIR=/package-output", arguments);
+        Assert.Contains("SOURCE_DIR=/workspace", arguments);
     }
 
     /// <summary>
@@ -72,7 +78,8 @@ public sealed class PspNativeBuildExecutorTests {
             "/repo/tmp/psp-staging",
             "/generated-core",
             "/out",
-            "/repo/build/EBOOT.PBP");
+            "/repo/tmp/native-package/EBOOT.PBP",
+            "/project/cache/build/psp/debug/native");
 
         IReadOnlyList<string> arguments = PspNativeBuildExecutor.CreateBuildArguments(workspace);
 

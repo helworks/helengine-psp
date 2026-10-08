@@ -22,10 +22,23 @@ public sealed class PspRuntimeNativeManifestWriter {
         string runtimeRootPath = Path.Combine(generatedCoreRootPath, "runtime");
         Directory.CreateDirectory(runtimeRootPath);
 
-        File.WriteAllText(Path.Combine(runtimeRootPath, "runtime_startup_manifest.hpp"), BuildStartupManifestHeaderContents());
-        File.WriteAllText(Path.Combine(runtimeRootPath, "runtime_startup_manifest.cpp"), BuildStartupManifestSourceContents(manifest));
-        File.WriteAllText(Path.Combine(runtimeRootPath, "runtime_scene_catalog_manifest.hpp"), BuildSceneCatalogManifestHeaderContents());
-        File.WriteAllText(Path.Combine(runtimeRootPath, "runtime_scene_catalog_manifest.cpp"), BuildSceneCatalogManifestSourceContents(manifest));
+        WriteIfChanged(Path.Combine(runtimeRootPath, "runtime_startup_manifest.hpp"), BuildStartupManifestHeaderContents());
+        WriteIfChanged(Path.Combine(runtimeRootPath, "runtime_startup_manifest.cpp"), BuildStartupManifestSourceContents(manifest));
+        WriteIfChanged(Path.Combine(runtimeRootPath, "runtime_scene_catalog_manifest.hpp"), BuildSceneCatalogManifestHeaderContents());
+        WriteIfChanged(Path.Combine(runtimeRootPath, "runtime_scene_catalog_manifest.cpp"), BuildSceneCatalogManifestSourceContents(manifest));
+    }
+
+    /// <summary>
+    /// Writes generated text only when its contents differ, preserving native dependency timestamps for identical manifests.
+    /// </summary>
+    /// <param name="path">Destination generated source path.</param>
+    /// <param name="contents">Complete generated source contents.</param>
+    static void WriteIfChanged(string path, string contents) {
+        if (File.Exists(path) && string.Equals(File.ReadAllText(path), contents, StringComparison.Ordinal)) {
+            return;
+        }
+
+        File.WriteAllText(path, contents);
     }
 
     /// <summary>

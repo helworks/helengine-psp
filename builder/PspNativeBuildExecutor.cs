@@ -17,6 +17,9 @@ public sealed class PspNativeBuildExecutor : IPspNativeBuildExecutor {
             throw new ArgumentNullException(nameof(workspace));
         }
 
+        Directory.CreateDirectory(workspace.NativeObjectCacheRootPath);
+        Directory.CreateDirectory(workspace.NativePackageRootPath);
+
         ProcessStartInfo startInfo = CreateStartInfo(workspace);
         NativeProcessRunResult result = new NativeProcessRunner().Run(startInfo, cancellationToken);
         if (result.ExitCode != 0) {
@@ -70,12 +73,19 @@ public sealed class PspNativeBuildExecutor : IPspNativeBuildExecutor {
             $"{workspace.RepositoryRootPath}:/workspace",
             "-v",
             $"{workspace.GeneratedCoreRootPath}:/generated-core",
+            "-v",
+            $"{workspace.NativeObjectCacheRootPath}:/native-cache",
+            "-v",
+            $"{workspace.NativePackageRootPath}:/package-output",
             "-w",
             "/workspace",
             "helengine-psp",
             "make",
-            "clean",
             "all",
+            "NATIVE_OBJECT_CACHE_ROOT=/native-cache",
+            "BUILD_DIR=/native-cache",
+            "PACKAGE_DIR=/package-output",
+            "SOURCE_DIR=/workspace",
             "HELENGINE_CORE_CPP_ROOT=/generated-core",
             "HELENGINE_PSP_ISOLATED_BOOT=ON",
             "HELENGINE_PSP_ENABLE_RUNTIME_STARTUP=ON",

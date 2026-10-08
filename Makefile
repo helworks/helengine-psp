@@ -8,21 +8,31 @@ ifeq ($(strip $(HELENGINE_CORE_CPP_ROOT)),)
 $(error HELENGINE_CORE_CPP_ROOT must point at the generated helengine.core C++ output folder)
 endif
 
-BUILD_DIR := build
-TARGET_PBP := $(BUILD_DIR)/EBOOT.PBP
+# The editor can mount a stable project/profile native build root here. CMake's
+# dependency rules then reuse native objects while each outer build keeps its own
+# fresh working/package staging directory.
+NATIVE_OBJECT_CACHE_ROOT ?= build
+BUILD_DIR ?= $(NATIVE_OBJECT_CACHE_ROOT)
+PACKAGE_DIR ?= $(BUILD_DIR)
+SOURCE_DIR ?= .
+TARGET_PBP := $(PACKAGE_DIR)/EBOOT.PBP
 HELENGINE_PSP_GAME_TITLE ?=
 CMAKE_ARGS := -DHELENGINE_CORE_CPP_ROOT=$(HELENGINE_CORE_CPP_ROOT) -DHELENGINE_PSP_ISOLATED_BOOT=$(HELENGINE_PSP_ISOLATED_BOOT) -DHELENGINE_PSP_ENABLE_RUNTIME_STARTUP=$(HELENGINE_PSP_ENABLE_RUNTIME_STARTUP) -DHELENGINE_PSP_ENABLE_BOOT_TRACE=$(HELENGINE_PSP_ENABLE_BOOT_TRACE) -DHELENGINE_PSP_ENABLE_RENDER_PROFILER=$(HELENGINE_PSP_ENABLE_RENDER_PROFILER) "-DHELENGINE_PSP_GAME_TITLE=$(HELENGINE_PSP_GAME_TITLE)"
 
-.PHONY: all clean
+.PHONY: all clean FORCE
 
-all: $(TARGET_PBP)
-
-$(BUILD_DIR)/CMakeCache.txt: CMakeLists.txt
-	@mkdir -p $(BUILD_DIR)
-	cd $(BUILD_DIR) && psp-cmake $(CMAKE_ARGS) ..
-
-$(TARGET_PBP): $(BUILD_DIR)/CMakeCache.txt
+all: $(BUILD_DIR)/CMakeCache.txt
+	@mkdir -p $(PACKAGE_DIR)
+	@rm -f $(BUILD_DIR)/EBOOT.PBP
 	$(MAKE) -C $(BUILD_DIR)
+ifneq ($(abspath $(PACKAGE_DIR)),$(abspath $(BUILD_DIR)))
+	@cp $(BUILD_DIR)/EBOOT.PBP $(TARGET_PBP)
+endif
+
+$(BUILD_DIR)/CMakeCache.txt: CMakeLists.txt FORCE
+	@mkdir -p $(BUILD_DIR)
+	cd $(BUILD_DIR) && psp-cmake $(CMAKE_ARGS) $(abspath $(SOURCE_DIR))
 
 clean:
 	@rm -rf $(BUILD_DIR)
+	@rm -f $(TARGET_PBP)
