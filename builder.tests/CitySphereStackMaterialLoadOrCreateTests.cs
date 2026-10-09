@@ -26,7 +26,7 @@ public sealed class CitySphereStackMaterialLoadOrCreateTests {
     /// </summary>
     [Fact]
     public void City_sphere_stack_material_load_or_create_preserves_psp_texture_id() {
-        MaterialAssetSettingsService service = new MaterialAssetSettingsService();
+        MaterialAssetSettingsService service = new MaterialAssetSettingsService(@"C:\dev\helprojs\city");
         PspPlatformAssetBuilder builder = new();
 
         Assert.True(File.Exists(AuthoredMaterialPath));
@@ -50,7 +50,7 @@ public sealed class CitySphereStackMaterialLoadOrCreateTests {
     /// </summary>
     [Fact]
     public void City_mixed_stack_sphere_materials_load_or_create_preserve_psp_texture_id() {
-        MaterialAssetSettingsService service = new MaterialAssetSettingsService();
+        MaterialAssetSettingsService service = new MaterialAssetSettingsService(@"C:\dev\helprojs\city");
         PspPlatformAssetBuilder builder = new();
 
         for (int index = 0; index < MixedStackSphereMaterialPaths.Length; index++) {

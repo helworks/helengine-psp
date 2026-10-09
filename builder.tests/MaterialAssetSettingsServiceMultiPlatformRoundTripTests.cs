@@ -10,7 +10,7 @@ namespace helengine.psp.builder.tests {
         /// </summary>
         [Fact]
         public void Save_and_load_round_trip_preserves_psp_texture_id_when_material_has_multiple_platform_schemas() {
-            string tempRootPath = Path.Combine(Path.GetTempPath(), "helengine-psp-material-settings-roundtrip", Guid.NewGuid().ToString("N"));
+            string tempRootPath = Path.Combine((Environment.GetEnvironmentVariable("HELENGINE_PSP_TEXTURE_TEST_OUTPUT") ?? AppContext.BaseDirectory), "helengine-psp-material-settings-roundtrip", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempRootPath);
 
             try {
@@ -43,7 +43,7 @@ namespace helengine.psp.builder.tests {
                     }
                 };
 
-                MaterialAssetSettingsService service = new MaterialAssetSettingsService();
+                MaterialAssetSettingsService service = new MaterialAssetSettingsService(tempRootPath);
                 service.Save(materialAssetPath, settings);
 
                 Assert.True(service.TryLoadPlatformSettings(materialAssetPath, "psp", out MaterialAssetProcessorSettings platformSettings));

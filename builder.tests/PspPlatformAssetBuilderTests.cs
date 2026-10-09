@@ -14,6 +14,7 @@ namespace helengine.psp.builder.tests;
 /// <summary>
 /// Verifies the PSP builder metadata surface published to the editor.
 /// </summary>
+[Collection(nameof(PspBuildProcessStateCollection))]
 public sealed class PspPlatformAssetBuilderTests {
     /// <summary>
     /// Ensures the PSP builder exposes the required build, graphics, codegen, storage, and media metadata.
@@ -181,23 +182,17 @@ public sealed class PspPlatformAssetBuilderTests {
     /// <param name="textureFormatCapabilities">Texture capability metadata to validate.</param>
     static void AssertTextureFormatCapabilities(PlatformTextureFormatCapabilityDefinition textureFormatCapabilities) {
         Assert.NotNull(textureFormatCapabilities);
-        Assert.Collection(
-            textureFormatCapabilities.SupportedColorFormatIds,
-            colorFormatId => Assert.Equal(TextureAssetColorFormat.Rgba4444.ToString(), colorFormatId),
-            colorFormatId => Assert.Equal(TextureAssetColorFormat.Indexed8.ToString(), colorFormatId));
+        Assert.Equal(47, textureFormatCapabilities.SupportedColorFormatIds.Length);
+        Assert.Contains("Rgba4444", textureFormatCapabilities.SupportedColorFormatIds);
+        Assert.Contains("Indexed8", textureFormatCapabilities.SupportedColorFormatIds);
+        foreach (PspTextureFormat format in PspTextureFormatCatalog.Formats) {
+            Assert.Contains(format.Id, textureFormatCapabilities.SupportedColorFormatIds);
+            Assert.Contains(textureFormatCapabilities.SupportedCombinations, combination => combination.ColorFormatId == format.Id && combination.AlphaPrecision == format.Alpha);
+        }
         Assert.Equal(
-            [TextureAssetAlphaPrecision.A4, TextureAssetAlphaPrecision.A8],
+            [TextureAssetAlphaPrecision.Opaque, TextureAssetAlphaPrecision.Binary, TextureAssetAlphaPrecision.A4, TextureAssetAlphaPrecision.A8],
             textureFormatCapabilities.SupportedAlphaPrecisions);
-        Assert.Collection(
-            textureFormatCapabilities.SupportedCombinations,
-            combination => {
-                Assert.Equal(TextureAssetColorFormat.Rgba4444.ToString(), combination.ColorFormatId);
-                Assert.Equal(TextureAssetAlphaPrecision.A4, combination.AlphaPrecision);
-            },
-            combination => {
-                Assert.Equal(TextureAssetColorFormat.Indexed8.ToString(), combination.ColorFormatId);
-                Assert.Equal(TextureAssetAlphaPrecision.A8, combination.AlphaPrecision);
-            });
+        Assert.DoesNotContain(textureFormatCapabilities.SupportedCombinations, combination => combination.ColorFormatId == "Psp.Linear.Rgb565" && combination.AlphaPrecision != TextureAssetAlphaPrecision.Opaque);
     }
 
     /// <summary>
@@ -344,7 +339,7 @@ public sealed class PspPlatformAssetBuilderTests {
     /// </summary>
     [Fact]
     public async Task BuildAsync_whenGivenGeneratedCoreAndCookedArtifacts_produces_psp_game_folder() {
-        string workingRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string workingRoot = Path.Combine((Environment.GetEnvironmentVariable("HELENGINE_PSP_TEXTURE_TEST_OUTPUT") ?? AppContext.BaseDirectory), Guid.NewGuid().ToString("N"));
         string outputRoot = Path.Combine(workingRoot, "out");
         string sourceRoot = Path.Combine(workingRoot, "staging");
         string generatedCoreRoot = Path.Combine(workingRoot, "generated-core");
@@ -477,7 +472,7 @@ public sealed class PspPlatformAssetBuilderTests {
     /// </summary>
     [Fact]
     public async Task BuildAsync_whenGivenUnityGeneratedCoreAndCookedArtifacts_produces_psp_game_folder() {
-        string workingRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string workingRoot = Path.Combine((Environment.GetEnvironmentVariable("HELENGINE_PSP_TEXTURE_TEST_OUTPUT") ?? AppContext.BaseDirectory), Guid.NewGuid().ToString("N"));
         string outputRoot = Path.Combine(workingRoot, "out");
         string sourceRoot = Path.Combine(workingRoot, "staging");
         string generatedCoreRoot = Path.Combine(workingRoot, "generated-core");
@@ -605,7 +600,7 @@ public sealed class PspPlatformAssetBuilderTests {
     /// </summary>
     [Fact]
     public async Task BuildAsync_rewrites_runtime_startup_manifest_with_platform_metadata() {
-        string workingRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string workingRoot = Path.Combine((Environment.GetEnvironmentVariable("HELENGINE_PSP_TEXTURE_TEST_OUTPUT") ?? AppContext.BaseDirectory), Guid.NewGuid().ToString("N"));
         string outputRoot = Path.Combine(workingRoot, "out");
         string sourceRoot = Path.Combine(workingRoot, "staging");
         string generatedCoreRoot = Path.Combine(workingRoot, "generated-core");
@@ -718,7 +713,7 @@ public sealed class PspPlatformAssetBuilderTests {
     /// </summary>
     [Fact]
     public async Task BuildAsync_requires_startup_scene_to_exist_in_scene_manifest() {
-        string workingRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string workingRoot = Path.Combine((Environment.GetEnvironmentVariable("HELENGINE_PSP_TEXTURE_TEST_OUTPUT") ?? AppContext.BaseDirectory), Guid.NewGuid().ToString("N"));
         string outputRoot = Path.Combine(workingRoot, "out");
         string sourceRoot = Path.Combine(workingRoot, "staging");
         string generatedCoreRoot = Path.Combine(workingRoot, "generated-core");
@@ -821,7 +816,7 @@ public sealed class PspPlatformAssetBuilderTests {
     /// </summary>
     [Fact]
     public async Task BuildAsync_whenGivenTexturePlatformCookWorkItem_writesCookedRuntimeTextureToDeclaredOutputPath() {
-        string workingRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string workingRoot = Path.Combine((Environment.GetEnvironmentVariable("HELENGINE_PSP_TEXTURE_TEST_OUTPUT") ?? AppContext.BaseDirectory), Guid.NewGuid().ToString("N"));
         string outputRoot = Path.Combine(workingRoot, "out");
         string sourceRoot = Path.Combine(workingRoot, "staging");
         string generatedCoreRoot = Path.Combine(workingRoot, "generated-core");
@@ -950,7 +945,7 @@ public sealed class PspPlatformAssetBuilderTests {
     /// </summary>
     [Fact]
     public async Task BuildAsync_whenGivenFontAtlasPlatformCookWorkItem_writesCookedRuntimeTextureToDeclaredOutputPath() {
-        string workingRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string workingRoot = Path.Combine((Environment.GetEnvironmentVariable("HELENGINE_PSP_TEXTURE_TEST_OUTPUT") ?? AppContext.BaseDirectory), Guid.NewGuid().ToString("N"));
         string outputRoot = Path.Combine(workingRoot, "out");
         string sourceRoot = Path.Combine(workingRoot, "staging");
         string generatedCoreRoot = Path.Combine(workingRoot, "generated-core");
@@ -1082,7 +1077,7 @@ public sealed class PspPlatformAssetBuilderTests {
     /// </summary>
     [Fact]
     public void EditorPackager_whenPspOwnsTextureCooking_emitsPlatformCookWorkItem_and_skipsGenericCookedTexture() {
-        string workspaceRootPath = Path.Combine(Path.GetTempPath(), "helengine-psp-work-item-tests", Guid.NewGuid().ToString("N"));
+        string workspaceRootPath = Path.Combine((Environment.GetEnvironmentVariable("HELENGINE_PSP_TEXTURE_TEST_OUTPUT") ?? AppContext.BaseDirectory), "helengine-psp-work-item-tests", Guid.NewGuid().ToString("N"));
         string projectRootPath = workspaceRootPath;
         string buildRootPath = Path.Combine(workspaceRootPath, "Build");
         string sceneId = "Scenes/TexturedScene.helen";
@@ -1097,7 +1092,7 @@ public sealed class PspPlatformAssetBuilderTests {
             string textureAssetId = WriteSourceTextureAssetAndReturnAssetId(projectRootPath, textureRelativePath, "psp");
             WritePspMaterialAsset(projectRootPath, materialRelativePath, textureAssetId);
             WriteSceneAssetWithMaterial(projectRootPath, sceneId, materialRelativePath);
-            SeedBuiltInStandardShaderAsset(ShaderCompileTarget.DirectX11);
+            using EditorBuiltInShaderAssetLibrary shaderLibrary = SeedBuiltInStandardShaderAsset(ShaderCompileTarget.DirectX11);
             PspPlatformAssetBuilder builder = new(new FakePspNativeBuildExecutor(), new FakePspPlatformCookSourceProcessor(
                 new TextureAsset {
                     Width = 1,
@@ -1115,7 +1110,8 @@ public sealed class PspPlatformAssetBuilderTests {
                 CreateTestFontAsset(),
                 builder,
                 "debug",
-                "psp-forward");
+                "psp-forward",
+                shaderLibrary);
 
             EditorPlatformBuildScenePackagerResult result = packager.Package([sceneId], buildRootPath);
 
@@ -1138,8 +1134,9 @@ public sealed class PspPlatformAssetBuilderTests {
     /// Seeds the built-in shader cache with one precompiled standard shader so scene-packager tests do not require runtime shader compilation.
     /// </summary>
     /// <param name="target">Shader compile target whose cache entry should be seeded.</param>
-    static void SeedBuiltInStandardShaderAsset(ShaderCompileTarget target) {
-        string shaderPath = EditorBuiltInShaderAssetLibrary.ResolveShaderPath("ForwardStandardShader.hlsl");
+    static EditorBuiltInShaderAssetLibrary SeedBuiltInStandardShaderAsset(ShaderCompileTarget target) {
+        EditorBuiltInShaderAssetLibrary library = new EditorBuiltInShaderAssetLibrary(new ShaderBackendRegistry());
+        string shaderPath = library.ResolveShaderPath("ForwardStandardShader.hlsl");
         string cacheKey = string.Concat(target.ToString(), "|", shaderPath);
         ShaderAsset shaderAsset = new ShaderAsset {
             Id = "ForwardStandardShader",
@@ -1172,9 +1169,10 @@ public sealed class PspPlatformAssetBuilderTests {
             ]
         };
 
-        FieldInfo cacheField = typeof(EditorBuiltInShaderAssetLibrary).GetField("ShaderAssetsByKey", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new InvalidOperationException("Built-in shader cache field was not found.");
-        Dictionary<string, ShaderAsset> cache = Assert.IsType<Dictionary<string, ShaderAsset>>(cacheField.GetValue(null));
+        FieldInfo cacheField = typeof(EditorBuiltInShaderAssetLibrary).GetField("ShaderAssetsByKey", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new InvalidOperationException("Built-in shader cache field was not found.");
+        Dictionary<string, ShaderAsset> cache = Assert.IsType<Dictionary<string, ShaderAsset>>(cacheField.GetValue(library));
         cache[cacheKey] = shaderAsset;
+        return library;
     }
 
     /// <summary>
@@ -1304,7 +1302,7 @@ public sealed class PspPlatformAssetBuilderTests {
             }
         };
 
-        MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService();
+        MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService(projectRootPath);
         settingsService.Save(materialPath, settings);
     }
 
@@ -1320,6 +1318,7 @@ public sealed class PspPlatformAssetBuilderTests {
 
         SceneAsset sceneAsset = new SceneAsset {
             Id = sceneId,
+            AuthoringAssetId = Guid.NewGuid().ToString("N"),
             RootEntities = [
                 new SceneEntityAsset {
                     Id = 1u,
@@ -1331,7 +1330,7 @@ public sealed class PspPlatformAssetBuilderTests {
                         new SceneComponentAssetRecord {
                             ComponentTypeId = "helengine.MeshComponent",
                             ComponentIndex = 0,
-                            Payload = WriteMeshComponentPayload(materialRelativePath)
+                            Payload = WriteMeshComponentPayload(projectRootPath, materialRelativePath)
                         }
                     ],
                     Children = Array.Empty<SceneEntityAsset>()
@@ -1348,7 +1347,10 @@ public sealed class PspPlatformAssetBuilderTests {
     /// </summary>
     /// <param name="materialRelativePath">Project-relative material path to encode.</param>
     /// <returns>Serialized mesh-component payload.</returns>
-    static byte[] WriteMeshComponentPayload(string materialRelativePath) {
+    static byte[] WriteMeshComponentPayload(string projectRootPath, string materialRelativePath) {
+        string materialPath = Path.Combine(projectRootPath, "assets", materialRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        string materialId = new AssetIdentityMetadataService(projectRootPath).Load(materialPath).AssetId;
+        string materialHash = "sha256:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(materialPath))).ToLowerInvariant();
         MeshComponent meshComponent = new MeshComponent();
         meshComponent.SetMaterials(new RuntimeMaterial[] {
             new TestRuntimeMaterial()
@@ -1356,7 +1358,7 @@ public sealed class PspPlatformAssetBuilderTests {
         EntityComponentSaveState saveState = new EntityComponentSaveState();
         saveState.SetAssetReference(
             "Materials[0]",
-            global::helengine.SceneAssetReferenceFactory.CreateFileSystemMaterial(materialRelativePath));
+            global::helengine.SceneAssetReferenceFactory.CreateFileSystemReference(materialId, materialRelativePath, materialHash));
 
         ComponentPersistenceRegistry persistenceRegistry = new ComponentPersistenceRegistry();
         SceneComponentAssetRecord record = persistenceRegistry.GetDescriptor(meshComponent).SerializeComponent(meshComponent, 0, saveState);

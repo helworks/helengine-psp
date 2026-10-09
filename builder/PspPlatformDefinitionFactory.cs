@@ -350,18 +350,6 @@ public static class PspPlatformDefinitionFactory {
     /// </summary>
     /// <returns>Texture capability metadata for PSP builder-owned texture cook contracts.</returns>
     static PlatformTextureFormatCapabilityDefinition CreateTextureFormatCapabilities() {
-        return new PlatformTextureFormatCapabilityDefinition(
-            [
-                TextureAssetColorFormat.Rgba4444.ToString(),
-                TextureAssetColorFormat.Indexed8.ToString()
-            ],
-            [
-                TextureAssetAlphaPrecision.A4,
-                TextureAssetAlphaPrecision.A8
-            ],
-            [
-                new PlatformTextureFormatCombinationDefinition(TextureAssetColorFormat.Rgba4444.ToString(), TextureAssetAlphaPrecision.A4),
-                new PlatformTextureFormatCombinationDefinition(TextureAssetColorFormat.Indexed8.ToString(), TextureAssetAlphaPrecision.A8)
-            ]);
+        return PspTextureFormatCapabilities.Create();
     }
 }

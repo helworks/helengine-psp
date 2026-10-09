@@ -23,11 +23,6 @@ public sealed class PspPlatformCookSourceProcessor : IPspPlatformCookSourceProce
     const string EditorAppAssemblyRelativePath = @"helengine.ui\helengine.editor.app\bin\Debug\net9.0-windows\helengine.editor.app.dll";
 
     /// <summary>
-    /// Shared texture processor used to apply editor-resolved PSP texture settings.
-    /// </summary>
-    readonly TextureAssetProcessor TextureAssetProcessor;
-
-    /// <summary>
     /// Lazily initialized default texture importer registrations loaded from the Windows editor backend.
     /// </summary>
     IReadOnlyList<TextureImporterRegistration> TextureImporterRegistrationsValue;
@@ -41,7 +36,6 @@ public sealed class PspPlatformCookSourceProcessor : IPspPlatformCookSourceProce
     /// Initializes the shared source processor used by PSP builder-owned work items.
     /// </summary>
     public PspPlatformCookSourceProcessor() {
-        TextureAssetProcessor = new TextureAssetProcessor();
     }
 
     /// <summary>
@@ -69,7 +63,10 @@ public sealed class PspPlatformCookSourceProcessor : IPspPlatformCookSourceProce
             throw new InvalidOperationException($"Texture importer '{importer.ImporterId}' did not return a texture asset for '{sourceAssetPath}'.");
         }
 
-        TextureAsset cookedTextureAsset = TextureAssetProcessor.Apply(importedTextureAsset, settings);
+        TextureAsset cookedTextureAsset;
+        try { cookedTextureAsset = PspTextureCooker.Apply(importedTextureAsset, settings); }
+        catch { importedTextureAsset.Dispose(); throw; }
+        if (!ReferenceEquals(cookedTextureAsset, importedTextureAsset)) importedTextureAsset.Dispose();
         cookedTextureAsset.Id = assetId;
         cookedTextureAsset.RuntimeAssetId = RuntimeAssetIdGenerator.Generate(assetId);
         return cookedTextureAsset;
@@ -94,7 +91,10 @@ public sealed class PspPlatformCookSourceProcessor : IPspPlatformCookSourceProce
         }
 
         TextureAsset importedAtlasTextureAsset = LoadSourceFontAtlasTexture(sourceAssetPath);
-        TextureAsset cookedAtlasAsset = TextureAssetProcessor.Apply(importedAtlasTextureAsset, settings);
+        TextureAsset cookedAtlasAsset;
+        try { cookedAtlasAsset = PspTextureCooker.Apply(importedAtlasTextureAsset, settings); }
+        catch { importedAtlasTextureAsset.Dispose(); throw; }
+        if (!ReferenceEquals(cookedAtlasAsset, importedAtlasTextureAsset)) importedAtlasTextureAsset.Dispose();
         cookedAtlasAsset.Id = assetId + FontAtlasSuffix;
         cookedAtlasAsset.RuntimeAssetId = RuntimeAssetIdGenerator.Generate(cookedAtlasAsset.Id);
         return cookedAtlasAsset;
@@ -111,6 +111,7 @@ public sealed class PspPlatformCookSourceProcessor : IPspPlatformCookSourceProce
         }
 
         string normalizedExtension = NormalizeExtension(Path.GetExtension(sourceAssetPath));
+        if (normalizedExtension == ".gim") return new TextureImporterRegistration("psp-gim", new PspGimTextureImporter(), new[] { ".gim" });
         IReadOnlyList<TextureImporterRegistration> registrations = GetTextureImporterRegistrations();
         for (int registrationIndex = 0; registrationIndex < registrations.Count; registrationIndex++) {
             TextureImporterRegistration registration = registrations[registrationIndex];
@@ -178,6 +179,7 @@ public sealed class PspPlatformCookSourceProcessor : IPspPlatformCookSourceProce
         }
 
         string normalizedExtension = NormalizeExtension(Path.GetExtension(sourceAssetPath));
+        if (normalizedExtension == ".gim") return true;
         IReadOnlyList<TextureImporterRegistration> registrations = GetTextureImporterRegistrations();
         for (int registrationIndex = 0; registrationIndex < registrations.Count; registrationIndex++) {
             TextureImporterRegistration registration = registrations[registrationIndex];

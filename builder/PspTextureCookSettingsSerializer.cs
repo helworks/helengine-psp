@@ -17,11 +17,14 @@ public static class PspTextureCookSettingsSerializer {
             throw new ArgumentNullException(nameof(settings));
         }
 
-        return JsonSerializer.Serialize(new Dictionary<string, object> {
+        PspTextureCooker.ValidateSettings(settings);
+        Dictionary<string, object> values = new Dictionary<string, object> {
             ["maxResolution"] = settings.MaxResolution,
-            ["colorFormat"] = settings.ColorFormat.ToString(),
+            ["colorFormat"] = settings.ColorFormatId,
             ["alphaPrecision"] = settings.AlphaPrecision.ToString()
-        });
+        };
+        if (!string.IsNullOrEmpty(settings.IndexingMethodId)) values["indexingMethod"] = settings.IndexingMethodId;
+        return JsonSerializer.Serialize(values);
     }
 
     /// <summary>
@@ -46,18 +49,17 @@ public static class PspTextureCookSettingsSerializer {
             ? alphaPrecisionElement.GetString() ?? TextureAssetAlphaPrecision.A8.ToString()
             : TextureAssetAlphaPrecision.A8.ToString();
 
-        if (!Enum.TryParse(colorFormatName, true, out TextureAssetColorFormat colorFormat)) {
-            throw new InvalidOperationException($"Unsupported PSP texture color format '{colorFormatName}'.");
-        }
-
         if (!Enum.TryParse(alphaPrecisionName, true, out TextureAssetAlphaPrecision alphaPrecision)) {
             throw new InvalidOperationException($"Unsupported PSP texture alpha precision '{alphaPrecisionName}'.");
         }
 
-        return new TextureAssetProcessorSettings {
+        TextureAssetProcessorSettings settings = new TextureAssetProcessorSettings {
             MaxResolution = maxResolution,
-            ColorFormat = colorFormat,
-            AlphaPrecision = alphaPrecision
+            ColorFormatId = colorFormatName,
+            AlphaPrecision = alphaPrecision,
+            IndexingMethodId = root.TryGetProperty("indexingMethod", out JsonElement indexing) ? indexing.GetString() : string.Empty
         };
+        PspTextureCooker.ValidateSettings(settings);
+        return settings;
     }
 }

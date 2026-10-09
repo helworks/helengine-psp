@@ -158,16 +158,13 @@ namespace helengine::psp::rendering {
             return;
         }
 
-        byteCount = texture->GetPixelCount() * sizeof(std::uint32_t);
+        byteCount = texture->GetGpuByteCount();
         const std::uint64_t flushStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
-        sceKernelDcacheWritebackRange(
-            const_cast<std::uint32_t*>(texture->GetPixelsAbgr8888()),
-            static_cast<unsigned int>(byteCount));
+        texture->WritebackGpuData();
         flushMicroseconds = PspRenderProfiler::GetTimestampMicroseconds() - flushStartMicroseconds;
 
         sceGuEnable(GU_TEXTURE_2D);
-        sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-        sceGuTexImage(0, texture->GetTextureBufferWidth(), texture->GetTextureImageHeight(), texture->GetTextureBufferWidth(), texture->GetPixelsAbgr8888());
+        texture->BindGpuData();
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
@@ -1029,7 +1026,7 @@ namespace helengine::psp::rendering {
                             0,
                             static_cast<int32_t>(atlasWidth - 1));
                         BlendAbgrPixel(
-                            atlasPixels[(sampleY * atlasWidth) + sampleX],
+                            atlasPixels[(sampleY * atlasTexture->GetTextureBufferWidth()) + sampleX],
                             surfacePixels[(targetY * textureWidth) + targetX]);
                     }
                 }

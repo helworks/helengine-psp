@@ -478,24 +478,21 @@ namespace helengine::psp::rendering {
             return;
         }
 
-        byteCount = texture->GetPixelCount() * sizeof(std::uint32_t);
+        byteCount = texture->GetGpuByteCount();
         const bool needsTextureUpload = !HasCachedTextureEnabledState
             || !CachedTextureEnabledState
             || CachedTexture != texture;
         if (needsTextureUpload) {
             const std::uint64_t flushStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
-            sceKernelDcacheWritebackRange(
-                const_cast<std::uint32_t*>(texture->GetPixelsAbgr8888()),
-                static_cast<unsigned int>(byteCount));
+            texture->WritebackGpuData();
             flushMicroseconds = PspRenderProfiler::GetTimestampMicroseconds() - flushStartMicroseconds;
 
             SetTextureEnabled(true);
-            sceGuTexMode(GU_PSM_8888, 0, 0, 0);
             sceGuTexMapMode(GU_TEXTURE_COORDS, 0, 0);
             sceGuTexProjMapMode(GU_UV);
             sceGuTexScale(1.0f, 1.0f);
             sceGuTexOffset(0.0f, 0.0f);
-            sceGuTexImage(0, texture->GetTextureBufferWidth(), texture->GetTextureImageHeight(), texture->GetTextureBufferWidth(), texture->GetPixelsAbgr8888());
+            texture->BindGpuData();
             sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
             sceGuTexFilter(GU_NEAREST, GU_NEAREST);
             sceGuTexWrap(GU_REPEAT, GU_REPEAT);

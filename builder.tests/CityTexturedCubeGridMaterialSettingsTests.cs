@@ -11,7 +11,7 @@ namespace helengine.psp.builder.tests {
         [Fact]
         public void City_textured_cube_grid_generated_material_settings_preserve_psp_texture_id() {
             const string materialAssetPath = @"C:\dev\helprojs\city\assets\Materials\rendering\textured_cube_grid\Cube00.hasset";
-            MaterialAssetSettingsService service = new MaterialAssetSettingsService();
+            MaterialAssetSettingsService service = new MaterialAssetSettingsService(@"C:\dev\helprojs\city");
 
             Assert.True(service.TryLoadPlatformSettings(materialAssetPath, "psp", out MaterialAssetProcessorSettings platformSettings));
             Assert.NotNull(platformSettings);

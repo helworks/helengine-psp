@@ -19,7 +19,7 @@ public sealed class PspTexturedMaterialPackagingRegressionTests {
     /// </summary>
     [Fact]
     public void Package_WhenSceneReferencesSixteenTexturedPspMaterials_PreservesDiffuseTextureBindingForEveryCookedMaterial() {
-        string workspaceRootPath = Path.Combine(Path.GetTempPath(), "helengine-psp-textured-material-packaging", Guid.NewGuid().ToString("N"));
+        string workspaceRootPath = Path.Combine((Environment.GetEnvironmentVariable("HELENGINE_PSP_TEXTURE_TEST_OUTPUT") ?? AppContext.BaseDirectory), "helengine-psp-textured-material-packaging", Guid.NewGuid().ToString("N"));
         string projectRootPath = workspaceRootPath;
         string buildRootPath = Path.Combine(workspaceRootPath, "Build");
         Directory.CreateDirectory(Path.Combine(projectRootPath, "assets"));
@@ -48,6 +48,7 @@ public sealed class PspTexturedMaterialPackagingRegressionTests {
                     },
                     CreateTestFontAsset()));
 
+            using EditorBuiltInShaderAssetLibrary shaderLibrary = SeedBuiltInStandardShaderAsset(ShaderCompileTarget.DirectX11);
             EditorPlatformBuildScenePackager packager = new(
                 projectRootPath,
                 [
@@ -57,7 +58,8 @@ public sealed class PspTexturedMaterialPackagingRegressionTests {
                 CreateTestFontAsset(),
                 builder,
                 "debug",
-                "psp-forward");
+                "psp-forward",
+                shaderLibrary);
 
             EditorPlatformBuildScenePackagerResult result = packager.Package([SceneId], buildRootPath);
 
@@ -129,8 +131,9 @@ public sealed class PspTexturedMaterialPackagingRegressionTests {
     /// Seeds the built-in shader cache with one precompiled standard shader so packaging does not require runtime shader compilation.
     /// </summary>
     /// <param name="target">Shader compile target whose cache entry should be seeded.</param>
-    static void SeedBuiltInStandardShaderAsset(ShaderCompileTarget target) {
-        string shaderPath = EditorBuiltInShaderAssetLibrary.ResolveShaderPath("ForwardStandardShader.hlsl");
+    static EditorBuiltInShaderAssetLibrary SeedBuiltInStandardShaderAsset(ShaderCompileTarget target) {
+        EditorBuiltInShaderAssetLibrary library = new EditorBuiltInShaderAssetLibrary(new ShaderBackendRegistry());
+        string shaderPath = library.ResolveShaderPath("ForwardStandardShader.hlsl");
         string cacheKey = string.Concat(target.ToString(), "|", shaderPath);
         ShaderAsset shaderAsset = new ShaderAsset {
             Id = "ForwardStandardShader",
@@ -163,9 +166,10 @@ public sealed class PspTexturedMaterialPackagingRegressionTests {
             ]
         };
 
-        FieldInfo cacheField = typeof(EditorBuiltInShaderAssetLibrary).GetField("ShaderAssetsByKey", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new InvalidOperationException("Built-in shader cache field was not found.");
-        Dictionary<string, ShaderAsset> cache = Assert.IsType<Dictionary<string, ShaderAsset>>(cacheField.GetValue(null));
+        FieldInfo cacheField = typeof(EditorBuiltInShaderAssetLibrary).GetField("ShaderAssetsByKey", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new InvalidOperationException("Built-in shader cache field was not found.");
+        Dictionary<string, ShaderAsset> cache = Assert.IsType<Dictionary<string, ShaderAsset>>(cacheField.GetValue(library));
         cache[cacheKey] = shaderAsset;
+        return library;
     }
 
     /// <summary>
@@ -262,7 +266,7 @@ public sealed class PspTexturedMaterialPackagingRegressionTests {
             }
         };
 
-        MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService();
+        MaterialAssetSettingsService settingsService = new MaterialAssetSettingsService(projectRootPath);
         settingsService.Save(materialPath, settings);
     }
 }

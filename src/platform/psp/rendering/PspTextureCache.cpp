@@ -6,12 +6,14 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <memory>
 
 #include <pspkernel.h>
 
 #include "TextureAssetColorFormat.hpp"
 #include "platform/psp/PspBootTrace.hpp"
 #include "platform/psp/rendering/PspRuntimeTexture.hpp"
+#include "platform/psp/rendering/PspNativeTexture.hpp"
 
 namespace helengine::psp::rendering {
     namespace {
@@ -171,6 +173,10 @@ namespace helengine::psp::rendering {
         if (!releasedPixels.empty()) {
             ReleasedTexturePixelBuffers.push_back(std::move(releasedPixels));
         }
+        std::vector<std::uint32_t> releasedNativeColors = texture->TakeNativeColors();
+        if (!releasedNativeColors.empty()) ReleasedTexturePixelBuffers.push_back(std::move(releasedNativeColors));
+        std::vector<std::uint32_t> releasedNativePalette = texture->TakeNativePalette();
+        if (!releasedNativePalette.empty()) ReleasedTexturePixelBuffers.push_back(std::move(releasedNativePalette));
 
         return true;
     }
@@ -200,6 +206,18 @@ namespace helengine::psp::rendering {
             throw std::runtime_error("PSP runtime texture data must include cooked color payload bytes.");
         }
 
+        if (data->Width < 1 || data->Height < 1 || data->Width > 512 || data->Height > 512) throw std::runtime_error("PSP texture dimensions must fit within 512 by 512.");
+        if (data->ColorFormat == TextureAssetColorFormat::PspNative) {
+            const auto* colors = reinterpret_cast<const std::uint8_t*>(data->Colors->Data);
+            const std::size_t paletteBytes = data->PaletteColors == nullptr ? 0 : static_cast<std::size_t>(data->PaletteColors->Length);
+            const auto* palette = paletteBytes == 0 ? nullptr : reinterpret_cast<const std::uint8_t*>(data->PaletteColors->Data);
+            const PspNativeTextureLayout layout = PspNativeTexture::Read(colors, static_cast<std::size_t>(data->Colors->Length), paletteBytes, data->Width, data->Height);
+            std::unique_ptr<PspRuntimeTexture> native = std::make_unique<PspRuntimeTexture>();
+            native->set_Id(data->get_Id()); native->SetRuntimeAssetId(data->get_RuntimeAssetId());
+            native->set_Width(data->Width); native->set_Height(data->Height);
+            native->SetNativeData(colors, static_cast<std::size_t>(data->Colors->Length), palette, paletteBytes, layout);
+            return native.release();
+        }
         const std::size_t expectedByteCount = GetExpectedColorByteCount(data);
         if (static_cast<std::size_t>(data->Colors->Length) != expectedByteCount) {
             throw std::runtime_error("PSP runtime texture data length does not match the cooked texture format.");
@@ -210,7 +228,8 @@ namespace helengine::psp::rendering {
             + " id=" + data->get_Id()
             + " expectedBytes=" + std::to_string(expectedByteCount)
             + " freeMem=" + std::to_string(sceKernelTotalFreeMemSize()));
-        PspRuntimeTexture* runtimeTexture = new PspRuntimeTexture();
+        std::unique_ptr<PspRuntimeTexture> ownedTexture = std::make_unique<PspRuntimeTexture>();
+        PspRuntimeTexture* runtimeTexture = ownedTexture.get();
         PspBootTrace::WriteLine(
             std::string("PspTextureCreateAllocated ptr=")
             + std::to_string(reinterpret_cast<std::uintptr_t>(runtimeTexture))
@@ -233,7 +252,7 @@ namespace helengine::psp::rendering {
             + std::to_string(reinterpret_cast<std::uintptr_t>(runtimeTexture))
             + " pixelCount=" + std::to_string(runtimeTexture->GetPixelCount())
             + " freeMem=" + std::to_string(sceKernelTotalFreeMemSize()));
-        return runtimeTexture;
+        return ownedTexture.release();
     }
 
     /// Computes the expected cooked color-payload byte length for one texture asset.
