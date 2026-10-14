@@ -18,7 +18,7 @@ namespace helengine.psp.builder.tests {
                 MaterialAssetImportSettings settings = new MaterialAssetImportSettings();
                 settings.Importer.ImporterId = "helengine.material";
                 settings.Importer.SourceChecksum = string.Empty;
-                settings.Importer.AssetId = "Materials.rendering.textured_cube_grid.Cube00";
+                settings.Importer.ProcessedAssetId = "Materials.rendering.textured_cube_grid.Cube00";
 
                 settings.Processor.Platforms["psp"] = new MaterialAssetProcessorSettings {
                     SchemaId = "standard-shader",
