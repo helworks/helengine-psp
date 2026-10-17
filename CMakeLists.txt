@@ -51,12 +51,14 @@ set(HELENGINE_PSP_SOURCES
     src/platform/psp/PspBootTrace.cpp
     src/platform/psp/PspInputBackend.cpp
     src/platform/psp/PspMemoryCardContentStreamSource.cpp
+    src/platform/psp/PspNativeFileSupport.cpp
     src/platform/psp/PspPackagedAssetLoader.cpp
     src/platform/psp/PspRuntimeSceneCatalogFactory.cpp
     src/platform/psp/audio/PspAudioBackend.cpp
     src/platform/psp/rendering/PspRenderProfiler.cpp
     src/platform/psp/rendering/PspRenderManager2D.cpp
     src/platform/psp/rendering/PspRuntimeTexture.cpp
+    src/platform/psp/rendering/PspNativeTexture.cpp
     src/platform/psp/rendering/PspTextureCache.cpp
     src/platform/psp/rendering/PspRuntimeMaterial.cpp
     src/platform/psp/rendering/PspRuntimeModel.cpp

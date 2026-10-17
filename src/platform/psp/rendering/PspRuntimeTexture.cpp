@@ -6,6 +6,7 @@
 #include <pspgu.h>
 #include <pspkernel.h>
 #include "platform/psp/rendering/PspNativeTexture.hpp"
+#include "platform/psp/rendering/PspTextureRegionUpdate.hpp"
 
 #include "platform/psp/PspBootTrace.hpp"
 
@@ -66,6 +67,23 @@ namespace helengine::psp::rendering {
     /// Replaces the owned ABGR8888 pixel buffer.
     void PspRuntimeTexture::SetPixelsAbgr8888(std::vector<std::uint32_t>&& pixels) {
         PixelsAbgr8888 = std::move(pixels);
+    }
+
+    /// Validates the complete update before allowing mutation or a change to the active GU frame protocol.
+    void PspRuntimeTexture::ValidateRegionUpdate(int x, int y, int width, int height,
+        const std::uint8_t* rgba8, std::size_t sourceBytes, int sourceRowPitch) {
+        if (!NativeColors.empty()) {
+            throw std::invalid_argument("PSP cooked native textures are immutable through the RGBA region API.");
+        }
+        PspTextureRegionUpdate::Validate(get_Width(), get_Height(), TextureBufferWidth,
+            PixelsAbgr8888.size(), x, y, width, height, rgba8, sourceBytes, sourceRowPitch);
+    }
+
+    /// Preserves the pixel allocation and padded rows while replacing only the requested logical texels.
+    void PspRuntimeTexture::UpdateRegionFromRgba8(int x, int y, int width, int height,
+        const std::uint8_t* rgba8, int sourceRowPitch) {
+        PspTextureRegionUpdate::Copy(PixelsAbgr8888.data(), TextureBufferWidth,
+            x, y, width, height, rgba8, sourceRowPitch);
     }
 
     /// Transfers the owned ABGR8888 pixel buffer out of the runtime texture for deferred safe release.

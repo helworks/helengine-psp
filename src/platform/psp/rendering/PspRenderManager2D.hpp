@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SpriteQuad2D.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -42,6 +43,9 @@ namespace helengine::psp::rendering {
         /// Flushes deferred PSP runtime texture deletions once the renderer reaches a safe boundary before the next scene begins loading.
         void FlushReleasedTextures() override;
 
+        /// Records the host-owned direct display list while commands for this frame are being submitted.
+        void SetActiveGuDisplayList(void* displayList);
+
         /// Renders one camera's queued 2D drawables in authored order.
         void RenderCamera(ICamera* camera);
 
@@ -58,6 +62,13 @@ namespace helengine::psp::rendering {
         void Visit(IDrawable2D* drawable) override;
 
     private:
+        /// Applies checked RGBA8 subrows after completing pending GPU texture reads.
+        void UpdateTextureRegionCore(RuntimeTexture* texture, int32_t x, int32_t y,
+            int32_t width, int32_t height, Array<std::uint8_t>* rgba8, int32_t sourceRowPitch) override;
+
+        /// Identifies the host's currently open direct list, or null between completed frames.
+        void* ActiveGuDisplayList = nullptr;
+
         /// Stores one GU 2D vertex with UVs, packed color, and screen-space position.
         struct Psp2DVertex {
             float U;
@@ -212,8 +223,8 @@ namespace helengine::psp::rendering {
         /// Draws one textured screen-space quad using normalized UV coordinates.
         void DrawTexturedQuad(RuntimeTexture* texture, const float3& position, const int2& size, const float4& sourceRect, const byte4& color);
 
-        /// Draws one textured screen-space quad after applying authored scale and rotation around its center.
-        void DrawTexturedQuadTransformed(RuntimeTexture* texture, const float3& position, float width, float height, const float4& sourceRect, const byte4& color, float rotationRadians);
+        /// Submits exact shared sprite corners with their original texture-coordinate association.
+        void DrawTexturedQuadTransformed(RuntimeTexture* texture, const SpriteQuad2D& quad, const float4& sourceRect, const byte4& color);
 
         /// Draws one filled rounded rectangle using textured white geometry and triangle fans for the corners.
         void DrawFilledRoundedRect(const float3& position, const int2& size, float radius, const byte4& color);

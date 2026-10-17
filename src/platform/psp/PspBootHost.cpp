@@ -20,8 +20,17 @@
 #include "IAudioBackend.hpp"
 #include "IRuntimeDiagnosticsProvider.hpp"
 #include "IRuntimeUpdateStageDiagnosticsProvider.hpp"
+// Physics-free catalogs omit both generated Bepu adapters. A partial pair is an invalid build.
+#if __has_include("BepuPhysicsWorld3D.hpp") != __has_include("BepuRuntimeComponentRegistration.hpp")
+#error "PSP generated Bepu runtime headers must be present or absent together."
+#endif
+#if __has_include("BepuPhysicsWorld3D.hpp")
+#define HELENGINE_PSP_HAS_BEPU_RUNTIME 1
 #include "BepuPhysicsWorld3D.hpp"
 #include "BepuRuntimeComponentRegistration.hpp"
+#else
+#define HELENGINE_PSP_HAS_BEPU_RUNTIME 0
+#endif
 #include "InputControlId.hpp"
 #include "InputControlKind.hpp"
 #include "InputDeviceKind.hpp"
@@ -454,6 +463,7 @@ namespace helengine::psp {
             platformInfo,
             EngineOptions);
         EngineCore->SetAudioBackend(EngineAudioBackend);
+#if HELENGINE_PSP_HAS_BEPU_RUNTIME
         BepuPhysicsWorld3D* physicsWorld = BepuPhysicsWorld3D::CreateWithSolveSchedule(1, 1);
         physicsWorld->set_SceneBindingDiagnosticSink(
             new Action<std::string>([](std::string message) {
@@ -465,6 +475,7 @@ namespace helengine::psp {
             }));
         BepuRuntimeComponentRegistration::AttachRuntimeWorld(EngineCore, physicsWorld);
         BepuRuntimeComponentRegistration::RegisterSceneBinding(EngineCore);
+#endif
 
         CompleteBootStage();
     }
@@ -755,6 +766,9 @@ namespace helengine::psp {
     /// Begins one PSP frame and clears the color and depth buffers.
     void PspBootHost::BeginFrame() {
         sceGuStart(GU_DIRECT, DisplayList);
+        if (EngineRenderManager2D != nullptr) {
+            static_cast<rendering::PspRenderManager2D*>(EngineRenderManager2D)->SetActiveGuDisplayList(DisplayList);
+        }
         sceGuClearColor(DefaultClearColor);
         sceGuClearDepth(0);
         sceGuClear(GU_COLOR_BUFFER_BIT | GU_DEPTH_BUFFER_BIT);
@@ -764,6 +778,9 @@ namespace helengine::psp {
     void PspBootHost::PresentFrame() {
         sceGuFinish();
         sceGuSync(0, 0);
+        if (EngineRenderManager2D != nullptr) {
+            static_cast<rendering::PspRenderManager2D*>(EngineRenderManager2D)->SetActiveGuDisplayList(nullptr);
+        }
         sceDisplayWaitVblankStart();
         sceGuSwapBuffers();
     }

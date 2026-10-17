@@ -317,8 +317,8 @@ public sealed class PspPackagedRuntimeSourceTests {
             "PspRenderManager2D.cpp");
         string source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("float3 scale = parent->get_Scale();", source, StringComparison.Ordinal);
-        Assert.Contains("float3 rotatedRight = float4::RotateVector(float3::get_UnitX(), parent->get_Orientation());", source, StringComparison.Ordinal);
+        Assert.Contains("Batch2DGeometry::ResolveSpriteQuad(sprite)", source, StringComparison.Ordinal);
+        Assert.Contains("const float2 positions[6] = {quad.TopLeft, quad.TopRight, quad.BottomRight, quad.TopLeft, quad.BottomRight, quad.BottomLeft}", source, StringComparison.Ordinal);
         Assert.Contains("DrawTexturedQuadTransformed(", source, StringComparison.Ordinal);
         Assert.Contains("DrawTexturedTriangles(vertices, 6, texture);", source, StringComparison.Ordinal);
     }

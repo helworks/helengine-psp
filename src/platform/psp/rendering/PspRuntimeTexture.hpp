@@ -41,6 +41,14 @@ namespace helengine::psp::rendering {
         /// Replaces the owned ABGR8888 pixel buffer.
         void SetPixelsAbgr8888(std::vector<std::uint32_t>&& pixels);
 
+        /// Validates a mutable legacy RGBA region and rejects immutable native payloads before GPU synchronization.
+        void ValidateRegionUpdate(int x, int y, int width, int height, const std::uint8_t* rgba8,
+            std::size_t sourceBytes, int sourceRowPitch);
+
+        /// Patches validated RGBA bytes in the retained allocation after the caller completes pending GU reads.
+        void UpdateRegionFromRgba8(int x, int y, int width, int height,
+            const std::uint8_t* rgba8, int sourceRowPitch);
+
         /// Transfers ownership of the ABGR8888 pixel buffer out of the runtime texture for deferred safe release.
         std::vector<std::uint32_t> TakePixelsAbgr8888();
 

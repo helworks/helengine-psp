@@ -1,4 +1,6 @@
 #include "platform/psp/rendering/PspRenderManager2D.hpp"
+#include "Batch2DGeometry.hpp"
+#include "SpriteQuad2D.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -27,6 +29,7 @@
 #include "TextLayoutUtils.hpp"
 #include "TextureAsset.hpp"
 #include "platform/psp/rendering/PspRuntimeTexture.hpp"
+#include "platform/psp/rendering/PspTextureUpdateBoundary.hpp"
 #include "runtime/array.hpp"
 
 namespace helengine::psp::rendering {
@@ -135,6 +138,32 @@ namespace helengine::psp::rendering {
         TextureCache.FlushReleasedTextures();
     }
 
+    /// Tracks the host display list without acquiring ownership of its backing allocation.
+    void PspRenderManager2D::SetActiveGuDisplayList(void* displayList) {
+        ActiveGuDisplayList = displayList;
+    }
+
+    /// Completes any open list before overwriting texture texels, then resumes the same frame state.
+    void PspRenderManager2D::UpdateTextureRegionCore(RuntimeTexture* texture, int32_t x, int32_t y,
+        int32_t width, int32_t height, Array<std::uint8_t>* rgba8, int32_t sourceRowPitch) {
+        PspRuntimeTexture* pspTexture = dynamic_cast<PspRuntimeTexture*>(texture);
+        if (pspTexture == nullptr || pspTexture->get_IsDisposed() || rgba8 == nullptr || rgba8->Length < 0) {
+            throw std::invalid_argument("PSP texture update requires a live PSP texture and RGBA byte array.");
+        }
+        const std::uint8_t* source = rgba8->Data;
+        pspTexture->ValidateRegionUpdate(x, y, width, height, source,
+            static_cast<std::size_t>(rgba8->Length), sourceRowPitch);
+        PspTextureUpdateBoundary::SynchronizeBeforeWrite(ActiveGuDisplayList);
+        pspTexture->UpdateRegionFromRgba8(x, y, width, height, source, sourceRowPitch);
+        pspTexture->WritebackGpuData();
+        ClearGeometryCaches();
+        BoundTexture = nullptr;
+        PspTextureUpdateBoundary::ResumeAfterWrite(ActiveGuDisplayList);
+        if (ActiveGuDisplayList != nullptr) {
+            sceGuTexFlush();
+        }
+    }
+
     /// Binds one PSP runtime texture for GU sampling or disables texturing when no texture exists.
     void PspRenderManager2D::BindTexture(PspRuntimeTexture* texture) {
         const std::uint64_t bindStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
@@ -238,29 +267,11 @@ namespace helengine::psp::rendering {
             return;
         }
 
-        RuntimeTexture* texture = sprite->get_Texture();
-        int2 resolvedSize = sprite->get_Size();
-        if (resolvedSize.X <= 0 || resolvedSize.Y <= 0) {
-            resolvedSize = int2(texture->get_Width(), texture->get_Height());
-        }
-
-        Entity* parent = sprite->get_Parent();
-        float3 scale = parent->get_Scale();
-        const float width = static_cast<float>(static_cast<double>(resolvedSize.X) * static_cast<double>(scale.X));
-        const float height = static_cast<float>(static_cast<double>(resolvedSize.Y) * static_cast<double>(scale.Y));
-        float3 rotatedRight = float4::RotateVector(float3::get_UnitX(), parent->get_Orientation());
-        const float rotationRadians = static_cast<float>(std::atan2(
-            static_cast<double>(rotatedRight.Y),
-            static_cast<double>(rotatedRight.X)));
-
         DrawTexturedQuadTransformed(
-            texture,
-            parent->get_Position(),
-            width,
-            height,
+            sprite->get_Texture(),
+            Batch2DGeometry::ResolveSpriteQuad(sprite),
             sprite->get_SourceRect(),
-            sprite->get_Color(),
-            rotationRadians);
+            sprite->get_Color());
     }
 
     /// Draws bitmap-font text by batching all visible glyphs into one textured triangle submission.
@@ -1127,83 +1138,23 @@ namespace helengine::psp::rendering {
             drawArrayMicroseconds);
     }
 
-    /// Draws one textured screen-space quad after applying authored scale and rotation around its center.
-    void PspRenderManager2D::DrawTexturedQuadTransformed(RuntimeTexture* texture, const float3& position, float width, float height, const float4& sourceRect, const byte4& color, float rotationRadians) {
-        const double absoluteWidth = std::abs(static_cast<double>(width));
-        const double absoluteHeight = std::abs(static_cast<double>(height));
-        if (texture == nullptr || absoluteWidth <= 0.0001d || absoluteHeight <= 0.0001d) {
-            return;
-        }
-
-        if (std::abs(static_cast<double>(rotationRadians)) <= 0.0001d) {
-            DrawTexturedQuad(
-                texture,
-                position,
-                int2(
-                    static_cast<int32_t>(std::lround(width)),
-                    static_cast<int32_t>(std::lround(height))),
-                sourceRect,
-                color);
-            return;
-        }
-
+    /// Submits resolved corners directly while retaining signed axes and texture-coordinate identity.
+    void PspRenderManager2D::DrawTexturedQuadTransformed(RuntimeTexture* texture, const SpriteQuad2D& quad, const float4& sourceRect, const byte4& color) {
+        if (texture == nullptr) { return; }
         const std::uint32_t packedColor = ConvertColorToAbgr(color);
-        const float4 textureSourceRect = ConvertSourceRectToTexturePixels(sourceRect, texture);
-        const double centerX = static_cast<double>(position.X) + (static_cast<double>(width) * 0.5d);
-        const double centerY = static_cast<double>(position.Y) + (static_cast<double>(height) * 0.5d);
-        const double halfWidth = static_cast<double>(width) * 0.5d;
-        const double halfHeight = static_cast<double>(height) * 0.5d;
-        const double rotationSin = std::sin(static_cast<double>(rotationRadians));
-        const double rotationCos = std::cos(static_cast<double>(rotationRadians));
-
-        const double localLeft = -halfWidth;
-        const double localRight = halfWidth;
-        const double localTop = -halfHeight;
-        const double localBottom = halfHeight;
-
+        const float4 uv = ConvertSourceRectToTexturePixels(sourceRect, texture);
+        const float2 positions[6] = {quad.TopLeft, quad.TopRight, quad.BottomRight, quad.TopLeft, quad.BottomRight, quad.BottomLeft};
+        const float textureU[6] = {uv.X, uv.X + uv.Z, uv.X + uv.Z, uv.X, uv.X + uv.Z, uv.X};
+        const float textureV[6] = {uv.Y, uv.Y, uv.Y + uv.W, uv.Y, uv.Y + uv.W, uv.Y + uv.W};
         Psp2DVertex vertices[6] = {};
-        vertices[0].U = textureSourceRect.X;
-        vertices[0].V = textureSourceRect.Y;
-        vertices[0].Color = packedColor;
-        vertices[0].X = static_cast<float>(centerX + (localLeft * rotationCos) - (localTop * rotationSin));
-        vertices[0].Y = static_cast<float>(centerY + (localLeft * rotationSin) + (localTop * rotationCos));
-        vertices[0].Z = position.Z;
-
-        vertices[1].U = textureSourceRect.X + textureSourceRect.Z;
-        vertices[1].V = textureSourceRect.Y;
-        vertices[1].Color = packedColor;
-        vertices[1].X = static_cast<float>(centerX + (localRight * rotationCos) - (localTop * rotationSin));
-        vertices[1].Y = static_cast<float>(centerY + (localRight * rotationSin) + (localTop * rotationCos));
-        vertices[1].Z = position.Z;
-
-        vertices[2].U = textureSourceRect.X + textureSourceRect.Z;
-        vertices[2].V = textureSourceRect.Y + textureSourceRect.W;
-        vertices[2].Color = packedColor;
-        vertices[2].X = static_cast<float>(centerX + (localRight * rotationCos) - (localBottom * rotationSin));
-        vertices[2].Y = static_cast<float>(centerY + (localRight * rotationSin) + (localBottom * rotationCos));
-        vertices[2].Z = position.Z;
-
-        vertices[3].U = textureSourceRect.X;
-        vertices[3].V = textureSourceRect.Y;
-        vertices[3].Color = packedColor;
-        vertices[3].X = vertices[0].X;
-        vertices[3].Y = vertices[0].Y;
-        vertices[3].Z = position.Z;
-
-        vertices[4].U = textureSourceRect.X + textureSourceRect.Z;
-        vertices[4].V = textureSourceRect.Y + textureSourceRect.W;
-        vertices[4].Color = packedColor;
-        vertices[4].X = vertices[2].X;
-        vertices[4].Y = vertices[2].Y;
-        vertices[4].Z = position.Z;
-
-        vertices[5].U = textureSourceRect.X;
-        vertices[5].V = textureSourceRect.Y + textureSourceRect.W;
-        vertices[5].Color = packedColor;
-        vertices[5].X = static_cast<float>(centerX + (localLeft * rotationCos) - (localBottom * rotationSin));
-        vertices[5].Y = static_cast<float>(centerY + (localLeft * rotationSin) + (localBottom * rotationCos));
-        vertices[5].Z = position.Z;
-
+        for (std::size_t index = 0; index < 6; ++index) {
+            vertices[index].X = positions[index].X;
+            vertices[index].Y = positions[index].Y;
+            vertices[index].Z = 0.0f;
+            vertices[index].U = textureU[index];
+            vertices[index].V = textureV[index];
+            vertices[index].Color = packedColor;
+        }
         DrawTexturedTriangles(vertices, 6, texture);
     }
 
