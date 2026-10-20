@@ -235,7 +235,7 @@ public sealed class PspPlatformAssetBuilderTests {
                 ["texture-id"] = "Textures/Checker",
                 ["casts-shadow"] = "false",
                 ["receives-shadow"] = "true"
-            }));
+            }, numericPolicy: global::helengine.NumericPrecisionPolicy.Default));
 
         PlatformMaterialAsset materialAsset = EditorAssetTestReader.ReadAsset<PlatformMaterialAsset>(result.CookedMaterialBytes);
         Assert.Equal("psp-forward", materialAsset.RendererFamilyId);
@@ -273,7 +273,7 @@ public sealed class PspPlatformAssetBuilderTests {
                 ["texture-id"] = string.Empty,
                 ["casts-shadow"] = "false",
                 ["receives-shadow"] = "true"
-            }));
+            }, numericPolicy: global::helengine.NumericPrecisionPolicy.Default));
 
         PlatformMaterialAsset materialAsset = EditorAssetTestReader.ReadAsset<PlatformMaterialAsset>(result.CookedMaterialBytes);
         Assert.False(materialAsset.Lit);
@@ -303,7 +303,7 @@ public sealed class PspPlatformAssetBuilderTests {
                 ["texture-id"] = string.Empty,
                 ["casts-shadow"] = "true",
                 ["receives-shadow"] = "true"
-            }));
+            }, numericPolicy: global::helengine.NumericPrecisionPolicy.Default));
 
         PlatformMaterialAsset materialAsset = EditorAssetTestReader.ReadAsset<PlatformMaterialAsset>(result.CookedMaterialBytes);
 
