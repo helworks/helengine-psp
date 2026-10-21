@@ -160,10 +160,10 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
             DoubleSided = false,
             UseVertexColor = false,
             Lit = receivesLighting && string.Equals(lightingResponse, "lit-directional", StringComparison.OrdinalIgnoreCase),
-            BaseColorR = ConvertNormalizedColorChannelToByte(parsedBaseColor.X),
-            BaseColorG = ConvertNormalizedColorChannelToByte(parsedBaseColor.Y),
-            BaseColorB = ConvertNormalizedColorChannelToByte(parsedBaseColor.Z),
-            BaseColorA = ConvertNormalizedColorChannelToByte(parsedBaseColor.W)
+            BaseColorR = ConvertNormalizedColorChannelToByte((float)parsedBaseColor.X),
+            BaseColorG = ConvertNormalizedColorChannelToByte((float)parsedBaseColor.Y),
+            BaseColorB = ConvertNormalizedColorChannelToByte((float)parsedBaseColor.Z),
+            BaseColorA = ConvertNormalizedColorChannelToByte((float)parsedBaseColor.W)
         };
 
         return new PlatformMaterialCookResult(global::helengine.files.AssetSerializer.SerializeToBytes(materialAsset), []);
@@ -704,10 +704,10 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
     static byte[] CreateFloat4ConstantBufferData(float4 value) {
         using MemoryStream stream = new MemoryStream();
         using EngineBinaryWriter writer = EngineBinaryWriter.Create(stream, EngineBinaryEndianness.LittleEndian);
-        writer.WriteSingle(value.X);
-        writer.WriteSingle(value.Y);
-        writer.WriteSingle(value.Z);
-        writer.WriteSingle(value.W);
+        writer.WriteSingle((float)value.X);
+        writer.WriteSingle((float)value.Y);
+        writer.WriteSingle((float)value.Z);
+        writer.WriteSingle((float)value.W);
         return stream.ToArray();
     }
 
