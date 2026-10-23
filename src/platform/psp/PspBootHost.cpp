@@ -66,9 +66,10 @@
 #endif
 
 PSP_MODULE_INFO("helengine_psp", 0, 1, 0);
-// Scene transitions can briefly overlap two large cooked PCM music assets, so the PSP app heap
-// needs headroom beyond the default 16 MB budget.
-PSP_HEAP_SIZE_KB(24 * 1024);
+// Let newlib size the heap from the largest free user-memory block after the executable loads,
+// reserving 512 KiB for SDK/system allocations instead of assuming a fixed block is available.
+PSP_HEAP_SIZE_KB(-1);
+PSP_HEAP_THRESHOLD_SIZE_KB(512);
 PSP_MAIN_THREAD_STACK_SIZE_KB(512);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_VFPU | THREAD_ATTR_USER);
 
