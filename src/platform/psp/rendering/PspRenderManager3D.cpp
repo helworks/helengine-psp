@@ -646,11 +646,11 @@ namespace helengine::psp::rendering {
     /// Builds a CPU-side runtime model payload from the raw mesh asset.
     RuntimeModel* PspRenderManager3D::BuildModelFromRaw(ModelAsset* data) {
         if (data != nullptr && IsCacheableModelId(data->get_Id())) {
-            auto cachedModelIterator = CachedModels.find(data->get_Id().raw);
+            auto cachedModelIterator = CachedModels.find(data->get_Id().raw());
             if (cachedModelIterator != CachedModels.end()) {
                 PspBootTrace::WriteLine(
                     std::string("PspRuntimeModelReuse id=") +
-                    data->get_Id().raw +
+                    data->get_Id().raw() +
                     " ptr=" +
                     std::to_string(reinterpret_cast<std::uintptr_t>(cachedModelIterator->second)) +
                     " cacheSize=" +
@@ -667,12 +667,12 @@ namespace helengine::psp::rendering {
         }
 
         if (data != nullptr && IsCacheableModelId(data->get_Id())) {
-            CachedModels.emplace(data->get_Id().raw, runtimeModel);
+            CachedModels.emplace(data->get_Id().raw(), runtimeModel);
         }
 
         PspBootTrace::WriteLine(
             std::string("PspRuntimeModelBuild id=") +
-            (data != nullptr ? data->get_Id().raw : std::string()) +
+            (data != nullptr ? data->get_Id().raw() : std::string()) +
             " ptr=" +
             std::to_string(reinterpret_cast<std::uintptr_t>(runtimeModel)) +
             " cacheSize=" +
@@ -732,7 +732,7 @@ namespace helengine::psp::rendering {
 
         PspBootTrace::WriteLine(
             std::string("PspRuntimeMaterialBuild id=") +
-            runtimeMaterial->get_Id().raw +
+            runtimeMaterial->get_Id().raw() +
             " ptr=" +
             std::to_string(reinterpret_cast<std::uintptr_t>(runtimeMaterial)));
         return runtimeMaterial;
@@ -805,7 +805,7 @@ namespace helengine::psp::rendering {
         }
 
         if (IsCacheableModelId(model->get_Id())) {
-            auto cachedModelIterator = CachedModels.find(model->get_Id().raw);
+            auto cachedModelIterator = CachedModels.find(model->get_Id().raw());
             if (cachedModelIterator != CachedModels.end() && cachedModelIterator->second == model) {
                 CachedModels.erase(cachedModelIterator);
             }
@@ -813,7 +813,7 @@ namespace helengine::psp::rendering {
 
         PspBootTrace::WriteLine(
             std::string("PspRuntimeModelRelease id=") +
-            model->get_Id().raw +
+            model->get_Id().raw() +
             " ptr=" +
             std::to_string(reinterpret_cast<std::uintptr_t>(model)) +
             " cacheSize=" +
@@ -835,7 +835,7 @@ namespace helengine::psp::rendering {
 
         PspBootTrace::WriteLine(
             std::string("PspRuntimeMaterialRelease id=") +
-            material->get_Id().raw +
+            material->get_Id().raw() +
             " ptr=" +
             std::to_string(reinterpret_cast<std::uintptr_t>(material)));
         if (pspMaterial->GetOwnedTexture() != nullptr) {
