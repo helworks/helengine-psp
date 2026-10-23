@@ -219,8 +219,12 @@ public sealed class PspPlatformAssetBuilderTests {
     /// <summary>
     /// Verifies the PSP material cook path preserves fixed-function material data without creating a shader dependency.
     /// </summary>
-    [Fact]
-    public void CookMaterial_preserves_diffuse_texture_and_shadow_fields_without_shader_dependency() {
+    /// <param name="storageBits">Target policy width required by the packaged runtime reader.</param>
+    [Theory]
+    [InlineData(32)]
+    [InlineData(64)]
+    public void CookMaterial_preserves_diffuse_texture_and_shadow_fields_without_shader_dependency(int storageBits) {
+        NumericPrecisionPolicy numericPolicy = new(storageBits, storageBits);
         PspPlatformAssetBuilder builder = new();
 
         PlatformMaterialCookResult result = builder.CookMaterial(new PlatformMaterialCookRequest(
@@ -235,9 +239,9 @@ public sealed class PspPlatformAssetBuilderTests {
                 ["texture-id"] = "Textures/Checker",
                 ["casts-shadow"] = "false",
                 ["receives-shadow"] = "true"
-            }, numericPolicy: global::helengine.NumericPrecisionPolicy.Default));
+            }, numericPolicy: numericPolicy));
 
-        PlatformMaterialAsset materialAsset = EditorAssetTestReader.ReadAsset<PlatformMaterialAsset>(result.CookedMaterialBytes);
+        PlatformMaterialAsset materialAsset = Assert.IsType<PlatformMaterialAsset>(helengine.PackagedAssetBinarySerializer.Deserialize(new MemoryStream(result.CookedMaterialBytes), numericPolicy));
         Assert.Equal("psp-forward", materialAsset.RendererFamilyId);
         Assert.Equal("Textures/Checker", materialAsset.TextureRelativePath);
         Assert.True(materialAsset.Lit);
@@ -814,9 +818,13 @@ public sealed class PspPlatformAssetBuilderTests {
     /// <summary>
     /// Verifies the PSP builder executes one builder-owned texture cook work item into the exact declared runtime output path.
     /// </summary>
-    [Fact]
-    public async Task BuildAsync_whenGivenTexturePlatformCookWorkItem_writesCookedRuntimeTextureToDeclaredOutputPath() {
-        string workingRoot = Path.Combine((Environment.GetEnvironmentVariable("HELENGINE_PSP_TEXTURE_TEST_OUTPUT") ?? AppContext.BaseDirectory), Guid.NewGuid().ToString("N"));
+    /// <param name="storageBits">Target policy width encoded in the final texture container.</param>
+    [Theory]
+    [InlineData(32)]
+    [InlineData(64)]
+    public async Task BuildAsync_whenGivenTexturePlatformCookWorkItem_writesCookedRuntimeTextureToDeclaredOutputPath(int storageBits) {
+        NumericPrecisionPolicy numericPolicy = new(storageBits, storageBits);
+        string workingRoot = Path.Combine((Environment.GetEnvironmentVariable("HELENGINE_PSP_TEXTURE_TEST_OUTPUT") ?? AppContext.BaseDirectory), "cooker-policy-test");
         string outputRoot = Path.Combine(workingRoot, "out");
         string sourceRoot = Path.Combine(workingRoot, "staging");
         string generatedCoreRoot = Path.Combine(workingRoot, "generated-core");
@@ -889,7 +897,7 @@ public sealed class PspPlatformAssetBuilderTests {
                 ],
                 PlatformBuildRuntimeFeatureManifest.Empty);
 
-            PlatformBuildRequest request = CreateBuildRequest(workingRoot, outputRoot, generatedCoreRoot, manifest);
+            PlatformBuildRequest request = CreateBuildRequest(workingRoot, outputRoot, generatedCoreRoot, manifest, numericPolicy);
             TextureAsset expectedTextureAsset = new TextureAsset {
                 Width = 1,
                 Height = 1,
@@ -914,7 +922,7 @@ public sealed class PspPlatformAssetBuilderTests {
             string outputTexturePath = Path.Combine(outputRoot, "PSP", "GAME", "HELENGINE", "cooked", "imported", "textures", "checker");
             Assert.True(File.Exists(outputTexturePath));
 
-            TextureAsset outputTextureAsset = Assert.IsType<TextureAsset>(AssetSerializer.DeserializeFromBytes(File.ReadAllBytes(outputTexturePath)));
+            TextureAsset outputTextureAsset = Assert.IsType<TextureAsset>(helengine.PackagedAssetBinarySerializer.Deserialize(new MemoryStream(File.ReadAllBytes(outputTexturePath)), numericPolicy));
             Assert.Equal("Textures/Checker", outputTextureAsset.Id);
             Assert.Equal(RuntimeAssetIdGenerator.Generate("Textures/Checker"), outputTextureAsset.RuntimeAssetId);
             Assert.Equal(TextureAssetColorFormat.Rgba4444, outputTextureAsset.ColorFormat);
@@ -943,9 +951,13 @@ public sealed class PspPlatformAssetBuilderTests {
     /// <summary>
     /// Verifies the PSP builder executes one builder-owned font-atlas cook work item into one cooked runtime texture payload at the exact declared output path.
     /// </summary>
-    [Fact]
-    public async Task BuildAsync_whenGivenFontAtlasPlatformCookWorkItem_writesCookedRuntimeTextureToDeclaredOutputPath() {
-        string workingRoot = Path.Combine((Environment.GetEnvironmentVariable("HELENGINE_PSP_TEXTURE_TEST_OUTPUT") ?? AppContext.BaseDirectory), Guid.NewGuid().ToString("N"));
+    /// <param name="storageBits">Target policy width encoded in the final font atlas container.</param>
+    [Theory]
+    [InlineData(32)]
+    [InlineData(64)]
+    public async Task BuildAsync_whenGivenFontAtlasPlatformCookWorkItem_writesCookedRuntimeTextureToDeclaredOutputPath(int storageBits) {
+        NumericPrecisionPolicy numericPolicy = new(storageBits, storageBits);
+        string workingRoot = Path.Combine((Environment.GetEnvironmentVariable("HELENGINE_PSP_TEXTURE_TEST_OUTPUT") ?? AppContext.BaseDirectory), "cooker-policy-test");
         string outputRoot = Path.Combine(workingRoot, "out");
         string sourceRoot = Path.Combine(workingRoot, "staging");
         string generatedCoreRoot = Path.Combine(workingRoot, "generated-core");
@@ -1018,7 +1030,7 @@ public sealed class PspPlatformAssetBuilderTests {
                 ],
                 PlatformBuildRuntimeFeatureManifest.Empty);
 
-            PlatformBuildRequest request = CreateBuildRequest(workingRoot, outputRoot, generatedCoreRoot, manifest);
+            PlatformBuildRequest request = CreateBuildRequest(workingRoot, outputRoot, generatedCoreRoot, manifest, numericPolicy);
             TextureAsset expectedTextureAsset = new TextureAsset {
                 Width = 1,
                 Height = 1,
@@ -1050,7 +1062,7 @@ public sealed class PspPlatformAssetBuilderTests {
                     ColorFormat = TextureAssetColorFormat.Rgba4444,
                     AlphaPrecision = TextureAssetAlphaPrecision.A4
                 });
-            byte[] expectedTextureBytes = global::helengine.files.AssetSerializer.SerializeToBytes(expectedCookedTextureAsset);
+            byte[] expectedTextureBytes = global::helengine.files.AssetSerializer.SerializeToBytes(expectedCookedTextureAsset, numericPolicy);
             Assert.Equal(expectedTextureBytes, File.ReadAllBytes(outputTexturePath));
         } finally {
             try {
@@ -1182,8 +1194,9 @@ public sealed class PspPlatformAssetBuilderTests {
     /// <param name="outputRoot">Final output root used by the build request.</param>
     /// <param name="generatedCoreRoot">Generated core source root used by the build request.</param>
     /// <param name="manifest">Resolved build manifest consumed by the PSP builder.</param>
+    /// <param name="numericPolicy">Optional target policy captured by the build request.</param>
     /// <returns>Fully resolved PSP build request.</returns>
-    static PlatformBuildRequest CreateBuildRequest(string workingRoot, string outputRoot, string generatedCoreRoot, PlatformBuildManifest manifest) {
+    static PlatformBuildRequest CreateBuildRequest(string workingRoot, string outputRoot, string generatedCoreRoot, PlatformBuildManifest manifest, NumericPrecisionPolicy numericPolicy = null) {
         return new PlatformBuildRequest(
             manifest,
             [new PlatformBuildTargetVariant("psp-debug", "psp", "psp", "default")],
@@ -1203,7 +1216,10 @@ public sealed class PspPlatformAssetBuilderTests {
             selectedCodegenProfileId: "default",
             selectedBuildOptionValues: new Dictionary<string, string>(),
             selectedGraphicsOptionValues: new Dictionary<string, string>(),
-            selectedCodegenOptionValues: new Dictionary<string, string>(),
+            selectedCodegenOptionValues: new Dictionary<string, string> {
+                [PlatformCodegenSettingIds.RealStorageBits] = (numericPolicy ?? RealRepresentation.Policy).StorageBits.ToString(),
+                [PlatformCodegenSettingIds.RealArithmeticBits] = (numericPolicy ?? RealRepresentation.Policy).ArithmeticBits.ToString()
+            },
             generatedCoreCppRootPath: generatedCoreRoot,
             selectedMediaProfileId: "psp-game-folder",
             selectedStorageProfileId: "homebrew-app");

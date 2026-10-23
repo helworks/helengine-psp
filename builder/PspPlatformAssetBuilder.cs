@@ -166,7 +166,7 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
             BaseColorA = ConvertNormalizedColorChannelToByte((float)parsedBaseColor.W)
         };
 
-        return new PlatformMaterialCookResult(global::helengine.files.AssetSerializer.SerializeToBytes(materialAsset), []);
+        return new PlatformMaterialCookResult(global::helengine.files.AssetSerializer.SerializeToBytes(materialAsset, request.NumericPolicy), []);
     }
 
     /// <summary>
@@ -250,7 +250,7 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
 
             PlatformCookWorkItem workItem = platformCookWorkItems[workItemIndex];
             try {
-                ExecutePlatformCookWorkItem(workItem, stagingRootPath);
+                ExecutePlatformCookWorkItem(workItem, stagingRootPath, request.NumericPolicy);
                 progressReporter.Report(new PlatformBuildProgressUpdate(
                     "Execute Platform Cook Work Items",
                     workItem.OutputLogicalArtifactId,
@@ -276,7 +276,8 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
     /// </summary>
     /// <param name="workItem">Builder-owned PSP cook work item to execute.</param>
     /// <param name="stagingRootPath">Working staging root that receives the cooked output.</param>
-    void ExecutePlatformCookWorkItem(PlatformCookWorkItem workItem, string stagingRootPath) {
+    /// <param name="numericPolicy">Target numeric policy encoded in the cooked texture container.</param>
+    void ExecutePlatformCookWorkItem(PlatformCookWorkItem workItem, string stagingRootPath, NumericPrecisionPolicy numericPolicy) {
         if (workItem == null) {
             throw new ArgumentNullException(nameof(workItem));
         } else if (string.IsNullOrWhiteSpace(stagingRootPath)) {
@@ -293,11 +294,11 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
 
         if (string.Equals(workItem.SourceAssetKind, "texture", StringComparison.OrdinalIgnoreCase)) {
             using TextureAsset cookedTextureAsset = PlatformCookSourceProcessor.CookTexture(workItem.SourceAssetPath, assetId, settings);
-            File.WriteAllBytes(destinationPath, global::helengine.files.AssetSerializer.SerializeToBytes(cookedTextureAsset));
+            File.WriteAllBytes(destinationPath, global::helengine.files.AssetSerializer.SerializeToBytes(cookedTextureAsset, numericPolicy));
             return;
         } else if (string.Equals(workItem.SourceAssetKind, "font-atlas-texture", StringComparison.OrdinalIgnoreCase)) {
             using TextureAsset cookedAtlasTextureAsset = PlatformCookSourceProcessor.CookFontAtlasTexture(workItem.SourceAssetPath, assetId, settings);
-            File.WriteAllBytes(destinationPath, global::helengine.files.AssetSerializer.SerializeToBytes(cookedAtlasTextureAsset));
+            File.WriteAllBytes(destinationPath, global::helengine.files.AssetSerializer.SerializeToBytes(cookedAtlasTextureAsset, numericPolicy));
             return;
         }
 
