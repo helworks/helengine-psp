@@ -682,7 +682,7 @@ namespace helengine::psp::rendering {
 
     /// Loads one cooked PSP model from packaged content and converts it into fixed-function vertex streams.
     RuntimeModel* PspRenderManager3D::BuildModelFromCooked(
-        std::string cookedAssetPath,
+        HeCppString cookedAssetPath,
         IContentStreamSource* contentStreamSource) {
         if (cookedAssetPath.empty()) {
             throw std::invalid_argument("PSP cooked model path is required.");
@@ -740,7 +740,7 @@ namespace helengine::psp::rendering {
 
     /// Loads and builds one fixed-function PSP runtime material from its cooked content-relative path.
     RuntimeMaterial* PspRenderManager3D::BuildMaterialFromCooked(
-        std::string cookedAssetPath,
+        HeCppString cookedAssetPath,
         IContentStreamSource* contentStreamSource) {
         if (cookedAssetPath.empty()) {
             throw std::invalid_argument("PSP cooked material path is required.");

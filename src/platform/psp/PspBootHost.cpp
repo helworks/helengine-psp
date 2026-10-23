@@ -131,7 +131,7 @@ namespace helengine::psp {
             }
 
             /// Records one core update-stage transition after physics binding without adding per-frame memory-card writes after the diagnostic limit.
-            void ReportUpdateStage(std::string stage) override {
+            void ReportUpdateStage(HeCppString stage) override {
                 if (!IsPostSceneBindingTraceActive) {
                     return;
                 }
@@ -588,7 +588,7 @@ namespace helengine::psp {
             return std::string();
         }
 
-        return loadedScenes->get_Item(0)->get_SceneId();
+        return loadedScenes->get_Item(0)->get_SceneId().raw();
     }
 
     /// Returns the current runtime loaded-scene count.
@@ -692,7 +692,7 @@ namespace helengine::psp {
                 const int32_t loadedSceneCount = loadedScenes != nullptr ? loadedScenes->get_Count() : 0;
                 std::string primarySceneId;
                 if (loadedScenes != nullptr && loadedSceneCount > 0 && loadedScenes->get_Item(0) != nullptr) {
-                    primarySceneId = loadedScenes->get_Item(0)->get_SceneId();
+                    primarySceneId = loadedScenes->get_Item(0)->get_SceneId().raw();
                 }
                 const int32_t entityCount = EngineCore->get_ObjectManager() != nullptr && EngineCore->get_ObjectManager()->get_Entities() != nullptr
                     ? EngineCore->get_ObjectManager()->get_Entities()->get_Count()

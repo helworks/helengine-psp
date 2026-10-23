@@ -15,8 +15,8 @@ namespace helengine::psp {
     }
 
     /// Opens one cooked asset using its content-relative runtime path.
-    ::Stream* PspMemoryCardContentStreamSource::OpenRead(std::string assetPath) {
-        return new FileStream(ResolvePhysicalPath(assetPath), FileMode::Open, FileAccess::Read, FileShare::Read);
+    ::Stream* PspMemoryCardContentStreamSource::OpenRead(HeCppString assetPath) {
+        return new FileStream(ResolvePhysicalPath(assetPath.raw()), FileMode::Open, FileAccess::Read, FileShare::Read);
     }
 
     /// Combines the configured content root with one runtime-relative cooked asset path.

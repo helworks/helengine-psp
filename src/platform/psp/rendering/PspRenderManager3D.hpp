@@ -32,13 +32,13 @@ namespace helengine::psp::rendering {
         RuntimeModel* BuildModelFromRaw(ModelAsset* data) override;
 
         /// Loads a cooked model payload from packaged PSP content and builds its fixed-function runtime representation.
-        RuntimeModel* BuildModelFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) override;
+        RuntimeModel* BuildModelFromCooked(HeCppString cookedAssetPath, IContentStreamSource* contentStreamSource) override;
 
         /// Builds one fixed-function PSP runtime material from its cooked platform payload.
         RuntimeMaterial* BuildMaterialFromCooked(PlatformMaterialAsset* materialAsset) override;
 
         /// Loads and builds one fixed-function PSP runtime material from its cooked content-relative path.
-        RuntimeMaterial* BuildMaterialFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) override;
+        RuntimeMaterial* BuildMaterialFromCooked(HeCppString cookedAssetPath, IContentStreamSource* contentStreamSource) override;
 
         /// Releases one PSP runtime model after the final scene reference is removed.
         void ReleaseModel(RuntimeModel* model) override;

@@ -14,7 +14,7 @@ namespace helengine::psp {
         /// Opens one cooked asset using its content-relative runtime path.
         /// <param name="assetPath">Content-relative cooked asset path requested by the generated runtime.</param>
         /// <returns>A readable stream that owns the opened memory-card file.</returns>
-        ::Stream* OpenRead(std::string assetPath) override;
+        ::Stream* OpenRead(HeCppString assetPath) override;
 
     private:
         /// Stores the memory-card directory that contains the staged runtime content.

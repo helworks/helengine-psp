@@ -95,7 +95,7 @@ namespace helengine::psp {
         voice.SourceSamples = reinterpret_cast<const std::int16_t*>(asset->EncodedBytes->Data);
         voice.SourceSampleCount = asset->EncodedBytes->Length / static_cast<int32_t>(sizeof(std::int16_t));
         voice.SourceSampleRate = asset->SampleRate;
-        voice.BusId = NormalizeBusId(request != nullptr && !request->BusId.empty() ? request->BusId : asset->DefaultBusId);
+        voice.BusId = NormalizeBusId((request != nullptr && !request->BusId.empty() ? request->BusId : asset->DefaultBusId).raw());
         voice.BaseGain = ClampGain(request != nullptr ? request->Gain : 1.0f);
         voice.Loop = request != nullptr ? request->Loop : asset->DefaultLoop;
         voice.Playing = true;
@@ -127,14 +127,14 @@ namespace helengine::psp {
         HasLoggedActiveMix = false;
     }
 
-    void PspAudioBackend::SetBusGain(std::string busId, float gain) {
+    void PspAudioBackend::SetBusGain(HeCppString busId, float gain) {
         std::lock_guard<std::mutex> lock(StateMutex);
-        BusGainsById[NormalizeBusId(std::move(busId))] = ClampGain(gain);
+        BusGainsById[NormalizeBusId(busId.raw())] = ClampGain(gain);
     }
 
-    void PspAudioBackend::SetBusPaused(std::string busId, bool paused) {
+    void PspAudioBackend::SetBusPaused(HeCppString busId, bool paused) {
         std::lock_guard<std::mutex> lock(StateMutex);
-        std::string normalizedBusId = NormalizeBusId(std::move(busId));
+        std::string normalizedBusId = NormalizeBusId(busId.raw());
         if (paused) {
             PausedBusIds.insert(normalizedBusId);
         } else {

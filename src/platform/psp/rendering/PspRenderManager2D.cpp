@@ -53,7 +53,7 @@ namespace helengine::psp::rendering {
 
     /// Builds a PSP runtime texture from one cooked texture payload read through the configured content stream source.
     RuntimeTexture* PspRenderManager2D::BuildTextureFromCooked(
-        std::string cookedAssetPath,
+        HeCppString cookedAssetPath,
         IContentStreamSource* contentStreamSource) {
         if (cookedAssetPath.empty()) {
             throw std::invalid_argument("PSP cooked texture path is required.");

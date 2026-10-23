@@ -34,9 +34,9 @@ namespace helengine::psp {
 
         void Stop(int32_t voiceId) override;
 
-        void SetBusGain(std::string busId, float gain) override;
+        void SetBusGain(HeCppString busId, float gain) override;
 
-        void SetBusPaused(std::string busId, bool paused) override;
+        void SetBusPaused(HeCppString busId, bool paused) override;
 
         bool IsPlaying(int32_t voiceId) override;
 
