@@ -98,7 +98,7 @@ namespace helengine::psp::rendering {
         const std::uint64_t cacheKey = data->get_RuntimeAssetId();
         PspBootTrace::WriteLine(
             std::string("PspTextureBuildBegin runtimeId=") + std::to_string(cacheKey)
-            + " id=" + data->get_Id()
+            + " id=" + data->get_Id().raw()
             + " width=" + std::to_string(data->Width)
             + " height=" + std::to_string(data->Height)
             + " colors=" + std::to_string(data->Colors != nullptr ? data->Colors->Length : 0)
@@ -140,7 +140,7 @@ namespace helengine::psp::rendering {
         PspBootTrace::WriteLine(
             std::string("PspTextureReleaseQueue ptr=")
             + std::to_string(reinterpret_cast<std::uintptr_t>(texture))
-            + " id=" + texture->get_Id()
+            + " id=" + texture->get_Id().raw()
             + " runtimeId=" + std::to_string(texture->GetRuntimeAssetId())
             + " freeMem=" + std::to_string(sceKernelTotalFreeMemSize()));
         const std::uint64_t cacheKey = texture->GetRuntimeAssetId();
@@ -225,7 +225,7 @@ namespace helengine::psp::rendering {
 
         PspBootTrace::WriteLine(
             std::string("PspTextureCreateBegin runtimeId=") + std::to_string(data->get_RuntimeAssetId())
-            + " id=" + data->get_Id()
+            + " id=" + data->get_Id().raw()
             + " expectedBytes=" + std::to_string(expectedByteCount)
             + " freeMem=" + std::to_string(sceKernelTotalFreeMemSize()));
         std::unique_ptr<PspRuntimeTexture> ownedTexture = std::make_unique<PspRuntimeTexture>();

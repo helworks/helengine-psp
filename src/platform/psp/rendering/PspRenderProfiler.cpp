@@ -130,7 +130,7 @@ namespace helengine::psp::rendering {
                 return "texture=null";
             }
 
-            return std::string("textureId=") + texture->get_Id()
+            return std::string("textureId=") + texture->get_Id().raw()
                 + " ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(texture))
                 + " width=" + std::to_string(texture->get_Width())
                 + " height=" + std::to_string(texture->get_Height())

@@ -19,7 +19,7 @@ namespace helengine::psp::rendering {
         PspBootTrace::WriteLine(
             std::string("PspRuntimeTextureDestroy ptr=")
             + std::to_string(reinterpret_cast<std::uintptr_t>(this))
-            + " id=" + get_Id()
+            + " id=" + get_Id().raw()
             + " width=" + std::to_string(get_Width())
             + " height=" + std::to_string(get_Height())
             + " pixels=" + std::to_string(PixelsAbgr8888.size()));

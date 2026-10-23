@@ -357,14 +357,14 @@ namespace helengine::psp::rendering {
             const double angle0 = Pi + ((Pi * 0.5 * segmentIndex) / RoundedCornerSegmentCount);
             const double angle1 = Pi + ((Pi * 0.5 * (segmentIndex + 1)) / RoundedCornerSegmentCount);
 
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, position.X + roundedRadius, position.Y + roundedRadius, position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>(position.X + roundedRadius), static_cast<float>(position.Y + roundedRadius), static_cast<float>(position.Z) });
             vertices.push_back(Psp2DVertex {
                 0.0f,
                 0.0f,
                 packedColor,
                 static_cast<float>((position.X + roundedRadius) + (std::cos(angle0) * roundedRadius)),
                 static_cast<float>((position.Y + roundedRadius) + (std::sin(angle0) * roundedRadius)),
-                position.Z
+                static_cast<float>(position.Z)
             });
             vertices.push_back(Psp2DVertex {
                 0.0f,
@@ -372,7 +372,7 @@ namespace helengine::psp::rendering {
                 packedColor,
                 static_cast<float>((position.X + roundedRadius) + (std::cos(angle1) * roundedRadius)),
                 static_cast<float>((position.Y + roundedRadius) + (std::sin(angle1) * roundedRadius)),
-                position.Z
+                static_cast<float>(position.Z)
             });
         }
 
@@ -380,14 +380,14 @@ namespace helengine::psp::rendering {
             const double angle0 = (Pi * 1.5) + ((Pi * 0.5 * segmentIndex) / RoundedCornerSegmentCount);
             const double angle1 = (Pi * 1.5) + ((Pi * 0.5 * (segmentIndex + 1)) / RoundedCornerSegmentCount);
 
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, position.X + size.X - roundedRadius, position.Y + roundedRadius, position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>(position.X + size.X - roundedRadius), static_cast<float>(position.Y + roundedRadius), static_cast<float>(position.Z) });
             vertices.push_back(Psp2DVertex {
                 0.0f,
                 0.0f,
                 packedColor,
                 static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle0) * roundedRadius)),
                 static_cast<float>((position.Y + roundedRadius) + (std::sin(angle0) * roundedRadius)),
-                position.Z
+                static_cast<float>(position.Z)
             });
             vertices.push_back(Psp2DVertex {
                 0.0f,
@@ -395,7 +395,7 @@ namespace helengine::psp::rendering {
                 packedColor,
                 static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle1) * roundedRadius)),
                 static_cast<float>((position.Y + roundedRadius) + (std::sin(angle1) * roundedRadius)),
-                position.Z
+                static_cast<float>(position.Z)
             });
         }
 
@@ -403,14 +403,14 @@ namespace helengine::psp::rendering {
             const double angle0 = (Pi * 0.5 * segmentIndex) / RoundedCornerSegmentCount;
             const double angle1 = (Pi * 0.5 * (segmentIndex + 1)) / RoundedCornerSegmentCount;
 
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, position.X + size.X - roundedRadius, position.Y + size.Y - roundedRadius, position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>(position.X + size.X - roundedRadius), static_cast<float>(position.Y + size.Y - roundedRadius), static_cast<float>(position.Z) });
             vertices.push_back(Psp2DVertex {
                 0.0f,
                 0.0f,
                 packedColor,
                 static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle0) * roundedRadius)),
                 static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle0) * roundedRadius)),
-                position.Z
+                static_cast<float>(position.Z)
             });
             vertices.push_back(Psp2DVertex {
                 0.0f,
@@ -418,7 +418,7 @@ namespace helengine::psp::rendering {
                 packedColor,
                 static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle1) * roundedRadius)),
                 static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle1) * roundedRadius)),
-                position.Z
+                static_cast<float>(position.Z)
             });
         }
 
@@ -426,14 +426,14 @@ namespace helengine::psp::rendering {
             const double angle0 = (Pi * 0.5) + ((Pi * 0.5 * segmentIndex) / RoundedCornerSegmentCount);
             const double angle1 = (Pi * 0.5) + ((Pi * 0.5 * (segmentIndex + 1)) / RoundedCornerSegmentCount);
 
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, position.X + roundedRadius, position.Y + size.Y - roundedRadius, position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>(position.X + roundedRadius), static_cast<float>(position.Y + size.Y - roundedRadius), static_cast<float>(position.Z) });
             vertices.push_back(Psp2DVertex {
                 0.0f,
                 0.0f,
                 packedColor,
                 static_cast<float>((position.X + roundedRadius) + (std::cos(angle0) * roundedRadius)),
                 static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle0) * roundedRadius)),
-                position.Z
+                static_cast<float>(position.Z)
             });
             vertices.push_back(Psp2DVertex {
                 0.0f,
@@ -441,7 +441,7 @@ namespace helengine::psp::rendering {
                 packedColor,
                 static_cast<float>((position.X + roundedRadius) + (std::cos(angle1) * roundedRadius)),
                 static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle1) * roundedRadius)),
-                position.Z
+                static_cast<float>(position.Z)
             });
         }
         AppendWhiteTrianglesToBatch(vertices);
@@ -490,11 +490,11 @@ namespace helengine::psp::rendering {
     /// Appends one solid-colored quad directly to one cached white-triangle vertex list.
     void PspRenderManager2D::AppendSolidQuadVertices(std::vector<Psp2DVertex>& vertices, const float3& position, const int2& size, const byte4& color) {
         const std::uint32_t packedColor = ConvertColorToAbgr(color);
-        const float left = position.X;
-        const float top = position.Y;
-        const float right = position.X + size.X;
-        const float bottom = position.Y + size.Y;
-        const float z = position.Z;
+        const float left = static_cast<float>(position.X);
+        const float top = static_cast<float>(position.Y);
+        const float right = static_cast<float>(position.X + size.X);
+        const float bottom = static_cast<float>(position.Y + size.Y);
+        const float z = static_cast<float>(position.Z);
 
         vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, left, top, z });
         vertices.push_back(Psp2DVertex { 1.0f, 0.0f, packedColor, right, top, z });
@@ -522,9 +522,9 @@ namespace helengine::psp::rendering {
         const std::size_t startIndex = PendingWhiteTriangles.size();
         PendingWhiteTriangles.insert(PendingWhiteTriangles.end(), vertices.begin(), vertices.end());
         for (std::size_t index = startIndex; index < PendingWhiteTriangles.size(); index++) {
-            PendingWhiteTriangles[index].X += positionOffset.X;
-            PendingWhiteTriangles[index].Y += positionOffset.Y;
-            PendingWhiteTriangles[index].Z += positionOffset.Z;
+            PendingWhiteTriangles[index].X += static_cast<float>(positionOffset.X);
+            PendingWhiteTriangles[index].Y += static_cast<float>(positionOffset.Y);
+            PendingWhiteTriangles[index].Z += static_cast<float>(positionOffset.Z);
         }
     }
 
@@ -551,8 +551,8 @@ namespace helengine::psp::rendering {
             const byte4 color = text->get_Color();
             const bool wrapText = text->get_WrapText();
             const TextAlignment alignment = text->get_Alignment();
-            const float fontScale = text->get_FontScale();
-            const std::string textValue = text->get_Text();
+            const float fontScale = static_cast<float>(text->get_FontScale());
+            const std::string textValue = text->get_Text().raw();
             const bool usesStaticSurface = ShouldUseStaticTextSurface(text);
             if (entry.Texture == texture
                 && entry.Size.X == size.X
@@ -587,8 +587,8 @@ namespace helengine::psp::rendering {
             }
 
             const int2 size = shape->get_Size();
-            const float radius = shape->get_Radius();
-            const float borderThickness = shape->get_BorderThickness();
+            const float radius = static_cast<float>(shape->get_Radius());
+            const float borderThickness = static_cast<float>(shape->get_BorderThickness());
             if (entry.Size.X == size.X
                 && entry.Size.Y == size.Y
                 && entry.Radius == radius
@@ -611,21 +611,21 @@ namespace helengine::psp::rendering {
         FontAsset* font = text->get_Font();
         RuntimeTexture* atlasTexture = font->get_Texture();
         const byte4 color = text->get_Color();
-        const float fontScaleValue = text->get_FontScale();
+        const float fontScaleValue = static_cast<float>(text->get_FontScale());
         const double fontScale = std::max(static_cast<double>(fontScaleValue), 0.0001d);
-        std::string content = text->get_Text();
+        std::string content = text->get_Text().raw();
 
         if (text->get_WrapText()) {
             const int2 textSize = text->get_Size();
             const int32_t wrapWidth = std::max<int32_t>(
                 1,
                 static_cast<int32_t>(std::lround(std::max<int32_t>(static_cast<int32_t>(textSize.X), 1) / fontScale)));
-            content = TextLayoutUtils::WrapText(content, font, wrapWidth);
+            content = TextLayoutUtils::WrapText(content, font, wrapWidth).raw();
         }
 
         cacheEntry.Texture = atlasTexture;
         cacheEntry.Content = content;
-        cacheEntry.RawText = text->get_Text();
+        cacheEntry.RawText = text->get_Text().raw();
         cacheEntry.Size = text->get_Size();
         cacheEntry.Color = color;
         cacheEntry.WrapText = text->get_WrapText();
@@ -656,15 +656,15 @@ namespace helengine::psp::rendering {
             }
 
             if (character == '\n') {
-                const double visibleLineWidth = TextLayoutAlignmentUtils::MeasureVisibleLineWidth(
+                const double visibleLineWidth = static_cast<double>(TextLayoutAlignmentUtils::MeasureVisibleLineWidth(
                     currentLine,
                     font,
                     fontScale,
-                    static_cast<double>(font->get_AtlasWidth()));
-                lineOffsets.push_back(TextLayoutAlignmentUtils::ResolveHorizontalOffset(
+                    static_cast<double>(font->get_AtlasWidth())));
+                lineOffsets.push_back(static_cast<double>(TextLayoutAlignmentUtils::ResolveHorizontalOffset(
                     text->get_Alignment(),
                     layoutWidth,
-                    visibleLineWidth));
+                    visibleLineWidth)));
                 currentLine.clear();
                 continue;
             }
@@ -672,15 +672,15 @@ namespace helengine::psp::rendering {
             currentLine.push_back(character);
         }
 
-        const double trailingVisibleLineWidth = TextLayoutAlignmentUtils::MeasureVisibleLineWidth(
+        const double trailingVisibleLineWidth = static_cast<double>(TextLayoutAlignmentUtils::MeasureVisibleLineWidth(
             currentLine,
             font,
             fontScale,
-            static_cast<double>(font->get_AtlasWidth()));
-        lineOffsets.push_back(TextLayoutAlignmentUtils::ResolveHorizontalOffset(
+            static_cast<double>(font->get_AtlasWidth())));
+        lineOffsets.push_back(static_cast<double>(TextLayoutAlignmentUtils::ResolveHorizontalOffset(
             text->get_Alignment(),
             layoutWidth,
-            trailingVisibleLineWidth));
+            trailingVisibleLineWidth)));
         std::size_t lineIndex = 0u;
         double lineOffsetX = lineOffsets.empty() ? 0.0 : lineOffsets[0];
 
@@ -708,8 +708,8 @@ namespace helengine::psp::rendering {
             }
             cacheEntry.GlyphCount++;
 
-            const double glyphWidth = glyph.SourceRect.Z * font->get_AtlasWidth() * fontScale;
-            const double glyphHeight = glyph.SourceRect.W * font->get_AtlasHeight() * fontScale;
+            const double glyphWidth = static_cast<double>(glyph.SourceRect.Z * font->get_AtlasWidth() * fontScale);
+            const double glyphHeight = static_cast<double>(glyph.SourceRect.W * font->get_AtlasHeight() * fontScale);
             const double snappedLineOffsetY = std::round(offsetY);
             const double drawX = std::round(baseX + lineOffsetX + offsetX);
             const double drawY = std::round(baseY + snappedLineOffsetY + (glyph.OffsetY * fontScale));
@@ -721,10 +721,10 @@ namespace helengine::psp::rendering {
             const float right = static_cast<float>(std::max(drawX + 1.0, drawRight));
             const float bottom = static_cast<float>(std::max(drawY + 1.0, drawBottom));
             const float z = 0.0f;
-            const float sourceLeft = textureSourceRect.X;
-            const float sourceTop = textureSourceRect.Y;
-            const float sourceRight = textureSourceRect.X + textureSourceRect.Z;
-            const float sourceBottom = textureSourceRect.Y + textureSourceRect.W;
+            const float sourceLeft = static_cast<float>(textureSourceRect.X);
+            const float sourceTop = static_cast<float>(textureSourceRect.Y);
+            const float sourceRight = static_cast<float>(textureSourceRect.X + textureSourceRect.Z);
+            const float sourceBottom = static_cast<float>(textureSourceRect.Y + textureSourceRect.W);
 
             cacheEntry.Vertices.push_back(Psp2DVertex { sourceLeft, sourceTop, packedColor, left, top, z });
             cacheEntry.Vertices.push_back(Psp2DVertex { sourceRight, sourceTop, packedColor, right, top, z });
@@ -748,16 +748,16 @@ namespace helengine::psp::rendering {
     /// Rebuilds one cached rounded-rectangle entry from the drawable's current authored state.
     void PspRenderManager2D::RebuildRoundedRectGeometryCacheEntry(RoundedRectGeometryCacheEntry& cacheEntry, IRoundedRectDrawable2D* shape) {
         const int2 size = shape->get_Size();
-        const int32_t borderThickness = std::max<int32_t>(0, static_cast<int32_t>(std::lround(shape->get_BorderThickness())));
-        const float radius = std::max(0.0f, shape->get_Radius());
+        const int32_t borderThickness = std::max<int32_t>(0, static_cast<int32_t>(std::lround(static_cast<double>(shape->get_BorderThickness()))));
+        const float radius = std::max(0.0f, static_cast<float>(shape->get_Radius()));
         const byte4 fillColor = shape->get_FillColor();
         const byte4 borderColor = shape->get_BorderColor();
         const int32_t innerWidth = size.X - (borderThickness * 2);
         const int32_t innerHeight = size.Y - (borderThickness * 2);
 
         cacheEntry.Size = size;
-        cacheEntry.Radius = shape->get_Radius();
-        cacheEntry.BorderThickness = shape->get_BorderThickness();
+        cacheEntry.Radius = static_cast<float>(shape->get_Radius());
+        cacheEntry.BorderThickness = static_cast<float>(shape->get_BorderThickness());
         cacheEntry.HasBorder = borderThickness > 0;
         cacheEntry.HasInnerFill = innerWidth > 0 && innerHeight > 0;
         cacheEntry.BorderPosition = float3(0.0f, 0.0f, 0.0f);
@@ -835,36 +835,36 @@ namespace helengine::psp::rendering {
             const double angle0 = Pi + ((Pi * 0.5 * segmentIndex) / RoundedCornerSegmentCount);
             const double angle1 = Pi + ((Pi * 0.5 * (segmentIndex + 1)) / RoundedCornerSegmentCount);
 
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, position.X + roundedRadius, position.Y + roundedRadius, position.Z });
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + roundedRadius) + (std::cos(angle0) * roundedRadius)), static_cast<float>((position.Y + roundedRadius) + (std::sin(angle0) * roundedRadius)), position.Z });
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + roundedRadius) + (std::cos(angle1) * roundedRadius)), static_cast<float>((position.Y + roundedRadius) + (std::sin(angle1) * roundedRadius)), position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>(position.X + roundedRadius), static_cast<float>(position.Y + roundedRadius), static_cast<float>(position.Z) });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + roundedRadius) + (std::cos(angle0) * roundedRadius)), static_cast<float>((position.Y + roundedRadius) + (std::sin(angle0) * roundedRadius)), static_cast<float>(position.Z) });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + roundedRadius) + (std::cos(angle1) * roundedRadius)), static_cast<float>((position.Y + roundedRadius) + (std::sin(angle1) * roundedRadius)), static_cast<float>(position.Z) });
         }
 
         for (int segmentIndex = 0; segmentIndex < RoundedCornerSegmentCount; segmentIndex++) {
             const double angle0 = (Pi * 1.5) + ((Pi * 0.5 * segmentIndex) / RoundedCornerSegmentCount);
             const double angle1 = (Pi * 1.5) + ((Pi * 0.5 * (segmentIndex + 1)) / RoundedCornerSegmentCount);
 
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, position.X + size.X - roundedRadius, position.Y + roundedRadius, position.Z });
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle0) * roundedRadius)), static_cast<float>((position.Y + roundedRadius) + (std::sin(angle0) * roundedRadius)), position.Z });
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle1) * roundedRadius)), static_cast<float>((position.Y + roundedRadius) + (std::sin(angle1) * roundedRadius)), position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>(position.X + size.X - roundedRadius), static_cast<float>(position.Y + roundedRadius), static_cast<float>(position.Z) });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle0) * roundedRadius)), static_cast<float>((position.Y + roundedRadius) + (std::sin(angle0) * roundedRadius)), static_cast<float>(position.Z) });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle1) * roundedRadius)), static_cast<float>((position.Y + roundedRadius) + (std::sin(angle1) * roundedRadius)), static_cast<float>(position.Z) });
         }
 
         for (int segmentIndex = 0; segmentIndex < RoundedCornerSegmentCount; segmentIndex++) {
             const double angle0 = (Pi * 0.5 * segmentIndex) / RoundedCornerSegmentCount;
             const double angle1 = (Pi * 0.5 * (segmentIndex + 1)) / RoundedCornerSegmentCount;
 
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, position.X + size.X - roundedRadius, position.Y + size.Y - roundedRadius, position.Z });
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle0) * roundedRadius)), static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle0) * roundedRadius)), position.Z });
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle1) * roundedRadius)), static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle1) * roundedRadius)), position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>(position.X + size.X - roundedRadius), static_cast<float>(position.Y + size.Y - roundedRadius), static_cast<float>(position.Z) });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle0) * roundedRadius)), static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle0) * roundedRadius)), static_cast<float>(position.Z) });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + size.X - roundedRadius) + (std::cos(angle1) * roundedRadius)), static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle1) * roundedRadius)), static_cast<float>(position.Z) });
         }
 
         for (int segmentIndex = 0; segmentIndex < RoundedCornerSegmentCount; segmentIndex++) {
             const double angle0 = (Pi * 0.5) + ((Pi * 0.5 * segmentIndex) / RoundedCornerSegmentCount);
             const double angle1 = (Pi * 0.5) + ((Pi * 0.5 * (segmentIndex + 1)) / RoundedCornerSegmentCount);
 
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, position.X + roundedRadius, position.Y + size.Y - roundedRadius, position.Z });
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + roundedRadius) + (std::cos(angle0) * roundedRadius)), static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle0) * roundedRadius)), position.Z });
-            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + roundedRadius) + (std::cos(angle1) * roundedRadius)), static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle1) * roundedRadius)), position.Z });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>(position.X + roundedRadius), static_cast<float>(position.Y + size.Y - roundedRadius), static_cast<float>(position.Z) });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + roundedRadius) + (std::cos(angle0) * roundedRadius)), static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle0) * roundedRadius)), static_cast<float>(position.Z) });
+            vertices.push_back(Psp2DVertex { 0.0f, 0.0f, packedColor, static_cast<float>((position.X + roundedRadius) + (std::cos(angle1) * roundedRadius)), static_cast<float>((position.Y + size.Y - roundedRadius) + (std::sin(angle1) * roundedRadius)), static_cast<float>(position.Z) });
         }
     }
 
@@ -949,15 +949,15 @@ namespace helengine::psp::rendering {
             }
 
             if (character == '\n') {
-                const double visibleLineWidth = TextLayoutAlignmentUtils::MeasureVisibleLineWidth(
+                const double visibleLineWidth = static_cast<double>(TextLayoutAlignmentUtils::MeasureVisibleLineWidth(
                     currentLine,
                     font,
                     fontScale,
-                    static_cast<double>(font->get_AtlasWidth()));
-                lineOffsets.push_back(TextLayoutAlignmentUtils::ResolveHorizontalOffset(
+                    static_cast<double>(font->get_AtlasWidth())));
+                lineOffsets.push_back(static_cast<double>(TextLayoutAlignmentUtils::ResolveHorizontalOffset(
                     cacheEntry.Alignment,
                     layoutWidth,
-                    visibleLineWidth));
+                    visibleLineWidth)));
                 currentLine.clear();
                 continue;
             }
@@ -965,15 +965,15 @@ namespace helengine::psp::rendering {
             currentLine.push_back(character);
         }
 
-        const double trailingVisibleLineWidth = TextLayoutAlignmentUtils::MeasureVisibleLineWidth(
+        const double trailingVisibleLineWidth = static_cast<double>(TextLayoutAlignmentUtils::MeasureVisibleLineWidth(
             currentLine,
             font,
             fontScale,
-            static_cast<double>(font->get_AtlasWidth()));
-        lineOffsets.push_back(TextLayoutAlignmentUtils::ResolveHorizontalOffset(
+            static_cast<double>(font->get_AtlasWidth())));
+        lineOffsets.push_back(static_cast<double>(TextLayoutAlignmentUtils::ResolveHorizontalOffset(
             cacheEntry.Alignment,
             layoutWidth,
-            trailingVisibleLineWidth));
+            trailingVisibleLineWidth)));
 
         double offsetX = 0.0;
         double offsetY = 0.0;
@@ -1002,8 +1002,8 @@ namespace helengine::psp::rendering {
                 continue;
             }
 
-            const double glyphWidth = glyph.SourceRect.Z * font->get_AtlasWidth() * fontScale;
-            const double glyphHeight = glyph.SourceRect.W * font->get_AtlasHeight() * fontScale;
+            const double glyphWidth = static_cast<double>(glyph.SourceRect.Z * font->get_AtlasWidth() * fontScale);
+            const double glyphHeight = static_cast<double>(glyph.SourceRect.W * font->get_AtlasHeight() * fontScale);
             const double snappedLineOffsetY = std::round(offsetY);
             const double drawX = std::round(baseX + lineOffsetX + offsetX);
             const double drawY = std::round(baseY + snappedLineOffsetY + (glyph.OffsetY * fontScale));
@@ -1019,8 +1019,8 @@ namespace helengine::psp::rendering {
                 const float4 atlasSourceRect = ConvertSourceRectToTexturePixels(glyph.SourceRect, atlasTexture);
                 const int32_t sourceLeft = static_cast<int32_t>(std::floor(static_cast<double>(atlasSourceRect.X)));
                 const int32_t sourceTop = static_cast<int32_t>(std::floor(static_cast<double>(atlasSourceRect.Y)));
-                const int32_t sourceWidth = std::max<int32_t>(1, static_cast<int32_t>(std::round(atlasSourceRect.Z)));
-                const int32_t sourceHeight = std::max<int32_t>(1, static_cast<int32_t>(std::round(atlasSourceRect.W)));
+                const int32_t sourceWidth = std::max<int32_t>(1, static_cast<int32_t>(std::round(static_cast<double>(atlasSourceRect.Z))));
+                const int32_t sourceHeight = std::max<int32_t>(1, static_cast<int32_t>(std::round(static_cast<double>(atlasSourceRect.W))));
 
                 for (int32_t destinationY = 0; destinationY < destinationHeight; destinationY++) {
                     const int32_t targetY = destinationTop + destinationY;
@@ -1109,19 +1109,19 @@ namespace helengine::psp::rendering {
         const std::uint32_t packedColor = ConvertColorToAbgr(color);
         const float4 textureSourceRect = ConvertSourceRectToTexturePixels(sourceRect, texture);
 
-        vertices[0].U = textureSourceRect.X;
-        vertices[0].V = textureSourceRect.Y;
+        vertices[0].U = static_cast<float>(textureSourceRect.X);
+        vertices[0].V = static_cast<float>(textureSourceRect.Y);
         vertices[0].Color = packedColor;
-        vertices[0].X = position.X;
-        vertices[0].Y = position.Y;
-        vertices[0].Z = position.Z;
+        vertices[0].X = static_cast<float>(position.X);
+        vertices[0].Y = static_cast<float>(position.Y);
+        vertices[0].Z = static_cast<float>(position.Z);
 
-        vertices[1].U = textureSourceRect.X + textureSourceRect.Z;
-        vertices[1].V = textureSourceRect.Y + textureSourceRect.W;
+        vertices[1].U = static_cast<float>(textureSourceRect.X + textureSourceRect.Z);
+        vertices[1].V = static_cast<float>(textureSourceRect.Y + textureSourceRect.W);
         vertices[1].Color = packedColor;
-        vertices[1].X = position.X + size.X;
-        vertices[1].Y = position.Y + size.Y;
-        vertices[1].Z = position.Z;
+        vertices[1].X = static_cast<float>(position.X + size.X);
+        vertices[1].Y = static_cast<float>(position.Y + size.Y);
+        vertices[1].Z = static_cast<float>(position.Z);
 
         const std::uint64_t drawArrayStartMicroseconds = PspRenderProfiler::GetTimestampMicroseconds();
         sceGuDrawArray(
@@ -1144,12 +1144,12 @@ namespace helengine::psp::rendering {
         const std::uint32_t packedColor = ConvertColorToAbgr(color);
         const float4 uv = ConvertSourceRectToTexturePixels(sourceRect, texture);
         const float2 positions[6] = {quad.TopLeft, quad.TopRight, quad.BottomRight, quad.TopLeft, quad.BottomRight, quad.BottomLeft};
-        const float textureU[6] = {uv.X, uv.X + uv.Z, uv.X + uv.Z, uv.X, uv.X + uv.Z, uv.X};
-        const float textureV[6] = {uv.Y, uv.Y, uv.Y + uv.W, uv.Y, uv.Y + uv.W, uv.Y + uv.W};
+        const float textureU[6] = {static_cast<float>(uv.X), static_cast<float>(uv.X + uv.Z), static_cast<float>(uv.X + uv.Z), static_cast<float>(uv.X), static_cast<float>(uv.X + uv.Z), static_cast<float>(uv.X)};
+        const float textureV[6] = {static_cast<float>(uv.Y), static_cast<float>(uv.Y), static_cast<float>(uv.Y + uv.W), static_cast<float>(uv.Y), static_cast<float>(uv.Y + uv.W), static_cast<float>(uv.Y + uv.W)};
         Psp2DVertex vertices[6] = {};
         for (std::size_t index = 0; index < 6; ++index) {
-            vertices[index].X = positions[index].X;
-            vertices[index].Y = positions[index].Y;
+            vertices[index].X = static_cast<float>(positions[index].X);
+            vertices[index].Y = static_cast<float>(positions[index].Y);
             vertices[index].Z = 0.0f;
             vertices[index].U = textureU[index];
             vertices[index].V = textureV[index];
@@ -1215,9 +1215,9 @@ namespace helengine::psp::rendering {
         Psp2DVertex* drawVertices = static_cast<Psp2DVertex*>(sceGuGetMemory(sizeof(Psp2DVertex) * vertexCount));
         for (std::size_t index = 0; index < vertexCount; index++) {
             drawVertices[index] = vertices[index];
-            drawVertices[index].X += positionOffset.X;
-            drawVertices[index].Y += positionOffset.Y;
-            drawVertices[index].Z += positionOffset.Z;
+            drawVertices[index].X += static_cast<float>(positionOffset.X);
+            drawVertices[index].Y += static_cast<float>(positionOffset.Y);
+            drawVertices[index].Z += static_cast<float>(positionOffset.Z);
             if (colorOverride != nullptr) {
                 drawVertices[index].Color = ConvertColorToAbgr(*colorOverride);
             }
@@ -1246,7 +1246,7 @@ namespace helengine::psp::rendering {
             DrawTextEffectPass(cacheEntry, textPosition, shadowOffset, text->get_ShadowColor());
         }
 
-        const float outlineScale = text->get_OutlineScale();
+        const float outlineScale = static_cast<float>(text->get_OutlineScale());
         if (outlineScale > 0.0f) {
             const byte4 outlineColor = text->get_OutlineColor();
             const float outlineOffset = SnapOutlineOffsetToPixelGrid(outlineScale);
@@ -1285,8 +1285,8 @@ namespace helengine::psp::rendering {
     /// Snaps a text origin or effect position to the physical PSP pixel grid while preserving its draw order depth.
     float3 PspRenderManager2D::SnapTextCoordinateToPixel(const float3& coordinate) {
         return float3(
-            static_cast<float>(std::round(coordinate.X)),
-            static_cast<float>(std::round(coordinate.Y)),
+            static_cast<float>(std::round(static_cast<double>(coordinate.X))),
+            static_cast<float>(std::round(static_cast<double>(coordinate.Y))),
             coordinate.Z);
     }
 
@@ -1326,10 +1326,10 @@ namespace helengine::psp::rendering {
 
         FlushPendingWhiteTriangles();
 
-        const int left = std::clamp(static_cast<int>(std::floor(clipRect.X)), 0, PspScreenWidth);
-        const int top = std::clamp(static_cast<int>(std::floor(clipRect.Y)), 0, PspScreenHeight);
-        const int right = std::clamp(static_cast<int>(std::ceil(clipRect.X + clipRect.Z)), left, PspScreenWidth);
-        const int bottom = std::clamp(static_cast<int>(std::ceil(clipRect.Y + clipRect.W)), top, PspScreenHeight);
+        const int left = std::clamp(static_cast<int>(std::floor(static_cast<double>(clipRect.X))), 0, PspScreenWidth);
+        const int top = std::clamp(static_cast<int>(std::floor(static_cast<double>(clipRect.Y))), 0, PspScreenHeight);
+        const int right = std::clamp(static_cast<int>(std::ceil(static_cast<double>(clipRect.X + clipRect.Z))), left, PspScreenWidth);
+        const int bottom = std::clamp(static_cast<int>(std::ceil(static_cast<double>(clipRect.Y + clipRect.W))), top, PspScreenHeight);
         const int width = std::max(0, right - left);
         const int height = std::max(0, bottom - top);
 
