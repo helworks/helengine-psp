@@ -15,7 +15,7 @@ namespace helengine::psp::rendering {
         /// Authored directional-light color.
         float4 DirectionalLightColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
 
-        /// Authored directional-light intensity.
-        float DirectionalLightIntensity = 1.0f;
+        /// Authored directional-light intensity retained in the selected engine storage precision.
+        Real DirectionalLightIntensity = 1.0f;
     };
 }

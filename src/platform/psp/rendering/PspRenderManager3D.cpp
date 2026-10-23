@@ -62,7 +62,7 @@ namespace helengine::psp::rendering {
         bool HasReportedUnbakedNonUniformScale = false;
 
         /// Returns whether one model id is safe to use as a shared PSP runtime-model cache key.
-        bool IsCacheableModelId(const std::string& modelId) {
+        bool IsCacheableModelId(const HeCppString& modelId) {
             return !modelId.empty()
                 && modelId != "00000000-0000-0000-0000-000000000000";
         }
@@ -70,29 +70,29 @@ namespace helengine::psp::rendering {
         /// Copies one generated matrix into the raw PSP GU upload buffer and preserves the generated matrix field layout.
         PspMatrixBuffer CreatePspMatrixBuffer(const float4x4& matrix) {
             PspMatrixBuffer buffer {};
-            buffer.M[0][0] = matrix.M11;
-            buffer.M[0][1] = matrix.M12;
-            buffer.M[0][2] = matrix.M13;
-            buffer.M[0][3] = matrix.M14;
-            buffer.M[1][0] = matrix.M21;
-            buffer.M[1][1] = matrix.M22;
-            buffer.M[1][2] = matrix.M23;
-            buffer.M[1][3] = matrix.M24;
-            buffer.M[2][0] = matrix.M31;
-            buffer.M[2][1] = matrix.M32;
-            buffer.M[2][2] = matrix.M33;
-            buffer.M[2][3] = matrix.M34;
-            buffer.M[3][0] = matrix.M41;
-            buffer.M[3][1] = matrix.M42;
-            buffer.M[3][2] = matrix.M43;
-            buffer.M[3][3] = matrix.M44;
+            buffer.M[0][0] = static_cast<float>(matrix.M11);
+            buffer.M[0][1] = static_cast<float>(matrix.M12);
+            buffer.M[0][2] = static_cast<float>(matrix.M13);
+            buffer.M[0][3] = static_cast<float>(matrix.M14);
+            buffer.M[1][0] = static_cast<float>(matrix.M21);
+            buffer.M[1][1] = static_cast<float>(matrix.M22);
+            buffer.M[1][2] = static_cast<float>(matrix.M23);
+            buffer.M[1][3] = static_cast<float>(matrix.M24);
+            buffer.M[2][0] = static_cast<float>(matrix.M31);
+            buffer.M[2][1] = static_cast<float>(matrix.M32);
+            buffer.M[2][2] = static_cast<float>(matrix.M33);
+            buffer.M[2][3] = static_cast<float>(matrix.M34);
+            buffer.M[3][0] = static_cast<float>(matrix.M41);
+            buffer.M[3][1] = static_cast<float>(matrix.M42);
+            buffer.M[3][2] = static_cast<float>(matrix.M43);
+            buffer.M[3][3] = static_cast<float>(matrix.M44);
             return buffer;
         }
 
         /// Converts one authored linear color into the PSP GU ABGR8888 format.
-        std::uint32_t ClampColorChannel(float value) {
-            float clamped = std::min(std::max(value, 0.0f), 1.0f);
-            return static_cast<std::uint32_t>(std::lround(clamped * 255.0f));
+        std::uint32_t ClampColorChannel(RealEvaluation value) {
+            const RealEvaluation clamped = RealMath::Clamp(value, 0.0f, 1.0f);
+            return static_cast<std::uint32_t>(static_cast<std::int32_t>((clamped * 255.0f) + 0.5f));
         }
 
         /// Converts one authored linear color into the PSP GU ABGR8888 format.
@@ -172,12 +172,12 @@ namespace helengine::psp::rendering {
                     : GetFallbackNormal();
 
                 vertices.push_back(PspRuntimeModel::FixedFunctionVertex {
-                    sourceNormal.X,
-                    sourceNormal.Y,
-                    sourceNormal.Z,
-                    position.X,
-                    position.Y,
-                    position.Z
+                    static_cast<float>(sourceNormal.X),
+                    static_cast<float>(sourceNormal.Y),
+                    static_cast<float>(sourceNormal.Z),
+                    static_cast<float>(position.X),
+                    static_cast<float>(position.Y),
+                    static_cast<float>(position.Z)
                 });
             }
 
@@ -212,14 +212,14 @@ namespace helengine::psp::rendering {
                 const float2& texCoord = (*data->TexCoords)[sourceIndex];
 
                 vertices.push_back(PspRuntimeModel::FixedFunctionTexturedVertex {
-                    texCoord.X,
-                    texCoord.Y,
-                    sourceNormal.X,
-                    sourceNormal.Y,
-                    sourceNormal.Z,
-                    position.X,
-                    position.Y,
-                    position.Z
+                    static_cast<float>(texCoord.X),
+                    static_cast<float>(texCoord.Y),
+                    static_cast<float>(sourceNormal.X),
+                    static_cast<float>(sourceNormal.Y),
+                    static_cast<float>(sourceNormal.Z),
+                    static_cast<float>(position.X),
+                    static_cast<float>(position.Y),
+                    static_cast<float>(position.Z)
                 });
             }
 
@@ -276,9 +276,9 @@ namespace helengine::psp::rendering {
         /// Returns whether one world scale uses distinct axis magnitudes that would skew fixed-function normals.
         bool HasNonUniformScale(const float3& scale) {
             constexpr float UniformScaleTolerance = 0.0001f;
-            return std::fabs(scale.X - scale.Y) > UniformScaleTolerance
-                || std::fabs(scale.X - scale.Z) > UniformScaleTolerance
-                || std::fabs(scale.Y - scale.Z) > UniformScaleTolerance;
+            return RealMath::Abs(scale.X - scale.Y) > UniformScaleTolerance
+                || RealMath::Abs(scale.X - scale.Z) > UniformScaleTolerance
+                || RealMath::Abs(scale.Y - scale.Z) > UniformScaleTolerance;
         }
 
         /// Rotates one local-space normal into world space using the entity orientation.
@@ -293,18 +293,18 @@ namespace helengine::psp::rendering {
         /// Clamps one floating-point color to the normalized channel range expected before PSP packing.
         float4 ClampColor(const float4& color) {
             return float4(
-                std::min(std::max(color.X, 0.0f), 1.0f),
-                std::min(std::max(color.Y, 0.0f), 1.0f),
-                std::min(std::max(color.Z, 0.0f), 1.0f),
-                std::min(std::max(color.W, 0.0f), 1.0f));
+                RealMath::Clamp(color.X, 0.0f, 1.0f),
+                RealMath::Clamp(color.Y, 0.0f, 1.0f),
+                RealMath::Clamp(color.Z, 0.0f, 1.0f),
+                RealMath::Clamp(color.W, 0.0f, 1.0f));
         }
 
         /// Converts one generated vector into the PSP GU vector layout.
         ScePspFVector3 CreatePspVector3(const float3& value) {
             ScePspFVector3 result {};
-            result.x = value.X;
-            result.y = value.Y;
-            result.z = value.Z;
+            result.x = static_cast<float>(value.X);
+            result.y = static_cast<float>(value.Y);
+            result.z = static_cast<float>(value.Z);
             return result;
         }
 
@@ -326,11 +326,11 @@ namespace helengine::psp::rendering {
                 return baseColor;
             }
 
-            const float ambient = lightingSettings.AmbientIntensity;
-            float diffuse = 0.0f;
+            const RealEvaluation ambient = lightingSettings.AmbientIntensity;
+            RealEvaluation diffuse = 0.0f;
             if (lightingSnapshot.HasDirectionalLight) {
                 const float3 lightDirection = float3::Normalize(lightingSnapshot.DirectionalLightDirection);
-                diffuse = std::max(0.0f, float3::Dot(worldNormal, lightDirection));
+                diffuse = RealMath::Max(0.0f, float3::Dot(worldNormal, lightDirection));
             }
 
             return ClampColor(float4(
@@ -368,9 +368,9 @@ namespace helengine::psp::rendering {
 
                 vertices[index] = PspLitVertex {
                     ConvertColorToAbgr(litColor),
-                    position.X,
-                    position.Y,
-                    position.Z
+                    static_cast<float>(position.X),
+                    static_cast<float>(position.Y),
+                    static_cast<float>(position.Z)
                 };
             }
 
@@ -646,11 +646,11 @@ namespace helengine::psp::rendering {
     /// Builds a CPU-side runtime model payload from the raw mesh asset.
     RuntimeModel* PspRenderManager3D::BuildModelFromRaw(ModelAsset* data) {
         if (data != nullptr && IsCacheableModelId(data->get_Id())) {
-            auto cachedModelIterator = CachedModels.find(data->get_Id());
+            auto cachedModelIterator = CachedModels.find(data->get_Id().raw);
             if (cachedModelIterator != CachedModels.end()) {
                 PspBootTrace::WriteLine(
                     std::string("PspRuntimeModelReuse id=") +
-                    data->get_Id() +
+                    data->get_Id().raw +
                     " ptr=" +
                     std::to_string(reinterpret_cast<std::uintptr_t>(cachedModelIterator->second)) +
                     " cacheSize=" +
@@ -667,12 +667,12 @@ namespace helengine::psp::rendering {
         }
 
         if (data != nullptr && IsCacheableModelId(data->get_Id())) {
-            CachedModels.emplace(data->get_Id(), runtimeModel);
+            CachedModels.emplace(data->get_Id().raw, runtimeModel);
         }
 
         PspBootTrace::WriteLine(
             std::string("PspRuntimeModelBuild id=") +
-            (data != nullptr ? data->get_Id() : std::string()) +
+            (data != nullptr ? data->get_Id().raw : std::string()) +
             " ptr=" +
             std::to_string(reinterpret_cast<std::uintptr_t>(runtimeModel)) +
             " cacheSize=" +
@@ -732,7 +732,7 @@ namespace helengine::psp::rendering {
 
         PspBootTrace::WriteLine(
             std::string("PspRuntimeMaterialBuild id=") +
-            runtimeMaterial->get_Id() +
+            runtimeMaterial->get_Id().raw +
             " ptr=" +
             std::to_string(reinterpret_cast<std::uintptr_t>(runtimeMaterial)));
         return runtimeMaterial;
@@ -782,7 +782,7 @@ namespace helengine::psp::rendering {
                     throw std::runtime_error("PSP cooked textured materials require a paired 2D render manager.");
                 }
 
-                const std::string texturePath = std::string("cooked/imported/") + materialAsset->TextureRelativePath;
+                const HeCppString texturePath = HeCppString("cooked/imported/") + materialAsset->TextureRelativePath;
                 RuntimeTexture* texture = RenderManager2D->BuildTextureFromCooked(texturePath, contentStreamSource);
                 pspMaterial->SetPrimaryTexture(texture);
             }
@@ -805,7 +805,7 @@ namespace helengine::psp::rendering {
         }
 
         if (IsCacheableModelId(model->get_Id())) {
-            auto cachedModelIterator = CachedModels.find(model->get_Id());
+            auto cachedModelIterator = CachedModels.find(model->get_Id().raw);
             if (cachedModelIterator != CachedModels.end() && cachedModelIterator->second == model) {
                 CachedModels.erase(cachedModelIterator);
             }
@@ -813,7 +813,7 @@ namespace helengine::psp::rendering {
 
         PspBootTrace::WriteLine(
             std::string("PspRuntimeModelRelease id=") +
-            model->get_Id() +
+            model->get_Id().raw +
             " ptr=" +
             std::to_string(reinterpret_cast<std::uintptr_t>(model)) +
             " cacheSize=" +
@@ -835,7 +835,7 @@ namespace helengine::psp::rendering {
 
         PspBootTrace::WriteLine(
             std::string("PspRuntimeMaterialRelease id=") +
-            material->get_Id() +
+            material->get_Id().raw +
             " ptr=" +
             std::to_string(reinterpret_cast<std::uintptr_t>(material)));
         if (pspMaterial->GetOwnedTexture() != nullptr) {
@@ -960,9 +960,9 @@ namespace helengine::psp::rendering {
             HasReportedUnbakedNonUniformScale = true;
             PspBootTrace::WriteLine(
                 std::string("PspBakeScaleWarning entityPtr=") + std::to_string(reinterpret_cast<std::uintptr_t>(drawableParent))
-                + " scale=" + std::to_string(worldScale.X)
-                + "," + std::to_string(worldScale.Y)
-                + "," + std::to_string(worldScale.Z));
+                + " scale=" + std::to_string(static_cast<double>(worldScale.X))
+                + "," + std::to_string(static_cast<double>(worldScale.Y))
+                + "," + std::to_string(static_cast<double>(worldScale.Z)));
         }
         const bool useScaledGpuVertices = false;
         WritePostPhysicsBindingDrawTrace(
@@ -1034,9 +1034,9 @@ namespace helengine::psp::rendering {
                     sourceVertex.U,
                     sourceVertex.V,
                     ConvertColorToAbgr(litColor),
-                    position.X,
-                    position.Y,
-                    position.Z
+                    static_cast<float>(position.X),
+                    static_cast<float>(position.Y),
+                    static_cast<float>(position.Z)
                 };
             }
 
@@ -1093,15 +1093,15 @@ namespace helengine::psp::rendering {
 
         float4x4::CreateLookAt__ref0_ref1_ref2_out3(cameraPosition, cameraTarget, cameraUp, CurrentView);
 
-        float aspectRatio = 1.0f;
+        RealEvaluation aspectRatio = 1.0f;
         const int2 mainWindowSize = get_MainWindowSize();
         if (mainWindowSize.Y > 0) {
-            aspectRatio = static_cast<float>(mainWindowSize.X) / static_cast<float>(mainWindowSize.Y);
+            aspectRatio = RealEvaluation(mainWindowSize.X) / RealEvaluation(mainWindowSize.Y);
         }
 
-        constexpr float CameraFieldOfViewRadians = 0.78539816339f;
-        const float nearPlaneDistance = camera->get_NearPlaneDistance();
-        const float farPlaneDistance = camera->get_FarPlaneDistance();
+        const RealEvaluation CameraFieldOfViewRadians = 0.78539816339f;
+        const RealEvaluation nearPlaneDistance = camera->get_NearPlaneDistance();
+        const RealEvaluation farPlaneDistance = camera->get_FarPlaneDistance();
         float4x4::CreatePerspectiveFieldOfView__out4(CameraFieldOfViewRadians, aspectRatio, nearPlaneDistance, farPlaneDistance, CurrentProjection);
         PspMatrixBuffer viewMatrix = CreatePspMatrixBuffer(CurrentView);
         PspMatrixBuffer projectionMatrix = CreatePspMatrixBuffer(CurrentProjection);
