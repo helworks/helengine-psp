@@ -348,6 +348,8 @@ public sealed class PspPlatformAssetBuilderTests {
         string sourceRoot = Path.Combine(workingRoot, "staging");
         string generatedCoreRoot = Path.Combine(workingRoot, "generated-core");
         string generatedCoreRuntimeRoot = Path.Combine(generatedCoreRoot, "runtime");
+        string generatedStreamPath = Path.Combine(generatedCoreRoot, "system", "io", "stream.hpp");
+        const string generatedStreamContents = "    virtual size_t Length() const = 0;\n    virtual size_t Position() const = 0;\n    virtual void SetPosition(size_t value) = 0;";
         string repositoryRoot = Path.Combine(workingRoot, "repository");
         string sceneSourcePath = Path.Combine(sourceRoot, "cooked", "scenes", "rendering", "cube_test.hasset");
         string modelSourcePath = Path.Combine(sourceRoot, "cooked", "models", "cube.hasset");
@@ -360,6 +362,8 @@ public sealed class PspPlatformAssetBuilderTests {
         Directory.CreateDirectory(Path.GetDirectoryName(importedTextureSourcePath)!);
         Directory.CreateDirectory(generatedCoreRoot);
         Directory.CreateDirectory(generatedCoreRuntimeRoot);
+        Directory.CreateDirectory(Path.GetDirectoryName(generatedStreamPath));
+        File.WriteAllText(generatedStreamPath, generatedStreamContents);
         Directory.CreateDirectory(Path.Combine(repositoryRoot, "src", "platform", "psp"));
         File.WriteAllText(sceneSourcePath, "scene payload");
         File.WriteAllText(modelSourcePath, "model payload");
@@ -451,6 +455,7 @@ public sealed class PspPlatformAssetBuilderTests {
             Assert.True(File.Exists(Path.Combine(outputRoot, "PSP", "GAME", "HELENGINE", "cooked", "materials", "standard.hasset")));
             Assert.True(File.Exists(Path.Combine(outputRoot, "PSP", "GAME", "HELENGINE", "cooked", "imported", "textures", "checker")));
             Assert.Equal(generatedCoreRoot, nativeBuildExecutor.LastWorkspace.GeneratedCoreRootPath);
+            Assert.Equal(generatedStreamContents, File.ReadAllText(generatedStreamPath));
         } finally {
             try {
                 Directory.SetCurrentDirectory(previousDirectory);
