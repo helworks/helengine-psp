@@ -56,11 +56,6 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
     readonly PspAppLayoutWriter AppLayoutWriter;
 
     /// <summary>
-    /// Normalizes regenerated native-core sources that still need PSP compatibility rewrites before compilation.
-    /// </summary>
-    readonly PspGeneratedCoreCompatibilityNormalizer GeneratedCoreCompatibilityNormalizer;
-
-    /// <summary>
     /// Writes generated runtime manifest sources consumed by the PSP native player.
     /// </summary>
     readonly PspRuntimeNativeManifestWriter RuntimeNativeManifestWriter;
@@ -88,7 +83,6 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
 
         NativeBuildExecutor = nativeBuildExecutor;
         AppLayoutWriter = new PspAppLayoutWriter();
-        GeneratedCoreCompatibilityNormalizer = new PspGeneratedCoreCompatibilityNormalizer();
         RuntimeNativeManifestWriter = new PspRuntimeNativeManifestWriter();
         PlatformCookSourceProcessor = new PspPlatformCookSourceProcessor();
         Descriptor = new PlatformBuilderDescriptor(
@@ -111,7 +105,6 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
         NativeBuildExecutor = nativeBuildExecutor ?? throw new ArgumentNullException(nameof(nativeBuildExecutor));
         PlatformCookSourceProcessor = platformCookSourceProcessor ?? throw new ArgumentNullException(nameof(platformCookSourceProcessor));
         AppLayoutWriter = new PspAppLayoutWriter();
-        GeneratedCoreCompatibilityNormalizer = new PspGeneratedCoreCompatibilityNormalizer();
         RuntimeNativeManifestWriter = new PspRuntimeNativeManifestWriter();
         Descriptor = new PlatformBuilderDescriptor(
             "helengine.psp.builder",
@@ -208,7 +201,6 @@ public sealed class PspPlatformAssetBuilder : IPlatformAssetBuilder {
         ExecutePlatformCookWorkItems(request, stagingRootPath, diagnostics, diagnosticReporter, progressReporter, cancellationToken);
 
         if (diagnostics.Count == 0) {
-            GeneratedCoreCompatibilityNormalizer.Normalize(request.GeneratedCoreCppRootPath);
             PspBuildWorkspace workspace = CreateWorkspace(request, stagingRootPath);
             if (request.SelectedBuildOptionValues != null
                 && request.SelectedBuildOptionValues.TryGetValue("game-name", out string gameName)
