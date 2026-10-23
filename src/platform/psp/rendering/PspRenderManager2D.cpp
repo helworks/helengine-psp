@@ -551,7 +551,7 @@ namespace helengine::psp::rendering {
             const byte4 color = text->get_Color();
             const bool wrapText = text->get_WrapText();
             const TextAlignment alignment = text->get_Alignment();
-            const float fontScale = static_cast<float>(text->get_FontScale());
+            const Real fontScale = text->get_FontScale();
             const std::string textValue = text->get_Text().raw();
             const bool usesStaticSurface = ShouldUseStaticTextSurface(text);
             if (entry.Texture == texture
@@ -587,8 +587,8 @@ namespace helengine::psp::rendering {
             }
 
             const int2 size = shape->get_Size();
-            const float radius = static_cast<float>(shape->get_Radius());
-            const float borderThickness = static_cast<float>(shape->get_BorderThickness());
+            const Real radius = shape->get_Radius();
+            const Real borderThickness = shape->get_BorderThickness();
             if (entry.Size.X == size.X
                 && entry.Size.Y == size.Y
                 && entry.Radius == radius
@@ -611,7 +611,7 @@ namespace helengine::psp::rendering {
         FontAsset* font = text->get_Font();
         RuntimeTexture* atlasTexture = font->get_Texture();
         const byte4 color = text->get_Color();
-        const float fontScaleValue = static_cast<float>(text->get_FontScale());
+        const Real fontScaleValue = text->get_FontScale();
         const double fontScale = std::max(static_cast<double>(fontScaleValue), 0.0001d);
         std::string content = text->get_Text().raw();
 
@@ -756,8 +756,8 @@ namespace helengine::psp::rendering {
         const int32_t innerHeight = size.Y - (borderThickness * 2);
 
         cacheEntry.Size = size;
-        cacheEntry.Radius = static_cast<float>(shape->get_Radius());
-        cacheEntry.BorderThickness = static_cast<float>(shape->get_BorderThickness());
+        cacheEntry.Radius = shape->get_Radius();
+        cacheEntry.BorderThickness = shape->get_BorderThickness();
         cacheEntry.HasBorder = borderThickness > 0;
         cacheEntry.HasInnerFill = innerWidth > 0 && innerHeight > 0;
         cacheEntry.BorderPosition = float3(0.0f, 0.0f, 0.0f);

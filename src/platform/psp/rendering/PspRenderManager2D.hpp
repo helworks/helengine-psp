@@ -106,7 +106,7 @@ namespace helengine::psp::rendering {
             TextAlignment Alignment = TextAlignment::Left;
 
             /// Stores the glyph scale used when the cache was built.
-            float FontScale = 0.0f;
+            Real FontScale = 0;
 
             /// Stores the number of visible glyphs represented by the cached geometry.
             int32_t GlyphCount = 0;
@@ -139,10 +139,10 @@ namespace helengine::psp::rendering {
             int2 Size = int2();
 
             /// Stores the rounded-corner radius used when the cache was built.
-            float Radius = 0.0f;
+            Real Radius = 0;
 
             /// Stores the border thickness used when the cache was built.
-            float BorderThickness = 0.0f;
+            Real BorderThickness = 0;
 
             /// Stores whether the border geometry should be emitted.
             bool HasBorder = false;
